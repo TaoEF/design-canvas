@@ -71,7 +71,7 @@ confidence: high
 
 ## AI 修改审阅
 
-顶部紧凑入口按页或文档范围列出修改，review.js 的 before 使用隔离只读 iframe；Accept 只改元数据，Undo 刷新形成普通历史边界。persistence.js 先结束编辑并 flush，再核对 revision/generation；人工保存可隐式接受相关 scope。详见 contract.ai-review。
+当前页底自动「放弃｜接受」，多页右下默认收起汇总，删除/异页singleton和文档级保留入口。review.js 的before按hover/focus原位投影、保持自然尺寸与相同zoom，使用隔离只读iframe；Accept 只改元数据，Undo 刷新形成普通历史边界。persistence.js 先结束编辑并 flush，再核对 revision/generation；人工保存可隐式接受相关 scope。详见 contract.ai-review。
 
 ## Failure Modes
 

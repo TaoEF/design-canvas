@@ -19,100 +19,173 @@ export function beforeHTML(html, scope, baseURL) {
   return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
 }
 
-export function createReview({ ui, persistence, navigate, dimensions, toast }) {
-  const trigger = ui.querySelector('.review-trigger');
-  const panel = ui.querySelector('.review-panel');
-  const list = panel.querySelector('.review-list');
-  const preview = ui.querySelector('.review-preview');
-  const message = panel.querySelector('.review-message');
-  let state = { review: { items: [], generation: 0 } }, drawnGeneration = -1, busy = false, returnFocus, readEpoch = 0, previewResize;
-  function closePreview() {
-    readEpoch++; previewResize?.disconnect(); preview.hidden = true; preview.querySelector('.review-frame').replaceChildren();
-    (returnFocus?.isConnected && !returnFocus.closest('[hidden]') ? returnFocus : trigger.hidden ? ui.querySelector('[data-act=edit]') : trigger)?.focus();
+export function createReview({ ui, persistence, navigate, view, restoreTarget, toast }) {
+  const bar = ui.querySelector('.review-actions'), summary = ui.querySelector('.review-summary'), trigger = summary.querySelector('.review-trigger'), panel = summary.querySelector('.review-panel'), list = summary.querySelector('.review-list');
+  const projection = ui.querySelector('.review-before'), hint = ui.querySelector('.review-hint');
+  let state = { review: { items: [], generation: 0 }, revision: '' }, drawn = '', busy = false, active = null, epoch = 0, frame, loaded = null, lastView = '', expanded = false, raf;
+  const cache = new Map();
+  const pageId = () => view().board?.dataset.artboard || '';
+  const cacheKey = id => `${state.revision}:${state.review.generation}:${state.review.scope}:${id}`;
+  const enabled = () => state.canReview && !busy && !state.review.conflict;
+  function endBefore() {
+    epoch++; active = null; loaded = null; projection.hidden = true; projection.replaceChildren(); frame = null; hint.hidden = true;
   }
-  function close() { panel.hidden = true; trigger.setAttribute('aria-expanded', 'false'); (trigger.hidden ? ui.querySelector('[data-act=edit]') : trigger).focus(); }
-  function button(text, command, id) {
-    const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.dataset.reviewCommand = command; b.dataset.reviewId = id;
+  function setExpanded(on, focus = false) {
+    expanded = on; panel.hidden = !on; trigger.setAttribute('aria-expanded', String(on));
+    if (focus) (on ? panel.querySelector('button') : trigger)?.focus();
+    position();
+  }
+  function button(text, command, item) {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.dataset.reviewCommand = command; b.dataset.reviewId = item.id;
+    if (command === 'undo') b.title = item.kind === 'added' ? '放弃新增页面' : '悬停或聚焦查看修改前；点击放弃';
     return b;
   }
-  function update(next) {
-    state = next;
-    const review = state.review, count = review.items.length;
-    trigger.hidden = !count && !review.conflict;
-    trigger.textContent = review.conflict ? 'AI 审阅异常' : `AI 修改 ${count}`;
-    if (drawnGeneration !== review.generation || list.childElementCount !== count) {
-      drawnGeneration = review.generation; list.replaceChildren();
-      for (const item of review.items) {
-        const row = document.createElement('div'); row.className = 'review-item';
-        const heading = document.createElement('div'); heading.className = 'review-item-heading';
-        const title = document.createElement('strong'); title.textContent = item.title;
-        const kind = document.createElement('span'); kind.textContent = { added: '新增', updated: '修改', deleted: '删除' }[item.kind];
-        heading.append(title, kind); row.append(heading);
-        const actions = document.createElement('div'); actions.className = 'review-item-actions';
-        if (item.kind !== 'added') actions.append(button('修改前', 'before', item.id));
-        if (review.scope === 'pages' && item.kind !== 'deleted') actions.append(button('定位', 'locate', item.id));
-        actions.append(button('撤回', 'undo', item.id), button('接受', 'accept', item.id));
-        row.append(actions); list.append(row);
-      }
-      if (!preview.hidden) closePreview();
-    }
-    message.textContent = review.conflict ? '文件在审阅之外被修改。恢复基线已保留，已阻止撤回，请先下载副本并排查外部修改。' : review.scope === 'document' ? `影响整份文档：${review.reasons.join('；')}。撤回会恢复全部未接受的修改。` : state.canReview ? '人工修改并保存某页，会接受该页的 AI 改动。' : '只读查看。取得编辑权限后可接受或撤回。';
-    for (const b of panel.querySelectorAll('[data-review-command=accept],[data-review-command=undo],[data-review-command=accept-all]')) b.disabled = !state.canReview || busy || review.conflict;
-    panel.setAttribute('aria-busy', String(busy));
-    if (!count && !review.conflict && !panel.hidden) close();
+  function actions(container, item, label = false) {
+    container.replaceChildren();
+    if (label) { const title = document.createElement('span'); title.className = 'review-scope'; title.textContent = '整份文档'; container.append(title); }
+    const undo = button('放弃', 'undo', item), accept = button('接受', 'accept', item); accept.className = 'review-accept'; container.append(undo, accept);
   }
-  trigger.addEventListener('click', () => { panel.hidden = !panel.hidden; trigger.setAttribute('aria-expanded', String(!panel.hidden)); if (!panel.hidden) panel.querySelector('button')?.focus(); });
-  panel.addEventListener('click', async event => {
-    const b = event.target.closest('[data-review-command]'); if (!b || busy) return;
-    const command = b.dataset.reviewCommand, id = b.dataset.reviewId;
-    if (command === 'close') return close();
-    if (command === 'locate') { navigate(id); return; }
-    if (command === 'before') {
-      const epoch = ++readEpoch; b.disabled = true;
-      try {
-        const result = await persistence().reviewRead(id, state.review.generation);
-        if (epoch !== readEpoch) return;
-        returnFocus = b; preview.hidden = false;
-        preview.querySelector('.review-preview-title').textContent = `${state.review.items.find(i => i.id === id)?.title || '整份文档'} · 修改前`;
-        const frame = document.createElement('iframe'); frame.title = 'AI 修改前，只读预览'; frame.setAttribute('sandbox', 'allow-same-origin'); frame.tabIndex = -1; frame.setAttribute('aria-hidden', 'true');
-        const area = preview.querySelector('.review-frame'), canvas = document.createElement('div'); canvas.className = 'review-scaled'; canvas.append(frame); area.replaceChildren(canvas);
-        const size = dimensions(id), documentView = id === 'document' || id === 'all';
-        function layout() {
-          const scale = Math.min(1, (area.clientWidth - 24) / size.width, documentView ? 1 : (area.clientHeight - 24) / size.height);
-          Object.assign(canvas.style, { width: `${size.width * scale}px`, height: `${size.height * scale}px` });
-          Object.assign(frame.style, { width: `${size.width}px`, height: `${size.height}px`, transform: `scale(${scale})` });
-        }
-        layout(); previewResize?.disconnect(); previewResize = new ResizeObserver(layout); previewResize.observe(area);
-        frame.addEventListener('load', async () => {
-          await frame.contentDocument?.fonts?.ready;
-          if (epoch !== readEpoch) return;
-          size.width = Math.max(size.width, frame.contentDocument.documentElement.scrollWidth);
-          size.height = Math.max(size.height, frame.contentDocument.documentElement.scrollHeight);
-          layout();
-        }, { once: true });
-        frame.srcdoc = beforeHTML(result.html, id, location.href);
-        preview.querySelector('[data-review-close-preview]').focus();
-      } catch (e) { toast(e.message, 6000); }
-      finally { b.disabled = false; }
-      return;
+  function update(next) {
+    const changed = next.revision !== state.revision || next.review.generation !== state.review.generation;
+    if (changed || next.reviewing || (state.canReview && !next.canReview)) endBefore();
+    state = next;
+    if (changed) cache.clear();
+    const key = JSON.stringify([state.review.generation, state.review.items]);
+    if (key !== drawn) {
+      drawn = key; list.replaceChildren();
+      for (const item of state.review.items) {
+        const row = document.createElement('div'); row.className = 'review-item review-row'; row.dataset.reviewRow = item.id;
+        const title = document.createElement('button'); title.type = 'button'; title.className = 'review-name'; title.textContent = item.title; title.title = item.title; title.dataset.reviewCommand = 'locate'; title.dataset.reviewId = item.id;
+        if (state.review.scope === 'document' || item.kind === 'deleted') title.disabled = true;
+        const kind = document.createElement('span'); kind.className = 'review-kind'; kind.textContent = { added: '新增', updated: '修改', deleted: '删除' }[item.kind];
+        const controls = document.createElement('div'); controls.className = 'review-item-actions'; actions(controls, item);
+        row.append(title, kind, controls); list.append(row);
+      }
     }
-    busy = true; update(state);
-    try { await persistence().reviewAction(command === 'accept-all' ? 'accept' : command, command === 'accept-all' ? 'all' : id, state.review.generation); }
-    catch (e) { toast(e.message, 6000); }
-    finally { busy = false; update(state); }
+    summary.querySelector('.review-count').textContent = state.review.conflict ? 'AI 审阅异常' : state.review.scope === 'document' ? '整份文档' : `${state.review.items.length} 页修改`;
+    summary.querySelector('.review-message').textContent = state.review.conflict ? '文件在审阅之外发生变化，基线已保留，请下载副本后排查。' : state.review.scope === 'document' ? `整份文档：放弃将恢复全部未接受修改。${state.review.reasons.join('；')}` : state.canReview ? '人工修改并保存某页，会接受该页的 AI 改动。' : '只读：可查看修改前；取得编辑权限后可处理。';
+    summary.querySelector('[data-review-command=accept-all]').disabled = !enabled();
+    position();
+    if (!raf && (state.review.items.length || state.review.conflict)) raf = requestAnimationFrame(tick);
+  }
+  function position() {
+    const v = view(), id = v.board?.dataset.artboard || '', review = state.review;
+    const item = review.scope === 'document' ? review.items[0] : review.items.find(i => i.id === id && i.kind !== 'deleted');
+    const scene = `${id}:${v.playing}:${innerWidth}:${innerHeight}:${v.layoutWidth}:${v.layoutHeight}`;
+    if (scene !== lastView) {
+      const previous = active, samePage = lastView.split(':')[0] === id;
+      lastView = scene; endBefore(); const serial = epoch;
+      if (previous && samePage && !v.playing) queueMicrotask(() => { if (serial === epoch && previous.isConnected && (previous.matches(':hover') || ui.activeElement === previous)) startBefore(previous); });
+    }
+    const showSummary = review.conflict || review.scope === 'document' || review.items.length > 1 || review.items.some(i => i.kind === 'deleted') || (review.items.length === 1 && !item);
+    summary.hidden = !!v.playing || !showSummary;
+    bar.hidden = !!v.playing || !item || review.conflict;
+    if (!showSummary) setExpandedSilently(false);
+    if (bar.dataset.reviewId !== item?.id || bar.dataset.reviewScope !== review.scope) {
+      bar.dataset.reviewId = item?.id || ''; bar.dataset.reviewScope = review.scope;
+      if (item) actions(bar, item, review.scope === 'document');
+    }
+    for (const b of ui.querySelectorAll('[data-review-command=undo],[data-review-command=accept]')) {
+      b.setAttribute('aria-disabled', String(!enabled())); b.disabled = busy || state.reviewing || (b.dataset.reviewCommand === 'accept' && !enabled());
+    }
+    for (const row of list.children) row.toggleAttribute('data-current', row.dataset.reviewRow === id);
+    const bounds = v.bounds, margin = 8;
+    summary.style.maxWidth = `${Math.max(160, bounds.w - 2 * margin)}px`;
+    summary.style.right = `${Math.max(12, innerWidth - bounds.x - bounds.w + margin)}px`;
+    summary.style.bottom = `${Math.max(48, innerHeight - bounds.y - bounds.h + 16)}px`;
+    panel.style.maxHeight = `${Math.max(80, bounds.h - (bar.hidden ? 72 : 112))}px`;
+    if (!bar.hidden) {
+      const r = v.rect || { x: bounds.x, y: bounds.y, width: bounds.w, height: bounds.h, bottom: bounds.y + bounds.h };
+      const w = bar.offsetWidth, h = bar.offsetHeight;
+      const x = Math.max(bounds.x + margin, Math.min(r.x + r.width / 2 - w / 2, bounds.x + bounds.w - margin - w));
+      let y = Math.max(bounds.y + margin, Math.min(r.bottom - h - 12, bounds.y + bounds.h - margin - h));
+      if (!summary.hidden) { const s = summary.getBoundingClientRect(); if (x < s.right + 8 && x + w > s.x - 8 && y + h > s.y - 8) y = Math.max(bounds.y + margin, s.y - h - 8); }
+      Object.assign(bar.style, { left: `${x}px`, top: `${y}px` });
+    }
+    if (!projection.hidden && loaded) {
+      const r = v.rect || { x: bounds.x + (bounds.w - loaded.width * v.zoom) / 2, y: bounds.y + (bounds.h - loaded.height * v.zoom) / 2 };
+      Object.assign(projection.style, { left: `${bounds.x}px`, top: `${bounds.y}px`, width: `${bounds.w}px`, height: `${bounds.h}px` });
+      const clip = projection.firstElementChild;
+      Object.assign(clip.style, { left: `${r.x - bounds.x}px`, top: `${r.y - bounds.y}px`, width: `${loaded.width * v.zoom}px`, height: `${loaded.height * v.zoom}px` });
+      frame.style.transform = `translate(${-loaded.x * v.zoom}px, ${-loaded.y * v.zoom}px) scale(${v.zoom})`;
+    }
+  }
+  function setExpandedSilently(on) { expanded = on; panel.hidden = !on; trigger.setAttribute('aria-expanded', String(on)); }
+  function tick() { raf = null; position(); if (state.review.items.length || state.review.conflict) raf = requestAnimationFrame(tick); }
+  async function startBefore(b) {
+    const item = state.review.items.find(i => i.id === b.dataset.reviewId);
+    if (!item || item.kind === 'added' || busy || state.reviewing || state.review.conflict || view().playing) { endBefore(); return; }
+    endBefore(); active = b; const serial = epoch, current = pageId(), key = cacheKey(item.id);
+    hint.textContent = '正在加载修改前…'; hint.hidden = false;
+    try {
+      let pending = cache.get(key);
+      if (!pending) {
+        pending = persistence().reviewRead(item.id, state.review.generation); cache.set(key, pending);
+        pending.catch(() => { if (cache.get(key) === pending) cache.delete(key); });
+      }
+      const result = await pending;
+      if (serial !== epoch || active !== b || current !== pageId() || key !== cacheKey(item.id)) return;
+      const doc = new DOMParser().parseFromString(result.html, 'text/html');
+      const targetId = state.review.scope === 'document' ? (current || doc.querySelector('[data-artboard]')?.dataset.artboard) : item.id;
+      if (![...doc.querySelectorAll('[data-artboard]')].some(n => n.dataset.artboard === targetId)) { hint.textContent = '新增页面没有修改前版本'; return; }
+      const v = view(), width = v.layoutWidth || 1280;
+      frame = document.createElement('iframe'); const ownFrame = frame; frame.title = 'AI 修改前，只读预览'; frame.setAttribute('sandbox', 'allow-same-origin'); frame.tabIndex = -1; frame.setAttribute('aria-hidden', 'true');
+      Object.assign(frame.style, { width: `${Math.max(innerWidth, width)}px`, height: `${Math.max(innerHeight, v.layoutHeight || 720)}px` });
+      const clip = document.createElement('div'); clip.className = 'review-projection'; clip.append(frame); projection.style.visibility = 'hidden'; projection.hidden = false; projection.replaceChildren(clip);
+      frame.addEventListener('load', async () => {
+        try {
+        await ownFrame.contentDocument?.fonts?.ready;
+        if (serial !== epoch || frame !== ownFrame || current !== pageId()) return;
+        const d = ownFrame.contentDocument, target = [...d.querySelectorAll('[data-artboard]')].find(n => n.dataset.artboard === targetId);
+        for (const n of d.querySelectorAll('[data-artboard]')) if (n === target || n.contains(target) || target.contains(n)) n.setAttribute('data-review-projection-target', '');
+        const fix = d.createElement('style'); fix.textContent = `[data-artboard]:not([data-review-projection-target]){display:none!important}[data-stage]{display:block!important;width:${width}px!important;position:static!important;transform:none!important;gap:0!important;margin:0!important;padding:0!important}[data-artboard]{margin:0!important;flex:none!important}`; d.head.append(fix);
+        const rect = target.getBoundingClientRect();
+        // Keep the layout viewport fixed while enlarging the rendering surface.
+        d.documentElement.style.width = `${Math.max(innerWidth, width)}px`;
+        ownFrame.style.width = `${Math.max(innerWidth, width, rect.right)}px`; ownFrame.style.height = `${Math.max(innerHeight, rect.bottom)}px`;
+        loaded = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+        hint.hidden = true; projection.style.visibility = ''; projection.hidden = false; position();
+        } catch (error) { if (serial === epoch) { endBefore(); toast(`无法显示修改前：${error.message}`, 6000); } }
+      }, { once: true });
+      frame.srcdoc = beforeHTML(result.html, 'document', location.href);
+    } catch (error) { if (serial === epoch) { endBefore(); toast(error.message, 6000); } }
+  }
+  ui.addEventListener('pointerover', e => {
+    const b = e.target.closest('[data-review-command]'); if (!b || b.contains(e.relatedTarget)) return;
+    if (b.dataset.reviewCommand === 'undo') startBefore(b); else if (b.dataset.reviewCommand === 'accept') endBefore();
   });
-  preview.querySelector('[data-review-close-preview]').addEventListener('click', closePreview);
-  function key(e) {
-    if (preview.hidden && panel.hidden) return false;
-    if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); if (!preview.hidden) closePreview(); else close(); return true; }
-    if (e.key === 'Tab' && !preview.hidden) {
-      e.preventDefault(); e.stopImmediatePropagation(); preview.querySelector('[data-review-close-preview]').focus(); return true;
+  ui.addEventListener('pointerout', e => { const b = e.target.closest('[data-review-command=undo]'); if (b && !b.contains(e.relatedTarget)) endBefore(); });
+  ui.addEventListener('focusin', e => { const b = e.target.closest('[data-review-command]'); if (b?.dataset.reviewCommand === 'undo') startBefore(b); else if (b?.dataset.reviewCommand === 'accept') endBefore(); });
+  ui.addEventListener('focusout', e => { if (e.target.closest('[data-review-command=undo]')) endBefore(); });
+  ui.addEventListener('click', async e => {
+    const b = e.target.closest('[data-review-command]'); if (!b || busy) return;
+    const command = b.dataset.reviewCommand, id = b.dataset.reviewId;
+    if (command === 'expand') { setExpanded(!expanded); return; }
+    if (command === 'close') { setExpanded(false, true); return; }
+    if (command === 'locate') { endBefore(); navigate(id); position(); bar.querySelector('[data-review-command=accept]')?.focus(); return; }
+    if (!['undo', 'accept', 'accept-all'].includes(command)) return;
+    if (!enabled()) { toast('只读查看：取得编辑权限后可处理 AI 修改'); return; }
+    const item = state.review.items.find(i => i.id === id);
+    endBefore(); busy = true; update(state);
+    if (command === 'undo' && item?.kind === 'deleted') restoreTarget(id);
+    try { await persistence().reviewAction(command === 'accept-all' ? 'accept' : command, command === 'accept-all' ? 'all' : id, state.review.generation); }
+    catch (error) { toast(error.message, 6000); }
+    finally {
+      restoreTarget(null); busy = false; update(state);
+      if (!b.isConnected || b.closest('[hidden]')) (bar.hidden ? summary.hidden ? ui.querySelector('[data-act=edit]') : trigger : bar.querySelector('[data-review-command=accept]'))?.focus();
+      const hovered = ui.querySelector('[data-review-command=undo]:hover');
+      if (hovered && !state.reviewing) startBefore(hovered);
     }
-    return false;
+  });
+  function key(e) {
+    if (e.key !== 'Escape' || (!active && projection.hidden && !expanded)) return false;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (active || !projection.hidden) endBefore(); else setExpanded(false, true);
+    return true;
   }
   return { update, key };
 }
 
 export function reviewHTML() {
-  return `<section id="ai-review" class="review-panel" role="region" aria-label="AI 修改审阅" hidden><div class="review-heading"><strong>AI 修改</strong><button type="button" data-review-command="close" class="icon-only" aria-label="关闭审阅">${icon('X')}</button></div><p class="review-message"></p><div class="review-list"></div><div class="review-footer"><button type="button" data-review-command="accept-all" class="primary">全部接受</button><span>审阅记录保存在本地服务</span></div></section><section class="review-preview" role="dialog" aria-modal="true" aria-label="修改前只读预览" hidden><div class="review-preview-bar"><strong class="review-preview-title"></strong><span>只读 · 正式画布保留修改后结果</span><button type="button" data-review-close-preview>返回修改后 ${icon('X')}</button></div><div class="review-frame"></div></section>`;
+  return `<div class="review-before" aria-label="修改前只读投影" hidden></div><div class="review-actions" role="group" aria-label="当前页 AI 修改" hidden></div><span class="review-hint" role="status" hidden></span><aside class="review-summary" aria-label="AI 修改汇总" hidden><div class="review-panel" id="ai-review" role="region" aria-label="AI 修改审阅" hidden><div class="review-heading"><strong>AI 修改</strong><button type="button" data-review-command="close" class="icon-only" aria-label="收起审阅">${icon('X')}</button></div><p class="review-message"></p><div class="review-list"></div></div><div class="review-summary-bar"><button type="button" data-review-command="expand" class="review-trigger" aria-expanded="false" aria-controls="ai-review"><span class="review-count"></span>${icon('ChevronDown')}</button><button type="button" data-review-command="accept-all" class="review-accept">全部接受</button></div></aside>`;
 }

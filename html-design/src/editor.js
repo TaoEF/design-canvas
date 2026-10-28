@@ -46,7 +46,7 @@ import {
       replace: null,
     };
 
-    let persistence = null, reviewUI = null;
+    let persistence = null, reviewUI = null, reviewRestorePage = null;
     let canRequestEdit = false,
       editRequested = false,
       requestingEdit = false;
@@ -2016,7 +2016,7 @@ import {
         sessionStorage.setItem(
           viewKey,
           JSON.stringify({
-            page: S.current?.dataset.artboard,
+            page: reviewRestorePage || S.current?.dataset.artboard,
             zoom: S.zoom,
             fit: S.fit,
             editRequested,
@@ -2101,7 +2101,8 @@ import {
     reviewUI = createReview({
       ui, persistence: () => persistence, toast,
       navigate(id) { const b = boards().find(b => b.dataset.artboard === id); if (b) goTo(b); },
-      dimensions(id) { const b = boards().find(b => b.dataset.artboard === id) || boards()[0]; return withAll(() => ({ width: b?.offsetWidth || 1280, height: b?.offsetHeight || 720 })); },
+      restoreTarget(id) { reviewRestorePage = id; },
+      view() { const b = S.current; return { board: b, rect: b?.getBoundingClientRect(), bounds: viewport.bounds(), zoom: S.zoom, playing: S.playing, layoutWidth: b?.offsetWidth || 1280, layoutHeight: b?.offsetHeight || 720 }; },
     });
 
     /* ---------- 初始化 ---------- */

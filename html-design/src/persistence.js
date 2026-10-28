@@ -7,7 +7,7 @@ export function createPersistence({ config, serialize, pause, isBusy, hasPending
   let review = { generation: 0, items: [], reasons: [] }, locked = false, pending = false, reviewing = false;
   const managed = !!config, drafts = managed && createDrafts(config.path);
   const canEdit = () => !managed || (connected && role === 'owner' && !frozen && !blocked && !reviewing && !refreshing);
-  function show(message, options = {}) { render({ message, canEdit: canEdit(), managed, dirty, review, canReview: canEdit() && !locked && !pending && !reviewing, reviewing, ...options }); }
+  function show(message, options = {}) { render({ message, revision, canEdit: canEdit(), managed, dirty, review, canReview: canEdit() && !locked && !pending && !reviewing, reviewing, ...options }); }
   function markDirty() {
     dirty = true; generation++; changed(true);
     show(managed ? '尚未保存' : '离线 · 尚未下载');

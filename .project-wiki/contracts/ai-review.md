@@ -37,11 +37,11 @@ confidence: high
 
 ## Summary
 
-AI commit 后当前 HTML 是 after，私有聚合 baseline 只用于未接受修改的恢复。逐页/整份 Accept 不重写设计，Undo 使用版本/租约/generation 检查的新写入。HTML/CSS 仍是设计真值。
+AI commit 后当前 HTML 是 after，私有聚合 baseline 只用于未接受修改的恢复。页底「放弃｜接受」分别调用保护Undo与元数据Accept；逐页/整份 Accept 不重写设计。HTML/CSS 仍是设计真值。
 
 ## Source Of Truth
 
-review-html.mjs 使用服务端 parse5@8.0.0 真树和 source locations 分析与局部恢复；review-store.mjs 保存单文件 prepared envelope；documents.mjs 复用规范路径的 exclusive 队列；persistence.js 负责 flush、权限和刷新边界；review.js 只负责紧凑摘要和隔离 before。
+review-html.mjs 使用服务端 parse5@8.0.0 真树和 source locations 分析与局部恢复；review-store.mjs 保存单文件 prepared envelope；documents.mjs 复用规范路径的 exclusive 队列；persistence.js 负责 flush、权限和刷新边界；review.js 负责固定像素页底操作、默认收起右下汇总和隔离原位before。
 
 ## Contracts
 
@@ -52,11 +52,11 @@ review-html.mjs 使用服务端 parse5@8.0.0 真树和 source locations 分析�
 - 审阅写进行中整体关闭普通编辑与新自动保存，允许本次请求前已有修改完成 flush。Undo 响应后再检查 dirty/generation/source/busy；若出现新内容则保留 DOM/草稿并提示冲突，不导航。刷新只在实际 pagehide 时释放 token，取消导航不会提前失效连接或永久锁在 refreshing。
 - `.html-design/reviews/<canonical hash>/state.json` 为 0600，独立于10份历史轮转；prepared 内保存旧 state/from/to/next。磁盘等于 to 时 finalize，等于 from 时 rollback，否则保留证据并阻止所有写入。metadata-only 也做近端文件版本检查。
 - 轻量摘要不传 baseline；恢复后保留当前 runtime、单调序号，刷新清空旧 DOM closures。下载/离线不携带审阅状态，原离线编辑仍可用。
-- before 清洗脚本/事件/表单/导航/嵌套活动内容，并置于 sandbox（仅 allow-same-origin，无 allow-scripts/forms/top-navigation）与 script-src none CSP 中。允许同源以保留原字体/资源，iframe 内容不进入 stage、序列化、history 或导出。
+- before 按revision/generation/scope缓存并取消迟到投影，保留兄弟DOM与stage继承，iframe内仅隐藏非目标页；投影以真实after锚点、before自然尺寸和相同zoom呈现。before 清洗脚本/事件/表单/导航/嵌套活动内容，并置于 sandbox（仅 allow-same-origin，无 allow-scripts/forms/top-navigation）与 script-src none CSP 中。允许同源以保留原字体/资源，iframe 内容不进入 stage、序列化、history 或导出。
 
 ## Workflows
 
-先正常 AI begin/commit，打开顶部 AI 修改：查看修改前、定位修改后、逐项撤回/接受或全部接受。正在输入时处理会先结束编辑并 flush；如果基线因人工编辑或其他窗口发生变化，刷新列表后重新选择，不自动重试旧写入。
+正常 AI begin/commit 后，当前pending页底自动出现「放弃｜接受」；hover/focus放弃显示原位before，click才Undo。多页右下默认收起的汇总可逐项定位/处理与全部接受，删除singleton/非当前singleton/整份文档与异常均保留入口。正在输入时处理会先结束编辑并 flush；如果基线因人工编辑或其他窗口发生变化，刷新列表后重新选择，不自动重试旧写入。
 
 `node html-design/review-demo.mjs` 只创建独立新稿并通过相同服务存储实现种入两页 pending；默认随机文件名，已有文件以 wx 拒绝覆盖。它不是升级已有稿的工具。
 

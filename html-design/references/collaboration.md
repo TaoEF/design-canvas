@@ -32,7 +32,7 @@ node html-design/collaborate.mjs commit <返回的 session.json 绝对路径>
 
 ## AI 修改的接受与撤回
 
-AI commit 后，最新编辑器显示「AI 修改」。页内改动可逐页 Accept / Undo，新增页可撤回新增，删除页可查看旧版并恢复。共享 CSS/字体/link、内容脚本、全局属性/页外结构、已有页的重排，以及无法安全定位的页结构，均使用整份文档范围，避免恢复不完整。页面由 HTML parser 和稳定 data-artboard 标识识别，不是另一套 blocks 模型。
+AI commit 后，当前pending页底自动显示「放弃｜接受」，多页右下提供默认收起的汇总。hover/focus放弃原位显示before，离开/接受/Escape恢复after；click放弃才调用Undo。页内改动可逐页 Accept / Undo，新增页可撤回新增，删除页可查看旧版并恢复。共享 CSS/字体/link、内容脚本、全局属性/页外结构、已有页的重排，以及无法安全定位的页结构，均使用整份文档范围，避免恢复不完整。页面由 HTML parser 和稳定 data-artboard 标识识别，不是另一套 blocks 模型。
 
 同页连续 AI 修改保留首次未接受基线。逐页接受只更新恢复参考，不重写 HTML；部分接受后再发生文档级修改，整份撤回仍保留已接受的页。人工编辑并保存会接受被修改页的 AI 结果；如果存在文档级待审阅，则人工修改接受整个审阅。保存反馈会说明隐式接受。选择/进入编辑/缩放、data-bbox 和序号变化不属于真实设计修改。
 
@@ -44,7 +44,7 @@ AI commit 后，最新编辑器显示「AI 修改」。页内改动可逐页 Acc
 
 涉及 HTML 的写入先原子落盘 prepared envelope（旧 state、fromRevision、toRevision、next state），再原子替换并同步 HTML 所在目录，最后原子 finalize state。每次读取/服务重启遇到 prepared 时，以实际 HTML 哈希选择：等于 to 完成 next；等于 from 回到旧 state；都不同则保留 journal 和基线、报告冲突并拒绝写入/撤回。存储失败会报错，不声称无待审阅。显式请求标识与最近完成的 AI token 支持丢响应后的相同请求重试；新版本后的旧请求不能覆盖。
 
-审阅摘要只包含 scope、变更列表、原因、generation 和冲突标志；before HTML 按需单独获取。before 在独立 sandbox iframe 中呈现，只允许同源资源，不允许脚本、表单或上层导航，另清除脚本/事件/导航元素并使用 CSP；它不进入正式 stage、保存、普通历史或导出。保留原文档资源基址。离线下载不携带服务端基线，不提供服务审阅。
+审阅摘要只包含 scope、变更列表、原因、generation 和冲突标志；before HTML 按需单独获取。before 在独立 sandbox iframe 中原位呈现（保留兄弟DOM语义，仅在iframe内隐藏其他页，使用before自然尺寸和当前zoom；异步迟到结果不显示），只允许同源资源，不允许脚本、表单或上层导航，另清除脚本/事件/导航元素并使用 CSP；它不进入正式 stage、保存、普通历史或导出。保留原文档资源基址。离线下载不携带服务端基线，不提供服务审阅。
 
 恢复保留当前编辑器 bundle 与不递减的 page/element 序号。不能协调多个服务进程，也不自动合并外部编辑；外部冲突需要保留副本与恢复记录后排查，不能删除审阅文件并假装完成撤回。
 
