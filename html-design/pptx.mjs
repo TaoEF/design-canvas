@@ -51,33 +51,67 @@ export function collectEditableSlide(board) {
     } else if (el.matches('svg,canvas')) {
       items.push({ kind: 'graphic', ...box, name, index: graphics.indexOf(el) });
     } else if (el.hasAttribute('data-el') && !el.querySelector('[data-el]') && el.textContent.trim()) {
-      // Measure actual browser line breaks, including rich-text spans, instead of rewrapping in PowerPoint.
-      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      // Keep authored breaks, not the browser's width-dependent soft wraps.
       const runs = [];
-      let node, lastY = null, lastKey = null;
+      let lastKey = null, pendingSpace = null, pendingBlockBreak = false;
       const baseStyle = styles(cs, el.textContent);
-      while ((node = walker.nextNode())) {
-        const parentStyle = getComputedStyle(node.parentElement);
-        const options = styles(parentStyle, el.textContent);
+      const append = (text, options) => {
+        if (!text) return;
         const key = JSON.stringify(options);
-        let offset = 0;
-        for (const char of node.textContent) {
-          const range = document.createRange();
-          range.setStart(node, offset); range.setEnd(node, offset + char.length); offset += char.length;
-          const r = range.getBoundingClientRect();
-          if (!r.width || !r.height) continue;
-          if (lastY !== null && Math.abs(r.top - lastY) > Math.max(3, baseStyle.fontSize * .45)) {
-            if (runs.length) runs[runs.length - 1].text += '\n';
-            lastKey = null;
-          }
-          lastY = r.top;
-          let text = char;
+        if (key === lastKey) runs[runs.length - 1].text += text;
+        else { runs.push({ text, options }); lastKey = key; }
+      };
+      const endsLine = () => !runs.length || runs[runs.length - 1].text.endsWith('\n');
+      const lineBreak = (options, explicit = false) => {
+        pendingSpace = null;
+        if (explicit || !endsLine()) append('\n', options);
+        pendingBlockBreak = false;
+      };
+      const appendContent = (text, options) => {
+        if (pendingBlockBreak) lineBreak(options);
+        if (pendingSpace && !endsLine()) append(' ', pendingSpace);
+        pendingSpace = null;
+        append(text, options);
+      };
+      const visit = node => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const parentStyle = getComputedStyle(node.parentElement);
+          const options = styles(parentStyle, el.textContent);
+          let text = node.textContent;
           if (parentStyle.textTransform === 'uppercase') text = text.toUpperCase();
           if (parentStyle.textTransform === 'lowercase') text = text.toLowerCase();
-          if (key === lastKey) runs[runs.length - 1].text += text;
-          else { runs.push({ text, options }); lastKey = key; }
+          const preserveSpaces = ['pre', 'pre-wrap', 'break-spaces'].includes(parentStyle.whiteSpace);
+          const preserveLines = preserveSpaces || parentStyle.whiteSpace === 'pre-line';
+          if (!preserveLines) text = text.replace(/\n/g, ' ');
+          for (const token of text.match(/\n|[\t\r\f ]+|[^\t\r\f \n]+/g) || []) {
+            if (token === '\n') {
+              if (pendingBlockBreak) lineBreak(options);
+              lineBreak(options, true);
+            } else if (!preserveSpaces && /^[\t\r\f ]+$/.test(token)) pendingSpace ||= options;
+            else appendContent(token, options);
+          }
+          return;
         }
-      }
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        const nodeStyle = getComputedStyle(node);
+        if (nodeStyle.display === 'none' || nodeStyle.visibility === 'hidden' || nodeStyle.opacity === '0') return;
+        const options = styles(nodeStyle, el.textContent);
+        if (node.tagName === 'BR') {
+          if (pendingBlockBreak) lineBreak(options);
+          lineBreak(options, true);
+          return;
+        }
+        const parentStyle = node.parentElement && getComputedStyle(node.parentElement);
+        const layoutItem = node !== el && ['flex', 'inline-flex', 'grid', 'inline-grid'].includes(parentStyle?.display);
+        // Flex/Grid blockify inline children; that does not make each child a paragraph.
+        const columnItem = layoutItem && parentStyle.display.includes('flex') && parentStyle.flexDirection.startsWith('column');
+        const block = node !== el && (layoutItem ? columnItem : ['block', 'flow-root', 'flex', 'grid', 'list-item', 'table-row'].includes(nodeStyle.display));
+        if (block) lineBreak(options);
+        else if (layoutItem && parseFloat(parentStyle.columnGap) > 0) pendingSpace ||= options;
+        for (const child of node.childNodes) visit(child);
+        if (block) { pendingSpace = null; pendingBlockBreak = true; }
+      };
+      visit(el);
       if (runs.length) items.push({
         kind: 'text', ...box, name, runs, ...baseStyle,
         align: ['left', 'center', 'right', 'justify'].includes(cs.textAlign) ? cs.textAlign : 'left',
@@ -113,10 +147,15 @@ export async function addEditableSlide({ pptx, slide, data, page, board, context
         line: { color: item.color.color, transparency: item.color.transparency, width: pt(item.width) },
       });
     } else if (item.kind === 'text') {
-      slide.addText(item.runs.map(run => ({ text: run.text, options: textOptions(run.options) })), {
+      // Explicit segments avoid PptxGenJS treating a trailing newline in a rich run
+      // differently from a newline followed by more text in the same run.
+      const runs = item.runs.flatMap(run => run.text.split('\n').map((text, i, parts) => ({
+        text, options: { ...textOptions(run.options), breakLine: i < parts.length - 1 },
+      })));
+      slide.addText(runs, {
         ...position, ...textOptions(item),
         x: position.x, y: position.y, w: position.w + px(2), h: position.h + px(2),
-        margin: item.padding.map(pt), valign: 'top', fit: 'none', wrap: false,
+        margin: item.padding.map(pt), valign: 'top', fit: 'none', wrap: true,
         lineSpacing: pt(item.lineHeight), paraSpaceBefore: 0, paraSpaceAfter: 0,
         lang: 'zh-CN', hyperlink: item.href ? { url: item.href } : undefined,
       });
