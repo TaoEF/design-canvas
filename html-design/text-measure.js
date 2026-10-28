@@ -4433,18 +4433,42 @@ property of their respective owners.
     boards.forEach((board) => {
       if (getComputedStyle(board).display === "none") board.style.setProperty("display", "block", "important");
     });
-    const candidates = boards.flatMap((board) => [...board.querySelectorAll("[data-el]")].filter((el) => !el.matches("img,svg,canvas,video,iframe,picture") && !el.querySelector("[data-el]") && el.textContent.trim()).map((el) => ({ board, el })));
+    const candidates = [];
+    for (const board of boards) {
+      const found = /* @__PURE__ */ new Map(), walker = document.createTreeWalker(board, NodeFilter.SHOW_TEXT);
+      let text;
+      while (text = walker.nextNode()) {
+        if (!text.textContent.trim() || text.parentElement.closest("script,style,noscript,template,svg,canvas,video,iframe")) continue;
+        const marked = text.parentElement.closest("[data-el]");
+        const el = marked && board.contains(marked) ? marked : text.parentElement;
+        if (!found.has(el)) found.set(el, { board, el, marked: !!marked && board.contains(marked), preview: text.textContent.trim().slice(0, 80) });
+      }
+      candidates.push(...found.values());
+    }
     const issues = [];
     const pageIds = boards.map((b) => b.dataset.artboard), elementIds = [...document.querySelectorAll("[data-artboard] [data-el]")].map((n) => n.dataset.el);
     let checked = 0;
-    for (const { board, el } of candidates.slice(0, 500)) {
-      const target = { pageId: board.dataset.artboard, elementId: el.dataset.el };
+    for (const { board, el, marked, preview } of candidates.slice(0, 500)) {
+      const target = { pageId: board.dataset.artboard, elementId: el.dataset.el ?? null };
+      if (!marked) {
+        issues.push({ ...target, status: "unmarked", tag: el.tagName.toLowerCase(), preview, overflow: null });
+        continue;
+      }
       if (!target.pageId || !target.elementId || pageIds.filter((v) => v === target.pageId).length !== 1 || elementIds.filter((v) => v === target.elementId).length !== 1) {
         issues.push({ ...target, status: "invalid-id", overflow: null });
         continue;
       }
-      if (getComputedStyle(el).display === "none" || getComputedStyle(el).visibility === "hidden" || getComputedStyle(el).opacity === "0") {
+      const ancestors = [];
+      for (let node = el; node && board.contains(node); node = node.parentElement) ancestors.push(node);
+      if (getComputedStyle(el).visibility !== "visible" || ancestors.some((n) => {
+        const cs = getComputedStyle(n);
+        return cs.display === "none" || cs.opacity === "0" || cs.contentVisibility === "hidden";
+      })) {
         issues.push({ ...target, status: "hidden", overflow: null });
+        continue;
+      }
+      if (el === board || el.querySelector("[data-el]")) {
+        issues.push({ ...target, status: "unsupported", code: "NESTED_TEXT_CONTAINER", overflow: null });
         continue;
       }
       if (!el.getClientRects().length) {
@@ -4460,13 +4484,24 @@ property of their respective owners.
         checked++;
         const r = el.getBoundingClientRect(), b = board.getBoundingClientRect();
         const outOfBounds = r.left < b.left - 1 || r.top < b.top - 1 || r.right > b.right + 1 || r.bottom > b.bottom + 1;
-        if (result.overflow || outOfBounds) issues.push({
+        const clippedBy = [];
+        for (const parent of ancestors.slice(1)) {
+          const cs2 = getComputedStyle(parent), a = parent.getBoundingClientRect();
+          const sx = parent.offsetWidth ? a.width / parent.offsetWidth : 1;
+          const sy = parent.offsetHeight ? a.height / parent.offsetHeight : 1;
+          const left = a.left + px(cs2.borderLeftWidth) * sx, top = a.top + px(cs2.borderTopWidth) * sy;
+          const clipX = ["hidden", "clip", "auto", "scroll"].includes(cs2.overflowX) && (r.left < left - 1 || r.right > left + parent.clientWidth * sx + 1);
+          const clipY = ["hidden", "clip", "auto", "scroll"].includes(cs2.overflowY) && (r.top < top - 1 || r.bottom > top + parent.clientHeight * sy + 1);
+          if (clipX || clipY) clippedBy.push({ elementId: parent.dataset.el ?? null, id: parent.id || null, tag: parent.tagName.toLowerCase(), x: clipX, y: clipY });
+        }
+        if (result.overflow || outOfBounds || clippedBy.length) issues.push({
           ...target,
-          status: "overflow",
+          status: clippedBy.length ? "clipped" : "overflow",
           engine: result.engine,
           overflow: result.overflow,
           outOfBounds,
           lineCount: result.lineCount,
+          ...clippedBy.length ? { clippedBy } : {},
           requiredHeight: result.requiredHeight,
           availableHeight: result.availableHeight,
           box: { x: round2(r.left - b.left), y: round2(r.top - b.top), width: round2(r.width), height: round2(r.height) },

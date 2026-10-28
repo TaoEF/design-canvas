@@ -25,8 +25,9 @@ export async function measureDocumentText({ mode, input, html = '<!doctype html>
   const base = new URL(baseUrl);
   if (!['http:', 'https:'].includes(base.protocol) || !['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname)) throw new Error('baseUrl must use a local HTTP preview address.');
   const browser = await chromium.launch(browserOptions());
+  let blockedNavigation = false;
   try {
-    const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1, acceptDownloads: false });
+    const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1, acceptDownloads: false, javaScriptEnabled: false });
     const page = await context.newPage(), resourceErrors = [];
     page.setDefaultTimeout(10000);
     page.on('requestfailed', r => {
@@ -37,11 +38,16 @@ export async function measureDocumentText({ mode, input, html = '<!doctype html>
       if (r.status() >= 400 && ['stylesheet', 'font'].includes(type)) resourceErrors.push({ type, url: r.url(), status: r.status() });
     });
     const url = new URL(`/__html-design/text/${randomUUID()}`, base).href;
+    await page.route('**/*', route => {
+      if (route.request().isNavigationRequest()) { blockedNavigation = true; return route.abort(); }
+      return route.continue();
+    });
     const tag = `<base href="${base.href.replaceAll('&', '&amp;').replaceAll('"', '&quot;')}">`;
     const content = /<head\b[^>]*>/i.test(html) ? html.replace(/<head\b[^>]*>/i, m => m + tag) : tag + html;
     await page.route(url, r => r.fulfill({ contentType: 'text/html; charset=utf-8', body: content,
       headers: { 'Content-Security-Policy': "script-src 'none'; object-src 'none'; frame-src 'none'" } }));
     await page.goto(url, { waitUntil: 'load', timeout: 30000 });
+    if (blockedNavigation || page.url() !== url) throw new Error('Document navigation is not supported during text measurement.');
     await page.emulateMedia({ media: 'screen', reducedMotion: 'reduce' });
     await page.evaluate(await readFile(new URL('./text-measure.js', import.meta.url), 'utf8'));
     let timer, result;
@@ -52,7 +58,11 @@ export async function measureDocumentText({ mode, input, html = '<!doctype html>
         new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Text measurement exceeded 30 seconds.')), 30000); }),
       ]);
     } finally { clearTimeout(timer); }
+    if (blockedNavigation || page.url() !== url) throw new Error('Document navigation is not supported during text measurement.');
     if (resourceErrors.length) result.status = 'issues';
     return { ...result, resourceErrors, ...(mode === 'check' ? { revision: createHash('sha256').update(html).digest('hex') } : {}) };
+  } catch (error) {
+    if (blockedNavigation) throw new Error('Document navigation is not supported during text measurement.');
+    throw error;
   } finally { await browser.close(); }
 }

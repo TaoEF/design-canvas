@@ -54,6 +54,11 @@ node html-design/text.mjs check demos/design.html
 ```
 
 All artboards are checked, including pages hidden by single-page presentation.
+Unmarked text is reported as `unmarked`; direct text mixed with nested editable
+elements is reported as unsupported (`NESTED_TEXT_CONTAINER`). Neither counts
+as checked. Text hidden by ancestors is reported as hidden; a text box crossing
+an ancestor's clipping boundary is reported as `clipped`, with `clippedBy`
+identifying that boundary. Clipping may be intentional and needs interpretation.
 Output contains stable `pageId`/`elementId` targets, overflow/out-of-bounds boxes,
 required/current **border-box** heights, and counts. Hidden text, unsupported
 layouts, invalid IDs, failed measurements, failed CSS/fonts, and truncation are
@@ -69,7 +74,8 @@ then check that copy with `--base-url` set to the original preview URL.
 Default resource origin is `HTML_DESIGN_ORIGIN` or `http://127.0.0.1:8876`.
 `--base-url` overrides it and must be a local HTTP(S) URL. A running preview
 server is needed only for resources served there; inline HTML and system-font
-measurement work without it. Content scripts are disabled. No HTML is modified.
+measurement work without it. Content scripts are disabled, and document
+navigation is rejected so results remain tied to the input snapshot. No HTML is modified.
 
 Both commands print one JSON result. Exit codes: **0** = no reported issues,
 **2** = layout/resource issues with usable measurements, **1** = invalid request

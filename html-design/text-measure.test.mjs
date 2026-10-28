@@ -81,3 +81,30 @@ test('scan limits explicitly report unchecked content and failed web fonts canno
   const result=await measureDocumentText({mode:'check',html:badFont,baseUrl:`http://127.0.0.1:${server.address().port}/deck.html`});assert.equal(result.status,'issues');assert.ok(result.resourceErrors.some(r=>r.type==='font'));
  }finally{await new Promise(r=>server.close(r));}
 });
+
+test('unmarked text and direct text around nested editable nodes are reported, not silently skipped',async()=>{
+ const wrap=body=>`<html><body><main data-stage><section data-artboard="p1" style="width:800px;height:500px">${body}</section></main></body></html>`;
+ const unmarked=await measureDocumentText({mode:'check',html:wrap('<p style="width:100px;height:20px;overflow:hidden">Unmarked text still needs checking.</p>')});
+ assert.equal(unmarked.status,'issues');assert.equal(unmarked.textCount,1);assert.equal(unmarked.issues[0].status,'unmarked');assert.equal(unmarked.issues[0].elementId,null);assert.match(unmarked.issues[0].preview,/Unmarked/);
+ const nested=await measureDocumentText({mode:'check',html:wrap('<div data-el="card">Direct parent text<p data-el="label" style="font:20px/30px Arial;width:300px;margin:0;overflow-wrap:break-word">Label</p></div>')});
+ assert.equal(nested.textCount,2);assert.ok(nested.issues.some(i=>i.elementId==='card'&&i.code==='NESTED_TEXT_CONTAINER'));assert.equal(nested.checkedCount,1);
+});
+
+test('ancestor opacity/display and clipping constraints remain visible in the report',async()=>{
+ const wrap=body=>`<html><head><style>p{font:32px/40px Arial;width:400px;height:120px;margin:0;overflow-wrap:break-word}</style></head><body><main data-stage><section data-artboard="p1" style="width:800px;height:500px">${body}</section></main></body></html>`;
+ for(const css of ['opacity:0','display:none']){const r=await measureDocumentText({mode:'check',html:wrap(`<div style="${css}"><p data-el="title">Hidden through parent.</p></div>`)});assert.equal(r.status,'issues');assert.equal(r.issues[0].status,'hidden');assert.equal(r.checkedCount,0);}
+ const clipped=await measureDocumentText({mode:'check',html:wrap('<div data-el="card" style="width:200px;height:30px;overflow:hidden;padding:10px;border:3px solid"><p data-el="title">This text fits its own box but its parent clips the box.</p></div>')});
+ assert.equal(clipped.status,'issues');assert.equal(clipped.issues[0].status,'clipped');assert.equal(clipped.issues[0].overflow,false);assert.deepEqual(clipped.issues[0].clippedBy[0],{elementId:'card',id:null,tag:'div',x:true,y:true});
+});
+
+test('meta refresh cannot execute a destination script or attach another page to the source revision',async()=>{
+ let targets=0,runs=0;
+ const server=http.createServer((req,res)=>{if(req.url==='/ran')runs++;else targets++;res.writeHead(200,{'Content-Type':'text/html'});res.end('<html><body><main data-stage><section data-artboard="other"><p data-el="other-title">Other</p></section></main><script>fetch("/ran")</script></body></html>');});
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));
+ try{
+  const baseUrl=`http://127.0.0.1:${server.address().port}/destination`;
+  const doc=`<html><head><meta http-equiv="refresh" content="0;url=${baseUrl}"></head><body><main data-stage><section data-artboard="source"><p data-el="source-title">Source</p></section></main></body></html>`;
+  await assert.rejects(measureDocumentText({mode:'check',html:doc,baseUrl}),/navigation/i);
+  assert.equal(targets,0);assert.equal(runs,0);
+ }finally{await new Promise(r=>server.close(r));}
+});
