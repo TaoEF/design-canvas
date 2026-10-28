@@ -101,8 +101,13 @@ export function collectEditableSlide(board) {
           lineBreak(options, true);
           return;
         }
-        const block = node !== el && ['block', 'flow-root', 'flex', 'grid', 'list-item', 'table-row'].includes(nodeStyle.display);
+        const parentStyle = node.parentElement && getComputedStyle(node.parentElement);
+        const layoutItem = node !== el && ['flex', 'inline-flex', 'grid', 'inline-grid'].includes(parentStyle?.display);
+        // Flex/Grid blockify inline children; that does not make each child a paragraph.
+        const columnItem = layoutItem && parentStyle.display.includes('flex') && parentStyle.flexDirection.startsWith('column');
+        const block = node !== el && (layoutItem ? columnItem : ['block', 'flow-root', 'flex', 'grid', 'list-item', 'table-row'].includes(nodeStyle.display));
         if (block) lineBreak(options);
+        else if (layoutItem && parseFloat(parentStyle.columnGap) > 0) pendingSpace ||= options;
         for (const child of node.childNodes) visit(child);
         if (block) { pendingSpace = null; pendingBlockBreak = true; }
       };

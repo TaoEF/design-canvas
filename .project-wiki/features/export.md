@@ -39,7 +39,7 @@ confidence: high
 
 导出不重新读取旧磁盘 HTML。脚本通过 CSP 禁止执行，等待字体图片；最多 100 页，尺寸 1–4096px。PDF 允许逐页不同尺寸；PPTX 页面宽高比须一致。普通文字与 img 不整页扁平化；SVG/canvas 可转为图片。
 
-PPTX 每个文字元素对应一个可编辑文本框，开启 `wrap="square"`，不自动缩小字号或按文字撑宽。只保留 HTML 的显式换行（br、块段落、white-space 保留的换行），不将浏览器因当前宽度产生的软折行固化。普通空白按 CSS 合并，跨 span 保留词间空格，pre/pre-wrap/break-spaces 保留空格。富文本样式继续按 run 映射，混合字号或基线差异不能凭字符几何位置推断换行。
+PPTX 每个文字元素对应一个可编辑文本框，开启 `wrap="square"`，不自动缩小字号或按文字撑宽。只保留 HTML 的显式换行（br、块段落、white-space 保留的换行），不将浏览器因当前宽度产生的软折行固化。普通空白按 CSS 合并，跨 span 保留词间空格，pre/pre-wrap/break-spaces 保留空格。富文本样式继续按 run 映射，混合字号或基线差异不能凭字符几何位置推断换行。Flex/Grid 子项会被浏览器块化，横排子项不能因此各自变成硬段落；正 column-gap 简化为词间空格，Flex column 子项保留纵向分隔。
 
 
 ## Workflows

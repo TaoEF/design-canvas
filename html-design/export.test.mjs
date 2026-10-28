@@ -78,13 +78,16 @@ test('PPTX paragraphs reflow at the textbox width while authored breaks and rich
     <p data-el="case" style="text-transform:uppercase">small <span>words</span></p>
     <p data-el="spans">one<span> </span><b>two </b><span> three</span>&nbsp;four</p>
     <p data-el="trailing">First<br></p>
+    <div data-el="flex" style="display:flex;width:500px;gap:10px"><span>Price:</span><span>$20</span></div>
+    <div data-el="grid" style="display:grid;width:500px;grid-template-columns:1fr 1fr;gap:10px"><span>Grid</span><span>items</span></div>
+    <div data-el="column" style="display:flex;flex-direction:column"><span>Top</span><span>Bottom</span></div>
     </section></main></body></html>`;
   const response = await request('pptx', html);
   assert.equal(response.status, 200, await response.clone().text());
   const zip = await JSZip.loadAsync(await response.arrayBuffer());
   const xml = await zip.file('ppt/slides/slide1.xml').async('string');
   const textboxes = [...xml.matchAll(/<p:sp>.*?<\/p:sp>/gs)].map(match => match[0]).filter(s => s.includes('<p:txBody>'));
-  assert.equal(textboxes.length, 11, 'each original text element remains one editable textbox');
+  assert.equal(textboxes.length, 14, 'each original text element remains one editable textbox');
   const box = name => {
     const shape = textboxes.find(s => s.includes(`name="${name}"`));
     assert.ok(shape, `textbox ${name} exists`);
@@ -108,6 +111,9 @@ test('PPTX paragraphs reflow at the textbox width while authored breaks and rich
   assert.deepEqual(paragraphs('case'), ['SMALL WORDS']);
   assert.deepEqual(paragraphs('spans'), ['one two three\u00a0four']);
   assert.deepEqual(paragraphs('trailing'), ['First', '']);
+  assert.deepEqual(paragraphs('flex'), ['Price: $20'], 'blockified row items are not separate paragraphs');
+  assert.deepEqual(paragraphs('grid'), ['Grid items']);
+  assert.deepEqual(paragraphs('column'), ['Top', 'Bottom']);
 });
 
 test('invalid export requests and cross-origin writes are rejected without touching files', async () => {
