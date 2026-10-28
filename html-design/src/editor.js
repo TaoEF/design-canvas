@@ -448,10 +448,10 @@ import {
     }
     function restoreFlow(b) {
       if (b.dataset.flowStyle == null)
-        return alert("这一页没有排版快照，无法切回排版模式。");
+        return alert("这一页没有自动排版快照，无法切回自动排版。");
       if (
         !confirm(
-          "切回排版模式会恢复自动排版，画板模式下的拖动会丢失（可以撤销）。继续吗？",
+          "切回自动排版会恢复原有布局，手动模式下的拖动会丢失（可以撤销）。继续吗？",
         )
       )
         return;
@@ -1017,19 +1017,18 @@ import {
         $(".fs").value = Math.round(
           parseFloat(getComputedStyle(el.contains(at) ? at : el).fontSize),
         );
-      const cs = getComputedStyle(el),
-        align = cs.textAlign;
-      $(".text-align").value =
-        align === "start" ? "left" : align === "end" ? "right" : align;
-      $(".color-swatch").style.background = cs.color;
-      const rgb = cs.color.match(/^rgb\((\d+), (\d+), (\d+)\)$/);
-      if (rgb && ui.activeElement !== $(".cpick"))
-        $(".cpick").value =
-          "#" +
-          rgb
-            .slice(1)
-            .map((n) => Number(n).toString(16).padStart(2, "0"))
-            .join("");
+      const cs = getComputedStyle(el), raw = cs.textAlign;
+      const value = raw === "start" ? (cs.direction === "rtl" ? "right" : "left") : raw === "end" ? (cs.direction === "rtl" ? "left" : "right") : raw;
+      const index = Math.max(0, ["left", "center", "right", "justify"].indexOf(value));
+      const labels = ["左对齐", "居中", "右对齐", "两端对齐"], alignButton = $("[data-act=text-align]");
+      alignButton.dataset.align = ["left", "center", "right", "justify"][index];
+      alignButton.innerHTML = icon(["AlignLeft", "AlignCenter", "AlignRight", "AlignJustify"][index]);
+      alignButton.title = `${labels[index]}；点击切换为${labels[(index + 1) % 4]}`;
+      alignButton.setAttribute("aria-label", `文字对齐：${alignButton.title}`);
+      const color = getComputedStyle(el.contains(at) ? at : el).color;
+      $(".color-swatch").style.background = color;
+      const rgb = color.match(/^rgb\((\d+), (\d+), (\d+)\)$/);
+      if (rgb && ui.activeElement !== $(".cpick")) $(".cpick").value = "#" + rgb.slice(1).map(n => Number(n).toString(16).padStart(2,"0")).join("");
     }
     function placeTbar() {
       const el = S.sel,
@@ -1074,10 +1073,7 @@ import {
         layoutTimer = setTimeout(refreshTextLayout, 100);
       }
     }
-    $(".cpick").addEventListener("input", (e) => fmt("color", e.target.value));
-    $(".text-align").addEventListener("change", (e) =>
-      fmt("align", e.target.value),
-    );
+    $(".cpick").addEventListener("input", e => fmt("color", e.target.value));
     $(".fs").addEventListener("change", (e) => {
       if (Number.isFinite(e.target.valueAsNumber))
         fmt("size", e.target.valueAsNumber);
@@ -1554,8 +1550,12 @@ import {
       "image-replace": () => pickReplace(S.sel),
       "image-fit": () => imageFit("contain"),
       "image-cover": () => imageFit("cover"),
-      "text-layout": (btn) => {
-        openMenu("text-layout", btn);
+      "text-align": () => {
+        const values = ["left", "center", "right", "justify"];
+        fmt("align", values[(values.indexOf($("[data-act=text-align]").dataset.align) + 1) % 4]);
+      },
+      "text-layout": () => {
+        openMenu("text-layout", $("[data-act=element-more]"));
         if (!$("[data-menu=text-layout]").hidden) refreshTextLayout();
       },
       "text-height": () => adaptText("height"),
@@ -1617,6 +1617,7 @@ import {
       "image-cover",
       "text-height",
       "text-fit",
+      "text-align",
       "element-duplicate",
       "element-delete",
       "element-front",

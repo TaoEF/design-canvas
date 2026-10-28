@@ -172,7 +172,7 @@ test("guide overlay stays within the workspace on light, dark and narrow canvase
       await new Promise((resolve) => setTimeout(resolve, 350));
       assert.equal(await p.locator(".guide-line").count(), 1);
       const r = await p.locator(".guides").boundingBox();
-      near(r.x, narrow ? 0 : 208);
+      near(r.x, narrow ? 0 : 170);
       near(r.y, 52);
       await p.screenshot({ path: `.export-test/guides-${name}.png` });
       await p.mouse.up();

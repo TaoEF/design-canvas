@@ -1,6 +1,6 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, mkdir } from "node:fs/promises";
 import { chromium } from "playwright";
 import JSZip from "jszip";
 import { exportDocument, browserOptions } from "./export.mjs";
@@ -246,7 +246,7 @@ test("single page is centered in the available work area, footer owns navigation
       const r = b.getBoundingClientRect();
       return { x: r.x, y: r.y, w: r.width, h: r.height };
     });
-    near(geometry.x + geometry.w / 2, 208 + (1440 - 208) / 2);
+    near(geometry.x + geometry.w / 2, 170 + (1440 - 170) / 2);
     near(geometry.y + geometry.h / 2, 52 + (900 - 52 - 40) / 2);
     assert.equal(await p.locator("[data-artboard]:visible").count(), 1);
     assert.equal(await p.locator("[data-act=single]").count(), 0);
@@ -401,7 +401,7 @@ test("text corners scale nested typography at 50% and 200%; side handles only re
   }
 });
 
-test("Fit/Cover keep the image frame and source, and undo restores the mode", async () => {
+test("image fit modes keep the frame and source, and undo restores the mode", async () => {
   const p = await open();
   try {
     const image = p.locator("[data-el=p1-image]"),
@@ -430,6 +430,66 @@ test("Fit/Cover keep the image frame and source, and undo restores the mode", as
   } finally {
     await p.close();
   }
+});
+
+test("compact navigation keeps the first thumbnail intact and text layout controls visible across window sizes", async () => {
+  const p = await open();
+  try {
+    await mkdir('.export-test', { recursive: true });
+    for (const width of [1440, 760, 390]) {
+      await p.setViewportSize({ width, height: 900 });
+      if (!(await p.locator('.nav').isVisible())) await p.locator('[data-act=nav]').click();
+      const layout = await p.evaluate(() => {
+        const u = document.querySelector('html-design-editor').shadowRoot;
+        const nav = u.querySelector('.nav').getBoundingClientRect();
+        const list = u.querySelector('.thumb-list').getBoundingClientRect();
+        const frame = u.querySelector('.frame').getBoundingClientRect();
+        return { nav: nav.width, top: frame.top - list.top, right: frame.right <= list.right,
+          headerWidth: u.querySelector('.head').scrollWidth,
+          modeIcons: u.querySelectorAll('.layout-toggle svg').length };
+      });
+      assert.equal(layout.nav, 170); assert.ok(layout.top >= 4); assert.ok(layout.right);
+      assert.ok(layout.headerWidth <= width); assert.equal(layout.modeIcons, 0);
+      assert.equal(await p.locator('[data-act=flow]').textContent(), '自动排版');
+      assert.equal(await p.locator('[data-act=artboard]').textContent(), '手动');
+      assert.ok(await p.locator('[data-act=flow]').isVisible());
+      await p.locator('[data-act=more]').click();
+      near((await p.locator('[data-menu=more]').boundingBox()).width, 190);
+      await p.keyboard.press('Escape');
+      if (width <= 540) await p.locator('[data-act=nav]').click();
+      await p.locator('[data-el=p1-title]').click();
+      await p.screenshot({ path: `.export-test/ui-refinement-${width}.png` });
+    }
+    assert.equal(await p.locator('[data-act=add-text] svg').count(), 2);
+    assert.equal(await p.locator('[data-act=add-image] svg').count(), 1);
+    assert.deepEqual(p.errors, []);
+  } finally { await p.close(); }
+});
+
+test("text alignment cycles with one click and adaptation stays in the element menu", async () => {
+  const p = await open();
+  try {
+    await p.locator('[data-el=p1-title]').click();
+    assert.equal(await p.locator('.tbar').evaluate(n => getComputedStyle(n).backgroundColor), 'rgb(32, 32, 32)');
+    assert.equal(await p.locator('.head').evaluate(n => getComputedStyle(n).backgroundColor), 'rgb(255, 255, 255)');
+    assert.equal(await p.locator('.text-tools select').count(), 0);
+    assert.equal(await p.locator('.text-tools [data-act=text-layout]').count(), 0);
+    for (const align of ['center', 'right', 'justify', 'left']) {
+      await p.locator('[data-act=text-align]').click();
+      assert.equal(await p.locator('[data-el=p1-title]').evaluate(n => n.style.textAlign), align);
+      assert.equal(await p.locator('[data-act=text-align]').getAttribute('data-align'), align);
+    }
+    assert.equal(await p.locator('.color-control svg').count(), 0);
+    assert.equal(await p.locator('.cpick').getAttribute('type'), 'color');
+    assert.equal(await p.locator('.color-swatch').evaluate(n => getComputedStyle(n).borderRadius), '50%');
+    await p.locator('[data-act=element-more]').click();
+    assert.ok(await p.locator('[data-act=text-layout]').isVisible());
+    near((await p.locator('[data-menu=element]').boundingBox()).width, 190);
+    await p.locator('[data-act=text-layout]').click();
+    assert.ok(await p.locator('[data-menu=text-layout]').isVisible());
+    assert.ok((await p.locator('[data-menu=text-layout]').boundingBox()).y > 52, 'diagnostics anchor to the visible toolbar, not the hidden menu item');
+    assert.deepEqual(p.errors, []);
+  } finally { await p.close(); }
 });
 
 test("play menu offers scrolling and fullscreen; exiting either returns to canvas preview on the current page", async () => {

@@ -25,11 +25,7 @@ export function createViewport({
   function bounds() {
     if (S.playing) return { x: 0, y: 0, w: innerWidth, h: innerHeight };
     const nav = root.hasAttribute("data-editor-nav")
-      ? innerWidth <= 540
-        ? 0
-        : innerWidth <= 760
-          ? 160
-          : 208
+      ? parseFloat(getComputedStyle(ui.host).getPropertyValue("--nav")) || 0
       : 0;
     return { x: nav, y: 52, w: innerWidth - nav, h: innerHeight - 92 };
   }
@@ -95,7 +91,7 @@ export function createViewport({
       0.1,
       Math.min((v.w - padding) / b.w, (v.h - padding) / b.h, 4),
     );
-    S.zoom = z;
+    S.zoom = clamp(z);
     drawViewport();
   }
   function step(dir) {

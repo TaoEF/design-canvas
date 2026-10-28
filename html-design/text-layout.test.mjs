@@ -29,7 +29,7 @@ async function open(edit=false,html=fixture){
  return p;
 }
 const inspect=(p,id)=>p.evaluate(id=>measurement.inspect(document.getElementById(id)),id);
-async function panel(p,id){await p.locator('#'+id).click();await p.locator('[data-act=text-layout]').click();await p.waitForFunction(()=>document.querySelector('html-design-editor').shadowRoot.querySelector('.text-layout-status').dataset.engine);}
+async function panel(p,id){await p.locator('#'+id).click();await p.locator('[data-act=element-more]').click();await p.locator('[data-act=text-layout]').click();await p.waitForFunction(()=>document.querySelector('html-design-editor').shadowRoot.querySelector('.text-layout-status').dataset.engine);}
 
 test('Pretext validates English and CJK against browser; rich text and word spacing fall back without changing DOM',async()=>{
  const p=await open();try{

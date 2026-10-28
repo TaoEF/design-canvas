@@ -29,7 +29,10 @@ export function createPages({
         (b) => Number(b.dataset.artboard?.match(/^p(\d+)$/)?.[1]) || 0,
       ),
     );
-  const thumbWidth = () => (innerWidth <= 760 ? 132 : 176);
+  const thumbWidth = () => {
+    const cs = getComputedStyle(listUI);
+    return listUI.clientWidth ? Math.max(80, listUI.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)) : 146;
+  };
   function sizeOf(b) {
     return withAll(() => {
       if (visible(b)) {
