@@ -62,6 +62,54 @@ test('PPTX contains editable text runs and separate source images, not flattened
   assert.match(await zip.file('ppt/notesSlides/notesSlide1.xml').async('string'), /可编辑元素/);
 });
 
+test('PPTX paragraphs reflow at the textbox width while authored breaks and rich styles survive', async () => {
+  const paragraph = '中文段落可以随文本框宽度重新换行。English words keep their spaces across soft wraps.';
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+    [data-artboard]{width:600px;height:900px} [data-el]{width:120px;font:20px/28px Arial;margin:0}
+    </style></head><body><main data-stage><section data-artboard="reflow">
+    <p data-el="soft">${paragraph}</p>
+    <p data-el="rich">Before <span style="font-weight:bold;color:#ffcc00;font-size:26px">bold words</span> after.</p>
+    <p data-el="br">First<br><span style="font-weight:bold">Second</span><br><br>Fourth</p>
+    <div data-el="blocks"><div>One <span style="color:#ff0000">red</span></div><div>Two</div><p>Three</p></div>
+    <p data-el="normal">  Source\n indentation <span>  and </span> spaces  </p>
+    <p data-el="pre-line" style="white-space:pre-line">First\n   Second\n\nFourth</p>
+    <p data-el="pre-wrap" style="white-space:pre-wrap">  First\n  Second  line</p>
+    <p data-el="invisible">Visible<span style="display:none">HIDDEN</span><span style="visibility:hidden">HIDDEN</span> text</p>
+    <p data-el="case" style="text-transform:uppercase">small <span>words</span></p>
+    <p data-el="spans">one<span> </span><b>two </b><span> three</span>&nbsp;four</p>
+    <p data-el="trailing">First<br></p>
+    </section></main></body></html>`;
+  const response = await request('pptx', html);
+  assert.equal(response.status, 200, await response.clone().text());
+  const zip = await JSZip.loadAsync(await response.arrayBuffer());
+  const xml = await zip.file('ppt/slides/slide1.xml').async('string');
+  const textboxes = [...xml.matchAll(/<p:sp>.*?<\/p:sp>/gs)].map(match => match[0]).filter(s => s.includes('<p:txBody>'));
+  assert.equal(textboxes.length, 11, 'each original text element remains one editable textbox');
+  const box = name => {
+    const shape = textboxes.find(s => s.includes(`name="${name}"`));
+    assert.ok(shape, `textbox ${name} exists`);
+    assert.match(shape, /<a:bodyPr[^>]*wrap="square"/);
+    assert.doesNotMatch(shape, /<a:(?:normAutofit|spAutoFit)/, 'resizing keeps the authored font size');
+    return shape;
+  };
+  const paragraphs = name => [...box(name).matchAll(/<a:p>.*?<\/a:p>/gs)].map(match =>
+    [...match[0].matchAll(/<a:t>(.*?)<\/a:t>/gs)].map(text => text[1]).join(''));
+  assert.deepEqual(paragraphs('soft'), [paragraph], 'soft wraps must not become hard paragraph breaks');
+  assert.deepEqual(paragraphs('rich'), ['Before bold words after.']);
+  assert.match(box('rich'), /b="1"/);
+  assert.match(box('rich'), /FFCC00/);
+  assert.match(box('rich'), /sz="1950"/);
+  assert.deepEqual(paragraphs('br'), ['First', 'Second', '', 'Fourth']);
+  assert.deepEqual(paragraphs('blocks'), ['One red', 'Two', 'Three']);
+  assert.deepEqual(paragraphs('normal'), ['Source indentation and spaces']);
+  assert.deepEqual(paragraphs('pre-line'), ['First', 'Second', '', 'Fourth']);
+  assert.deepEqual(paragraphs('pre-wrap'), ['  First', '  Second  line']);
+  assert.deepEqual(paragraphs('invisible'), ['Visible text']);
+  assert.deepEqual(paragraphs('case'), ['SMALL WORDS']);
+  assert.deepEqual(paragraphs('spans'), ['one two three\u00a0four']);
+  assert.deepEqual(paragraphs('trailing'), ['First', '']);
+});
+
 test('invalid export requests and cross-origin writes are rejected without touching files', async () => {
   assert.equal((await request('pdf', fixture, { Origin: 'https://example.com' })).status, 403);
   assert.equal((await request('exe')).status, 404);
