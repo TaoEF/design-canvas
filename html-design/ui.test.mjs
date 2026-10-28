@@ -473,12 +473,12 @@ test("play menu offers scrolling and fullscreen; exiting either returns to canva
       await p.locator("html").getAttribute("data-editor-playing"),
       "",
     );
-    assert.ok(await p.evaluate(() => !!document.fullscreenElement));
+    await p.waitForFunction(() => document.fullscreenElement !== null);
     await p.keyboard.press("ArrowRight");
     assert.equal(await current(p), "p3");
     await p.locator(".play-controls [data-act=stop]").click();
     assert.equal(await current(p), "p3");
-    assert.equal(await p.evaluate(() => !!document.fullscreenElement), false);
+    await p.waitForFunction(() => document.fullscreenElement === null);
     assert.equal(await p.locator("html").getAttribute("data-editing"), null);
     assert.deepEqual(p.errors, []);
   } finally {

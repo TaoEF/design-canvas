@@ -56,7 +56,7 @@ confidence: high
 
 ## Failure Modes
 
-仅检查模板存在无法证明 GitHub 标签或 Project 已配置；仅检查图谱无法证明文字正确；旧 HTML 内嵌脚本不自动随 build 升级。
+浏览器全屏进入/退出是异步状态切换；回归用 waitForFunction 等待实际 fullscreenElement，不能在点击后立即读取后断言。首次 Linux CI 曾因此33/34通过，见 Issue #1。仅检查模板存在无法证明 GitHub 标签或 Project 已配置；仅检查图谱无法证明文字正确；旧 HTML 内嵌脚本不自动随 build 升级。
 
 
 ## Update Rules
