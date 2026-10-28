@@ -75,3 +75,18 @@ H02 white-space:pre的stage、inline-block页面之间换行改空格，实际�
 H03 真实浏览器门闩延迟Undo响应：请求发出后普通Edit、改字、拖动/源码应用均不可创建新持久修改；响应后内容和连接可继续正常使用。
 H04 在响应期间强制制造dirty/未应用源码，验证刷新保护：不释放有效token后再盲目导航，不丢DOM/草稿，不永久refreshing；明确冲突或可恢复状态，不用忽略beforeunload断言代替修复。
 H05 修复后针对review Node/browser与原交接流程定向验证；不常规二次独立审查。最终干净候选运行完整相同断言，并由Planner实际覆盖H01-H04。
+
+## I. 用户确认的 Flato UI 修订验收（Planner，2026-10-28）
+
+I01 单页updated自动页底「放弃｜接受」，无需顶部入口/打开面板；hover/focus放弃原位before，离开/blur/接受hover恢复after；点击才写入。preview前后磁盘字节/revision、DOM与history不变，Accept仍字节不变。
+I02 真实浏览器在50%/200% zoom、pan四边越界、1280/390px窗口和侧栏开合时检查操作条bbox完整在viewport.bounds内，按钮屏幕尺寸不变；before/after锚点相同，无hover引起的位移/闪烁。页面真实尺寸变化不拉伸before。
+I03 两页pending默认右下收起summary包含数量/箭头/Accept All；展开逐项定位、放弃、接受，长名和多项列表可滚动；接受一页保留另一页baseline，剩一页UI正确，全部接受后控件消失；current未pending但另页pending仍可发现/到达。
+I04 新增页无before；唯一删除页仍有恢复/接受入口，恢复位置/导航正确；最后一页删除仍可恢复；全局scope明确显示文档范围和原因，不提供虚假页级动作，部分接受成果保留。
+I05 使用真实网络门闩：hover后立刻离开、切页、切接受/新generation，迟到before结果不得显示；再hover可正确载入最新before；失败有反馈、不标假before。保持hover多次heartbeat不会销毁/闪现iframe或改焦点。
+I06 原位before继续阻止脚本/事件/表单/导航和嵌套活动内容；保留相对资源基址；before打开时下载/PDF/PPTX仍只取after，stage、保存与导出无review UI/iframe泄漏。before页面大小/样式不同也不改变canonical尺寸/布局。
+I07 owner预览态可处理；viewer能hover查看但写动作禁用；Undo门闩期间普通Edit/拖动/源码应用仍锁定，异常dirty/source仍保DOM/草稿/token，旧revision/generation仍拒绝。
+I08 Tab/focus同样显示before，blur/接受聚焦/Escape恢复after；展开/收起有正确aria和可见焦点，退出回到可见控件；触摸设备可直接处理；进入播放隐藏review并退出旧preview，返回后恢复正确状态。
+I09 旧A-H、documents、UI/selection/text/导出断言继续通过；旧测试仅更新已变的交互步骤，禁止删掉安全断言。build确定、wiki/project/graph/diff通过；按concurrency=2跑完整回归。运行一次UI detector并记录处理或有据例外。
+I10 Planner在最终干净模拟集成候选上独立实际覆盖I01/I02/I03/I04/I05/I06；结合I07/I08定向用例确认，不只看截图。桌面/窄屏截图一次批量检查、集中修复后至多一次视觉确认。记录原服务8881/人工稿保持事实和新的稳定URL。用户确认前不进#6或远端交付。
+
+流程：Developer主验证冻结后，原Reviewer仅检查5502560之后新增UI边界一次，直接反馈Developer；不重复原服务审查。Planner验收修复后的确定候选。用户「好的，开始」授权实施本修订，不等于验收旧候选。

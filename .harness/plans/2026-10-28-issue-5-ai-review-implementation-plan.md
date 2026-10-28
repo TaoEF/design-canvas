@@ -124,3 +124,34 @@ before 用独立 sandbox iframe，禁止 script/inline handler、forms、嵌套 
 - 审阅写请求进行中必须禁止新的人工编辑/手势，并结束已有输入；不能只禁用审阅按钮。服务器已执行Undo但响应延迟时，用户不能新建未保存内容后又遭强制reload。刷新前再检查dirty、未应用源码/忙碌状态，发现新改动则保留副本、明确冲突；不能先release token再触发可取消导航并永久卡在refreshing。
 
 Developer只修复上述已复现问题及直接回归，保留原保护断言；主验证与针对Findings的定向复验后冻结新tip。Planner在干净候选上验收以上行为并记录最终身份，用户接受前不进下一项。
+
+## 9. 用户确认的 Flato UI 修订（2026-10-28，优先于第3节旧UI描述）
+
+用户在看过源码调查后明确「好的，开始」。此为本修订的实施授权；不是对旧候选5502560的验收或远端交付授权。Planner `/root` 负责本计划及测试用例，原Developer负责实现。修订起点为5502560，WIP仍仅#5，原服务8881和正在试用的HTML不得重建/覆盖。
+
+### 9.1 已核对参考与用户差异
+
+Flato HEAD 2e650309：AIPageReviewPanel.jsx 为页底absolute/bottom12/水平居中、30px按钮、8px圆角；挂在缩放外的页面容器内，控件不缩放。左按钮mouseenter/focus切before，mouseleave/blur切after，click才Undo；右按钮hover/focus返回after，click Accept。SimpleSlideEditor用before只读投影，canonical after不变。AIPageChangesSummary默认收起，右下fixed/bottom120/right16，数量+箭头、Accept All，展开312px逐项列表，可定位/撤回/接受，删除项可恢复。
+
+用户明确要求使用「放弃｜接受」文案、多页时出现汇总、控件始终可见；覆盖Flato源码现有「撤销」文案、单项也出现汇总和缺少视口夹紧的行为。保留现有黑白灰主题，用等价紧凑形态实现，不引入React/MUI/Zustand。
+
+### 9.2 必须交付的交互
+
+1. 移除旧顶部「AI 修改」作为正常主入口和独立大预览/返回模式。当前页有pending时，自动在该页下边缘附近显示「放弃｜接受」分段操作条。它是两个动作，不是持久设置的toggle。普通新增页也可放弃/接受，但没有虚假的before。
+2. updated页：hover或键盘focus「放弃」即在原画布位置显示只读before；mouseleave/blur/转到接受/Escape/切页/播放/新generation/权限交接时退出。移到接受立即回after。点击放弃才调用已有Undo，点击接受调用已有Accept。触摸设备不依赖hover，动作可直接点击；不新增需要用户先进入的比较模式。
+3. before复用既有sanitize/CSP/sandbox隔离。在editor Shadow DOM的独立视觉层对齐页面原屏幕原点、相同zoom/pan，不插入真实stage、不替换设计DOM、不改自动保存/history/导出。before实际尺寸变化使用原尺寸，不拉伸成after尺寸；只在可用画布视口裁切。iframe不得截获操作条hover/焦点，切换不能改变锚点造成闪烁。
+4. 异步按需读before，以revision/generation/scope为缓存边界；悬停期间可预取，离开/切页/新generation后拒绝陈旧结果。网络慢时仍可移到接受/点击操作；加载失败明确提示，不能把after标成before。预览不制造持久状态或隐式接受。
+5. 操作条用页面实际getBoundingClientRect和viewport.bounds定位；正常靠近页底居中，超出时在可用画布范围内夹紧，保持完整按钮/焦点圈。随zoom、pan、resize、侧栏开合和当前页变化更新；控件尺寸固定屏幕像素，不随内容缩放。整页移出视口时仍为当前pending页保留夹紧操作条。与页脚、summary碰撞时让位，不遮住关键按钮。
+6. pending页数>1，画布右下额外出现summary：默认收起，数量+箭头、Accept All。展开是小面板，列表可滚动且不越出可用视口；逐项定位/放弃/接受、当前项状态、增改删标识。处理到剩一个普通可见页时收起/移除summary，保留该页操作条。若唯一pending页不在当前页，保留可发现的页导航提示；不能为了隐藏summary让剩余修改不可达。
+7. 删除页没有页面锚点：即使只剩一个，也保留右下小型恢复/接受入口作为明确例外；恢复后导航到恢复页。文档级pending显示「整份文档」范围/原因，用同样紧凑控件和右下说明入口，放弃明确影响全部未接受修改；不得伪造逐页恢复。异常/外部冲突也保留可达说明。正常单页无需整块列表。
+8. summary在页面右下可见区域、页脚之上；窄窗口可限宽和向上展开。轻量阴影/圆角/紧凑密度对齐Flato，长页名省略并可读完整名称。所有控件可键盘访问，展开有aria-expanded，Escape收起/结束preview；禁用态与只读权限明确。
+
+### 9.3 实现面与交付边界
+
+主要改src/review.js、editor.css、ui.js与editor/viewport少量状态/几何通知；尽量复用现有persistence API和全部服务保护。不改review存储schema或另造after模型。若实现必须变更安全协议，先回Planner说明，不能自行弱化。
+
+Developer先读impeccable的craft-floor（本会话已读SKILL和shape；context已跑过，不重跑），按用户明确参考执行，不发起无关审美选择。一次合并桌面/窄屏视觉检查，集中修复后至多一次视觉确认；完成时运行一次UI detector。同步DESIGN、README/collaboration和wiki，删除失效旧UI描述。
+
+新增用户反馈形成未被原审查覆盖的交互边界（原位sandbox预览、异步hover生命周期、几何定位）。主验证冻结后，只请原Reviewer对5502560之后的本次UI增量做一次定向只读检查，Findings直接回Developer；不重审已审查的服务实现，不启动常规第二轮全量审查。修复后Developer定向验证，Planner最终候选验收。
+
+测试I01-I10见测试计划；全量回归保留原断言的产品语义，只把旧顶部/弹窗操作步骤更新为新UI，不能删除保护用例。新建独立候选/新文件提供试用；不更新旧8881稿，不启动#6，不合main或远端交付。
