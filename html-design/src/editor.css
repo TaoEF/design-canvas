@@ -908,9 +908,9 @@ textarea {
   :host([data-editing]) .head .preview-button {
     display: none;
   }
-  .head .document { flex: 0; }
+  .head .document { flex: 0; gap: 3px; }
   .head .document-title { display: none; }
-  .head .save-state { display: none; }
+  .head .save-state { width: 22px; min-width: 22px; max-width: 22px; padding: 0; flex-shrink: 0; }
   .head .tools > [data-act="undo"], .head .tools > [data-act="redo"] { display: none; }
   .head .actions { flex: initial; }
   .head [data-act="export"] > .icon:last-child {

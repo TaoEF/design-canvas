@@ -453,6 +453,10 @@ test("compact navigation keeps the first thumbnail intact and text layout contro
       assert.equal(await p.locator('[data-act=flow]').textContent(), '自动排版');
       assert.equal(await p.locator('[data-act=artboard]').textContent(), '手动');
       assert.ok(await p.locator('[data-act=flow]').isVisible());
+      assert.ok(await p.locator('[data-act=status]').isVisible(), 'save diagnostics stay accessible on narrow screens');
+      await p.locator('[data-act=status]').click();
+      assert.ok(await p.locator('[data-menu=status]').isVisible());
+      await p.keyboard.press('Escape');
       await p.locator('[data-act=more]').click();
       near((await p.locator('[data-menu=more]').boundingBox()).width, 190);
       await p.keyboard.press('Escape');
@@ -488,6 +492,29 @@ test("text alignment cycles with one click and adaptation stays in the element m
     await p.locator('[data-act=text-layout]').click();
     assert.ok(await p.locator('[data-menu=text-layout]').isVisible());
     assert.ok((await p.locator('[data-menu=text-layout]').boundingBox()).y > 52, 'diagnostics anchor to the visible toolbar, not the hidden menu item');
+    assert.deepEqual(p.errors, []);
+  } finally { await p.close(); }
+});
+
+test("keyboard adaptation opens with useful focus and image menus skip hidden text actions", async () => {
+  const p = await open();
+  const focused = () => p.evaluate(() => document.querySelector('html-design-editor').shadowRoot.activeElement?.dataset.act);
+  try {
+    await p.locator('[data-el=p1-title]').click();
+    await p.locator('[data-act=element-more]').focus();
+    await p.keyboard.press('Enter');
+    for (let i = 0; i < 4; i++) await p.keyboard.press('ArrowDown');
+    assert.equal(await focused(), 'text-layout');
+    await p.keyboard.press('Enter');
+    await p.waitForFunction(() => ['text-height', 'text-fit'].includes(document.querySelector('html-design-editor').shadowRoot.activeElement?.dataset.act));
+    await p.keyboard.press('ArrowDown');
+    assert.ok(['text-height', 'text-fit'].includes(await focused()));
+    await p.keyboard.press('Escape');
+    assert.equal(await focused(), 'element-more');
+    await p.locator('[data-el=p1-image]').click();
+    await p.locator('[data-act=element-more]').focus();
+    await p.keyboard.press('Enter'); await p.keyboard.press('ArrowDown');
+    assert.equal(await focused(), 'element-duplicate');
     assert.deepEqual(p.errors, []);
   } finally { await p.close(); }
 });

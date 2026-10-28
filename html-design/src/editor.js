@@ -1554,9 +1554,14 @@ import {
         const values = ["left", "center", "right", "justify"];
         fmt("align", values[(values.indexOf($("[data-act=text-align]").dataset.align) + 1) % 4]);
       },
-      "text-layout": () => {
-        openMenu("text-layout", $("[data-act=element-more]"));
-        if (!$("[data-menu=text-layout]").hidden) refreshTextLayout();
+      "text-layout": async (btn) => {
+        const keyboard = ui.activeElement === btn, trigger = $("[data-act=element-more]"), panel = $("[data-menu=text-layout]");
+        openMenu("text-layout", trigger);
+        if (keyboard) trigger.focus();
+        if (!panel.hidden) {
+          await refreshTextLayout();
+          if (keyboard && !panel.hidden) panel.querySelector("button:not(:disabled)")?.focus();
+        }
       },
       "text-height": () => adaptText("height"),
       "text-fit": () => adaptText("fit"),
@@ -1668,7 +1673,7 @@ import {
           items = [
             ...(menu?.querySelectorAll("button:not(:disabled):not([hidden])") ||
               []),
-          ];
+          ].filter(n => n.getClientRects().length);
         e.preventDefault();
         (e.key === "ArrowDown" ? items[0] : items.at(-1))?.focus();
         return;
@@ -1688,7 +1693,7 @@ import {
             ...e.target
               .closest("[data-menu]")
               .querySelectorAll("button:not(:disabled):not([hidden])"),
-          ],
+          ].filter(n => n.getClientRects().length),
           i = items.indexOf(ui.activeElement);
         e.preventDefault();
         items[
