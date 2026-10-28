@@ -148,10 +148,11 @@ button.primary:hover:not(:disabled) {
 .done-button {
   background: var(--hover);
 }
-:host(:not([data-editing])) .nav-head [data-act="page-add"],
-:host(:not([data-editing])) .thumb-more {
+:host(:not([data-editing])) .nav-head [data-act="page-add"] {
   display: none;
 }
+.page-preview-hint { margin: 0; }
+:host([data-editing]) .page-preview-hint { display: none; }
 .actions {
   flex: 1;
   justify-content: flex-end;
