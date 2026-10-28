@@ -979,3 +979,9 @@ textarea {
 .play-exit:focus-visible {
   opacity: 1 !important;
 }
+
+/* Experimental text sizing; diagnostics stay inside the editor shadow root. */
+.text-layout-panel { width: 268px; }
+.text-layout-panel strong { display: block; padding: 8px 10px 0; font-weight: 550; }
+.text-layout-status { margin: 8px 10px 12px; max-width: 232px; color: var(--muted); line-height: 1.6; }
+.text-layout-status[data-overflow="true"] { color: #a84c18; }

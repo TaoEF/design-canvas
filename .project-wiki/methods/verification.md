@@ -22,6 +22,8 @@ sources:
     status: current
   - path: html-design/selection.test.mjs
     status: current
+  - path: html-design/text-layout.test.mjs
+    status: current
   - path: .github/workflows/ci.yml
     status: current
 related:
@@ -58,6 +60,8 @@ confidence: high
 
 浏览器全屏进入/退出是异步状态切换；回归用 waitForFunction 等待实际 fullscreenElement，不能在点击后立即读取后断言。首次 Linux CI 曾因此33/34通过，见 Issue #1。仅检查模板存在无法证明 GitHub 标签或 Project 已配置；仅检查图谱无法证明文字正确；旧 HTML 内嵌脚本不自动随 build 升级。
 
+
+Pretext 分支回归补充中英文预测/浏览器对照、复杂样式回退、50%/100%/200%缩放、富文本比例与单步撤销、离线保存重开、最小字号失败和字体异步期间退出编辑。演示页只使用分支新建稿，不覆盖主目录人工稿。
 
 ## Update Rules
 

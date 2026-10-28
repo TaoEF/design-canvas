@@ -24,11 +24,12 @@ export function toolbarHTML({ HANDLES }) {
     <div class="text-tools"><input class="fs" type="number" min="6" max="999" aria-label="字号" title="字号，单位 px">${fmt("bold", "Bold", "加粗 (Ctrl/⌘ B)")}
       <label class="color-control" title="文字颜色" aria-label="文字颜色">${icon("Type")}<span class="color-swatch"></span><input type="color" class="cpick" aria-label="文字颜色"></label>
       <select class="compact-select text-align" aria-label="文字对齐"><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option><option value="justify">两端对齐</option></select>
-      </div>
+      ${b("text-layout", "TextCursorInput", "文字适配（实验）：检测溢出、调整高度和字号", { text: "适配", attrs: 'aria-expanded="false" aria-haspopup="menu"' })}</div>
     <div class="image-tools" hidden>${b("image-replace", "Replace", "替换图片", { text: "替换" })}<div class="seg" role="group" aria-label="图片填充模式"><button data-act="image-fit" title="完整显示，保持比例">Fit</button><button data-act="image-cover" title="裁切铺满，保持比例">Cover</button></div></div>
     <div class="object-tools">${b("element-more", "Ellipsis", "元素操作", { cls: "icon-only", attrs: 'aria-expanded="false" aria-haspopup="menu"' })}</div>
   </div>
   <div class="sel">${HANDLES.map((h) => `<i data-h="${h}" title="${h.length === 2 ? "拖动缩放（文字角点同步缩放字号）" : "调整边界，不改变字号"}"></i>`).join("")}</div>
+  <div class="menu-panel text-layout-panel" data-menu="text-layout" role="menu" hidden><strong>文字适配 · 实验</strong><p class="text-layout-status" role="status" aria-live="polite"></p>${b("text-height", "TextCursorInput", "保持字号，按内容调整文本框高度", { text: "高度随内容" })}${b("text-fit", "Type", "保持文本框，缩小字号以完整显示（最小 6px）", { text: "缩小字号适配" })}</div>
   <div class="menu-panel" data-menu="play" role="menu" hidden>${b("scroll-play", "PanelsTopBottom", "滚动播放：上下滚动浏览全部页面", { text: "滚动播放" })}${b("fullscreen", "Maximize", "全屏播放", { text: "全屏播放" })}</div>
   <div class="menu-panel pop" data-menu="export" role="menu" hidden>
     ${b("pdf", "FileText", "下载 PDF", { text: "PDF 文档" })}${b("pptx", "Presentation", "下载 PPTX（文字和图片可编辑）", { text: "PowerPoint · 可编辑" })}<div class="menu-separator"></div>

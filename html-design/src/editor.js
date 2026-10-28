@@ -4,6 +4,7 @@ import { createPersistence } from "./persistence.js";
 import { createViewport } from "./viewport.js";
 import { createPages } from "./pages.js";
 import { textMetrics, scaleText } from "./typography.js";
+import { createTextLayout } from "./text-layout.js";
 import { icon } from "./icons.js";
 import { rekeyDOMIds } from "./identifiers.js";
 import { createGuides } from "./guides.js";
@@ -105,6 +106,8 @@ import {
     $(".title").textContent = document.title || fileName();
     const guides = createGuides({ ui, origin });
     const selectionOverlay = createSelectionOverlay(ui);
+    const textLayout = createTextLayout({ ui });
+    let layoutRequest = 0, layoutTimer;
 
     /* ---------- 工具函数 ---------- */
     let focusedBeforeModal = null;
@@ -1032,7 +1035,11 @@ import {
       const el = S.sel,
         show = S.editing && !S.playing && el?.isConnected && visible(el);
       tbar.hidden = !show;
-      if (!show) return;
+      if (!show) {
+        $("[data-menu=text-layout]").hidden = true;
+        ++layoutRequest;
+        return;
+      }
       const multi = S.selection.length > 1;
       $(".selection-count").hidden = !multi;
       $(".selection-count").textContent = multi
@@ -1059,6 +1066,13 @@ import {
         );
       }
       if (text) syncTbar();
+      if (!text || !show) {
+        $("[data-menu=text-layout]").hidden = true;
+        ++layoutRequest;
+      } else if (!$("[data-menu=text-layout]").hidden) {
+        clearTimeout(layoutTimer);
+        layoutTimer = setTimeout(refreshTextLayout, 100);
+      }
     }
     $(".cpick").addEventListener("input", (e) => fmt("color", e.target.value));
     $(".text-align").addEventListener("change", (e) =>
@@ -1439,6 +1453,52 @@ import {
       );
       drawSel();
     }
+    async function refreshTextLayout() {
+      const id = ++layoutRequest, el = S.sel;
+      const status = $(".text-layout-status");
+      const height = $("[data-act=text-height]"), fit = $("[data-act=text-fit]");
+      height.disabled = fit.disabled = true;
+      status.textContent = "正在检测文字…";
+      delete status.dataset.engine;
+      try {
+        if (!el || S.selection.length !== 1) return;
+        const result = await textLayout.inspect(el);
+        if (id !== layoutRequest || S.sel !== el || !S.editing) return;
+        status.dataset.engine = result.engine;
+        status.dataset.overflow = String(result.overflow);
+        status.textContent = `${result.overflow ? "文字溢出" : "文字可完整显示"}${result.lineCount ? ` · ${result.lineCount} 行` : ""}，需要 ${Math.ceil(result.requiredHeight)}px / 当前 ${Math.round(result.availableHeight)}px。${result.engine === "pretext" ? "" : "使用浏览器实测。"}${result.adaptable ? "" : "这种布局暂不支持自动适配。"}`;
+        status.title = result.reason;
+        height.disabled = !result.adaptable;
+        fit.disabled = !result.adaptable || !result.overflow;
+      } catch (error) {
+        if (id === layoutRequest) status.textContent = error.message;
+      }
+    }
+    async function adaptText(mode) {
+      endText();
+      const el = S.sel;
+      if (!el || S.selection.length !== 1) return;
+      const before = el.outerHTML;
+      try {
+        const changes = await textLayout.plan(el, mode);
+        if (!el.isConnected || S.sel !== el || !S.editing || S.playing || !persistence?.canEdit() || el.outerHTML !== before) {
+          toast("文字或编辑状态已变化，请重新适配");
+          return;
+        }
+        if (!changes.length) return toast("文字已可完整显示");
+        const stylesBefore = changes.map(({ node }) => node.getAttribute("style"));
+        record(changes.map(c => c.node), () => {
+          changes.forEach(({ node, styles }) => Object.assign(node.style, styles));
+          if (textLayout.check(el).overflow) {
+            changes.forEach(({ node }, i) => stylesBefore[i] === null
+              ? node.removeAttribute("style") : node.setAttribute("style", stylesBefore[i]));
+            throw new Error("页面布局限制了适配，已保留原样；请调整文本框或父级布局");
+          }
+        }, el.closest("[data-artboard]"));
+        drawSel();
+        toast(mode === "height" ? "已按内容调整高度，可撤销" : "已缩小字号适配，可撤销");
+      } catch (error) { toast(error.message, 4000); }
+    }
     const ACTS = {
       nav(btn) {
         if (innerWidth <= 540) {
@@ -1494,6 +1554,12 @@ import {
       "image-replace": () => pickReplace(S.sel),
       "image-fit": () => imageFit("contain"),
       "image-cover": () => imageFit("cover"),
+      "text-layout": (btn) => {
+        openMenu("text-layout", btn);
+        if (!$("[data-menu=text-layout]").hidden) refreshTextLayout();
+      },
+      "text-height": () => adaptText("height"),
+      "text-fit": () => adaptText("fit"),
       "element-duplicate": () => S.sel && duplicate(S.sel),
       "element-delete": () => S.sel && removeEl(S.sel),
       "element-front": () => layer(true),
@@ -1549,6 +1615,8 @@ import {
       "image-replace",
       "image-fit",
       "image-cover",
+      "text-height",
+      "text-fit",
       "element-duplicate",
       "element-delete",
       "element-front",
@@ -1565,7 +1633,7 @@ import {
       const act = btn.dataset.act;
       if (!act) return;
       if (
-        !["preview", "export", "more", "status", "element-more"].includes(act)
+        !["preview", "export", "more", "status", "element-more", "text-layout"].includes(act)
       )
         closeMenus();
       if (

@@ -19,6 +19,10 @@ sources:
     status: current
   - path: html-design/selection.test.mjs
     status: current
+  - path: html-design/src/text-layout.js
+    status: current
+  - path: html-design/text-layout.test.mjs
+    status: current
   - path: DESIGN.md
     status: current
 related:
@@ -38,7 +42,7 @@ confidence: high
 
 ## Source Of Truth
 
-`editor.js` 组合交互；`ui.js` / `editor.css` 负责界面；`pages.js` 负责页面；`viewport.js` 负责缩放、播放；`typography.js`、`guides.js`、`layers.js` 负责文字、吸附和叠层；`selection.js` 负责多选、框选和方向扩选；`persistence.js` / `drafts.js` 负责保存恢复；`export.js` 序列化导出。具体模块以当前 import 为准。
+`editor.js` 组合交互；`ui.js` / `editor.css` 负责界面；`pages.js` 负责页面；`viewport.js` 负责缩放、播放；`text-layout.js` 在实验分支封装 Pretext 1.0.0、字体就绪、测量和适配计划；`typography.js`、`guides.js`、`layers.js` 负责文字、吸附和叠层；`selection.js` 负责多选、框选和方向扩选；`persistence.js` / `drafts.js` 负责保存恢复；`export.js` 序列化导出。具体模块以当前 import 为准。
 
 
 ## Contracts
@@ -50,6 +54,10 @@ confidence: high
 
 修改 `src/`，运行构建与相关回归。已有文档使用 begin/commit 交接更新内嵌脚本；不能直接运行示例生成器替换用户稿件。
 
+
+## Pretext 实验边界
+
+当前分支新增文字「适配」菜单：溢出检测、保持字号调整高度、保持框按比例缩小字号（最小6px）。纯文本预测通过浏览器校验后采用，否则回退实测；混合字号不宣称由 Pretext rich-inline 覆盖。排版计划在隐藏副本上计算，仅操作确认时修改原节点，保留 HTML 结构；无布局缓存/分行持久化，PPTX 仍按浏览器实测导出。复杂块结构/伪元素/多栏/竖排/截断不自动适配。每次仍测量 DOM，不承诺性能收益。
 
 ## Failure Modes
 
