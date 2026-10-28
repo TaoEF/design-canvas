@@ -241,3 +241,34 @@ test('B06/D03: AI expiry creates no pending review; symlink alias shares owner, 
   assert.ok((await f.current()).review.conflict); await rejected(f.review('undo', 'p1'));
   assert.match(await readFile(f.file, 'utf8'), /external/);
 });
+
+test('H01: page-contained style and stylesheet nodes remain global; manual edits protect all affected pages', async t => {
+  const initial = html(page('p1', '<style>[data-artboard] h1{color:red}</style>p1') + page('p2'));
+  for (const [before, after] of [
+    [initial, initial.replace('color:red', 'color:blue')],
+    [html(page('p1', '<link rel="stylesheet" href="a.css">p1') + page('p2')), html(page('p1', '<link rel="stylesheet" href="b.css">p1') + page('p2'))],
+    [html(), html(page('p1', '<style>h1{color:blue}</style>p1') + page('p2'))],
+  ]) assert.equal(reviewDiff(before, after).scope, 'document');
+  const f = await fixture(t, {}, initial);
+  await f.ai(h => h.replace('>p2<', '>accepted p2<')); await f.review('accept', 'p2');
+  await f.ai(h => h.replace('color:red', 'color:blue'));
+  assert.equal((await f.current()).review.scope, 'document');
+  await f.review('undo', 'document'); assert.match(await readFile(f.file, 'utf8'), /accepted p2/);
+  await f.ai(h => h.replace('color:red', 'color:blue'));
+  const stale = await f.current();
+  const saved = await f.call('save', { revision: stale.revision, html: (await readFile(f.file, 'utf8')).replace('accepted p2', 'manual p2') });
+  assert.deepEqual(saved.implicitAccepted, ['document']); assert.equal(saved.review.items.length, 0);
+  await rejected(f.call('review/undo', { revision: stale.revision, generation: stale.review.generation, scope: 'document' }));
+  assert.match(await readFile(f.file, 'utf8'), /color:blue/); assert.match(await readFile(f.file, 'utf8'), /manual p2/);
+});
+
+test('H02: stage whitespace retains layout meaning; removing only a page with unchanged whitespace remains local', () => {
+  const before = html(page('p1') + '\n' + page('p2')).replace('<main data-stage>', '<main data-stage style="white-space:pre">');
+  assert.equal(reviewDiff(before, before.replace('</section>\n<section', '</section> <section')).scope, 'document');
+  const deleted = before.replace(page('p1'), '');
+  assert.deepEqual(reviewDiff(before, deleted).items.map(i => [i.id, i.kind]), [['p1', 'deleted']]);
+  assert.equal(reviewDiff(before, deleted).scope, 'pages');
+  assert.equal(reviewDiff(before, before.replace('data-stage style="white-space:pre"', "style='white-space:pre' data-stage='' ")).items.length, 0);
+  const svg = html(page('p1', '<svg><text>first</text><text>second</text></svg>') + page('p2'));
+  assert.equal(reviewDiff(svg, svg.replace('second', 'changed')).items[0].id, 'p1', 'merging adjacent HTML text must not collapse SVG text elements');
+});

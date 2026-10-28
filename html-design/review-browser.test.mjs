@@ -179,3 +179,88 @@ test('F05: delayed pre-takeover heartbeat cannot cancel one-click editing intent
     assert.match(await readFile(f.file, 'utf8'), /Latest gated human text/);
   } finally { releaseSave(); releaseSync(); }
 });
+
+test('H02: newline-to-space between inline pages actually changes layout and creates document review', async t => {
+  const { reviewDiff } = await import('./review-html.mjs');
+  const ctx = await browser.newContext(), p = await ctx.newPage(); t.after(() => ctx.close());
+  const before = '<!DOCTYPE html><html><head><style>section{display:inline-block;width:100px;height:30px}</style></head><body><main data-stage style="white-space:pre"><section data-artboard="p1"></section>\n<section data-artboard="p2"></section></main></body></html>', after = before.replace('</section>\n<section', '</section> <section');
+  await p.setContent(before); const old = await p.locator('[data-artboard=p2]').boundingBox();
+  await p.setContent(after); const next = await p.locator('[data-artboard=p2]').boundingBox();
+  assert.notEqual(old.y, next.y); assert.notEqual(old.x, next.x); assert.equal(reviewDiff(before, after).scope, 'document');
+});
+
+test('H03: pending Undo freezes edit, gestures and source apply until response; connection remains usable afterward', async t => {
+  const f = await fixture(t, 'undo-gated'); await f.load();
+  await f.ai(h => h.replace('Original one', 'AI gated'));
+  await f.page.locator('[data-el=p1-title]').filter({ hasText: 'AI gated' }).waitFor(); await f.show();
+  let release, received; const gate = new Promise(r => release = r), response = new Promise(r => received = r);
+  await f.page.route('**/__html-design/document/review/undo', async route => { const result = await route.fetch(); received(); await gate; await route.fulfill({ response: result }); });
+  try {
+    await f.row('p1').getByRole('button', { name: '撤回', exact: true }).click(); await response;
+    assert.ok(await f.page.locator('[data-act=edit]').isDisabled());
+    assert.ok(await f.page.locator('[data-act=page-add]').first().isDisabled());
+    await f.page.locator('[data-el=p1-title]').dblclick();
+    assert.equal(await f.page.locator('[contenteditable=true]').count(), 0);
+    const box = await f.page.locator('[data-el=p1-title]').boundingBox();
+    await f.page.mouse.move(box.x + 10, box.y + 10); await f.page.mouse.down(); await f.page.mouse.move(box.x + 60, box.y + 20); await f.page.mouse.up();
+    await f.page.locator('[data-act=more]').click(); await f.page.locator('[data-act=source]').click();
+    assert.ok(await f.page.locator('textarea').isEditable() === false); assert.ok(await f.page.locator('[data-act=src-apply]').isDisabled());
+    await f.page.locator('[data-act=src-close]').click();
+    release(); await f.page.locator('[data-el=p1-title]').filter({ hasText: 'Original one' }).waitFor();
+    await f.page.locator('[data-act=edit]').click(); await f.page.locator('html[data-editing]').waitFor();
+    await f.page.locator('[data-el=p1-title]').dblclick(); await f.page.locator('[contenteditable=true]').fill('Human after gated undo');
+    await f.page.waitForFunction(() => document.querySelector('html-design-editor').shadowRoot.querySelector('.state-text').textContent === '已保存');
+    assert.match(await readFile(f.file, 'utf8'), /Human after gated undo/);
+  } finally { release(); }
+});
+
+for (const forced of ['dirty', 'source']) {
+  test(`H04: forced ${forced} while Undo response is held keeps draft/DOM and live token without navigation`, async t => {
+    const f = await fixture(t, `forced-${forced}`);
+    await f.ai(h => h.replace('Original one', 'AI pending'));
+    const current = await f.call('read');
+    await mkdir(path.join(root, 'runtime'), { recursive: true });
+    for (const name of ['persistence.js', 'drafts.js']) await writeFile(path.join(root, 'runtime', name), await readFile(`html-design/src/${name}`));
+    await f.page.goto(`${origin}/__html-design/health`);
+    await f.page.evaluate(async ({ config, html }) => {
+      const { createPersistence } = await import('/runtime/persistence.js');
+      window.hSnapshot = html; window.hStates = []; window.hNavigations = 0; window.hDirty = false; window.hSource = false;
+      document.body.innerHTML = '<h1>AI pending</h1><textarea></textarea>';
+      window.hHarness = createPersistence({ config, serialize: () => window.hSnapshot, pause: () => true, prepareReview: () => true, isBusy: () => false, hasPendingSource: () => window.hSource,
+        applyHTML: () => {}, changed: dirty => window.hDirty = dirty, render: state => window.hStates.push(state), reload: () => window.hNavigations++, download: () => {} });
+      await window.hHarness.start();
+    }, { config: { path: `/demos/forced-${forced}.html`, revision: current.revision }, html: current.html });
+    let release, received, saves = 0, releases = 0, badTokens = 0, syncs = 0;
+    const gate = new Promise(r => release = r), response = new Promise(r => received = r);
+    f.page.on('response', r => { if (r.url().includes('/__html-design/document/') && r.status() === 401) badTokens++; });
+    await f.page.route('**/__html-design/document/save', async route => { saves++; await route.continue(); });
+    await f.page.route('**/__html-design/document/sync', async route => { syncs++; await route.continue(); });
+    await f.page.route('**/__html-design/document/release', async route => { releases++; await route.continue(); });
+    await f.page.route('**/__html-design/document/review/undo', async route => { const result = await route.fetch(); received(); await gate; await route.fulfill({ response: result }); });
+    try {
+      await f.page.evaluate(() => {
+        const s = window.hStates.at(-1);
+        window.hOutcome = window.hHarness.reviewAction('undo', 'p1', s.review.generation).then(() => 'ok', e => e.message);
+      });
+      await response;
+      await f.page.evaluate(forced => {
+        window.hSnapshot = window.hSnapshot.replace('AI pending', 'Forced preserved text');
+        document.querySelector('h1').textContent = 'Forced preserved text';
+        window.hHarness.markDirty();
+        if (forced === 'source') { window.hSource = true; document.querySelector('textarea').value = 'Unapplied source must stay'; }
+      }, forced);
+      await f.page.waitForTimeout(900); assert.equal(saves, 0, 'automatic save must not race an in-flight review');
+      release(); assert.equal(await f.page.evaluate(() => window.hOutcome), 'ok');
+      assert.deepEqual(await f.page.evaluate(() => ({ dirty: window.hDirty, navigations: window.hNavigations, conflict: window.hStates.at(-1).conflict, canEdit: window.hHarness.canEdit() })), { dirty: true, navigations: 0, conflict: true, canEdit: false });
+      assert.equal(await f.page.locator('h1').textContent(), 'Forced preserved text');
+      if (forced === 'source') assert.equal(await f.page.locator('textarea').inputValue(), 'Unapplied source must stay');
+      const draftPreserved = await f.page.evaluate(async () => new Promise(resolve => {
+        const request = indexedDB.open('html-design-drafts', 1); request.onsuccess = () => { const rows = request.result.transaction('drafts').objectStore('drafts').getAll(); rows.onsuccess = () => resolve(rows.result.some(d => d.html.includes('Forced preserved text'))); };
+      }));
+      assert.ok(draftPreserved); const previousSyncs = syncs; await f.page.evaluate(() => window.hHarness.retry());
+      assert.ok(syncs > previousSyncs, 'retry must still reach the server, rather than remain stuck refreshing');
+      assert.equal(releases, 0); assert.equal(badTokens, 0); assert.equal(await f.page.evaluate(() => window.hNavigations), 0);
+      assert.match(await readFile(f.file, 'utf8'), /Original one/); assert.doesNotMatch(await readFile(f.file, 'utf8'), /Forced preserved text/);
+    } finally { release(); }
+  });
+}

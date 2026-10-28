@@ -6,15 +6,21 @@ const children = n => n.childNodes || [];
 const walk = function* (n) { yield n; for (const c of children(n)) yield* walk(c); if (n.content) yield* walk(n.content); };
 const ignored = n => has(n, 'data-editor') || has(n, 'data-editor-ui') || has(n, 'data-editor-connection') || (n.tagName === 'style' && has(n, 'data-editor-style')) || attr(n, 'id') === 'codex-browser-sidebar-comments-root';
 const derived = name => name === 'data-bbox' || name === 'contenteditable' || name === 'data-page-seq' || name === 'data-element-seq' || name === 'data-editing' || name.startsWith('data-editor-');
-function signature(n, shell = false) {
-  if (ignored(n) || (shell && has(n, 'data-artboard'))) return null;
+function signature(n, shell = false, commonPages = new Set()) {
+  if (ignored(n)) return null;
+  if (shell && has(n, 'data-artboard')) return commonPages.has(attr(n, 'data-artboard')) ? ['page', attr(n, 'data-artboard')] : null;
   if (n.nodeName === '#comment') return null;
   if (n.nodeName === '#documentType') return ['doctype', n.name, n.publicId, n.systemId];
   if (n.nodeName === '#text') {
-    const structural = ['#document', 'html', 'head', 'body'].includes(n.parentNode?.nodeName) || has(n.parentNode, 'data-stage');
+    const structural = ['#document', 'html', 'head'].includes(n.parentNode?.nodeName);
     return shell && structural && !n.value.trim() ? null : ['text', n.value];
   }
-  return [n.tagName || n.nodeName, (n.attrs || []).filter(a => !derived(a.name)).map(a => [a.namespace || '', a.name, a.value]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))), children(n).map(c => signature(c, shell)).filter(c => c !== null), n.content ? signature(n.content, shell) : null];
+  const content = [];
+  for (const c of children(n).map(c => signature(c, shell, commonPages)).filter(c => c !== null)) {
+    if (c.length === 2 && c[0] === 'text' && content.at(-1)?.length === 2 && content.at(-1)[0] === 'text') content.at(-1)[1] += c[1];
+    else content.push(c);
+  }
+  return [n.tagName || n.nodeName, (n.attrs || []).filter(a => !derived(a.name)).map(a => [a.namespace || '', a.name, a.value]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))), content, n.content ? signature(n.content, shell, commonPages) : null];
 }
 export function inspectHTML(html) {
   const tree = parse(html, { sourceCodeLocationInfo: true }), nodes = [...walk(tree)];
@@ -30,11 +36,13 @@ export function reviewDiff(beforeHTML, afterHTML) {
   const before = inspectHTML(beforeHTML), after = inspectHTML(afterHTML);
   if (equal(signature(before.tree), signature(after.tree))) return { scope: 'pages', items: [], reasons: [] };
   const reasons = [];
+  const commonBefore = before.ids.filter(id => after.byId.has(id)), commonAfter = after.ids.filter(id => before.byId.has(id)), common = new Set(commonBefore);
   if (!before.safe || !after.safe) reasons.push('页面结构或标识无法安全分开恢复');
-  if (!equal(signature(before.tree, true), signature(after.tree, true))) reasons.push('共享样式、全局属性或页面外内容变化');
+  if (!equal(signature(before.tree, true, common), signature(after.tree, true, common))) reasons.push('共享样式、全局属性或页面外内容变化');
+  const styles = doc => doc.nodes.filter(n => !ignored(n) && (n.tagName === 'style' || (n.tagName === 'link' && attr(n, 'rel')?.toLowerCase().split(/\s+/).includes('stylesheet')))).map(n => signature(n));
+  if (!equal(styles(before), styles(after))) reasons.push('样式表变化（包含页内共享样式）');
   const scripts = doc => doc.nodes.filter(n => n.tagName === 'script' && !ignored(n)).map(n => signature(n));
   if (!equal(scripts(before), scripts(after))) reasons.push('内容脚本变化');
-  const commonBefore = before.ids.filter(id => after.byId.has(id)), commonAfter = after.ids.filter(id => before.byId.has(id));
   if (!equal(commonBefore, commonAfter)) reasons.push('已有页面顺序变化');
   if (reasons.length) return { scope: 'document', items: [{ id: 'document', kind: 'updated', title: '整份文档' }], reasons };
   const items = [...new Set([...before.ids, ...after.ids])].flatMap(id => {

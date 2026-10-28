@@ -969,7 +969,7 @@ property of their respective owners.
     let draftQueue = Promise.resolve(), refreshing = false, opening = false;
     let review = { generation: 0, items: [], reasons: [] }, locked = false, pending = false, reviewing = false;
     const managed = !!config, drafts = managed && createDrafts(config.path);
-    const canEdit = () => !managed || connected && role === "owner" && !frozen && !blocked;
+    const canEdit = () => !managed || connected && role === "owner" && !frozen && !blocked && !reviewing && !refreshing;
     function show(message, options = {}) {
       render({ message, canEdit: canEdit(), managed, dirty, review, canReview: canEdit() && !locked && !pending && !reviewing, reviewing, ...options });
     }
@@ -1000,11 +1000,12 @@ property of their respective owners.
       draftQueue = job;
       return job;
     }
-    async function flush() {
+    async function flush(reviewFlush = false) {
       if (!managed) return;
+      if (reviewing && !reviewFlush) return;
       if (saving) {
         await saving;
-        if (dirty && !blocked) return flush();
+        if (dirty && !blocked) return flush(reviewFlush);
         return;
       }
       if (!dirty) return;
@@ -1078,18 +1079,25 @@ property of their respective owners.
     }
     async function refresh() {
       if (refreshing) return;
+      if (dirty || hasPendingSource() || isBusy()) return false;
       refreshing = true;
-      if (token) await request("release").catch(() => {
-      });
-      token = null;
-      reload();
+      try {
+        reload();
+      } catch (error) {
+        refreshing = false;
+        throw error;
+      }
+      setTimeout(() => {
+        refreshing = false;
+      }, 500);
+      return true;
     }
     async function sync() {
-      if (polling || saving || !token || refreshing) return;
+      if (polling || saving || reviewing || !token || refreshing) return;
       polling = true;
       try {
         const result = await request("sync");
-        if (saving) return;
+        if (saving || reviewing) return;
         adopt(result);
         if (result.revision !== revision) {
           if (hasPendingSource()) {
@@ -1210,22 +1218,33 @@ property of their respective owners.
         if (!managed || !canEdit() || locked || pending || reviewing) throw new Error("请先取得编辑权限并等待交接结束");
         if (prepareReview() === false) throw new Error("请先应用或关闭源码，再处理 AI 修改");
         reviewing = true;
+        show("正在处理 AI 修改…");
         try {
-          await flush();
+          await flush(true);
           if (dirty) throw new Error("当前修改尚未保存，请先完成保存");
           const latest = await request("sync");
           adopt(latest);
           if (latest.revision !== revision || review.generation !== expectedGeneration) throw new Error("修改或审阅已有更新，请重新选择；当前内容保持不变");
+          const writeGeneration = generation;
           const result = await request(`review/${action}`, { revision, generation: expectedGeneration, scope, requestId: crypto.randomUUID() });
           adopt(result);
           if (result.revision !== revision) {
+            if (dirty || generation !== writeGeneration || hasPendingSource() || isBusy()) {
+              blocked = true;
+              frozen = true;
+              clearTimeout(timer);
+              await backup().catch(() => {
+              });
+              show("撤回已完成，但期间出现新修改 · 内容已保留，请下载副本后同步", { conflict: true, retry: true });
+              return result;
+            }
             historyBoundary();
             await refresh();
           } else show("已接受 AI 修改");
           return result;
         } finally {
           reviewing = false;
-          if (!refreshing) show(dirty ? "尚未保存" : "已保存");
+          if (!refreshing) show(blocked ? "版本冲突 · 修改已保留，请下载 HTML" : dirty ? "尚未保存" : "已保存", { conflict: blocked, retry: blocked });
         }
       },
       async save() {

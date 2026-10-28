@@ -47,3 +47,5 @@ AI commit 后，最新编辑器显示「AI 修改」。页内改动可逐页 Acc
 审阅摘要只包含 scope、变更列表、原因、generation 和冲突标志；before HTML 按需单独获取。before 在独立 sandbox iframe 中呈现，只允许同源资源，不允许脚本、表单或上层导航，另清除脚本/事件/导航元素并使用 CSP；它不进入正式 stage、保存、普通历史或导出。保留原文档资源基址。离线下载不携带服务端基线，不提供服务审阅。
 
 恢复保留当前编辑器 bundle 与不递减的 page/element 序号。不能协调多个服务进程，也不自动合并外部编辑；外部冲突需要保留副本与恢复记录后排查，不能删除审阅文件并假装完成撤回。
+
+审查补充：页内 style 与 stylesheet link 仍是全局样式表，变化归文档级；inline style 属性仍可页级。stage 的空白可能通过 white-space/inline-block 影响布局，不能统一忽略。审阅写入期间禁用普通编辑与新自动保存，保留已有 flush；Undo 响应后再次检查 dirty/generation/未应用源码/手势，出现新修改就保留 DOM 与草稿、提示冲突而不刷新。连接 token 只在实际 pagehide 释放，取消导航后心跳仍可继续，不会预先释放后永久 refreshing。

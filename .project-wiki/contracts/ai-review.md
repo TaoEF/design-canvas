@@ -45,10 +45,11 @@ review-html.mjs 使用服务端 parse5@8.0.0 真树和 source locations 分析�
 
 ## Contracts
 
-- 页内变更按 data-artboard 稳定标识归类新增/修改/删除；共享 head/样式/全局属性/页外结构、任何内容脚本、已有页重排、重复/缺失标识、非 stage 直接子页等保守归为文档级。
+- 页内变更按 data-artboard 稳定标识归类新增/修改/删除；共享 head/样式/全局属性/页外结构、任何内容脚本、已有页重排、重复/缺失标识、非 stage 直接子页等保守归为文档级。style/stylesheet link 即使位于页内也按全局比较，内联 style 属性仍可页级；stage 内显著空白保留，共同页占位用于避免仅增删页造成伪全局。
 - 等价属性次序/引号、编辑器 runtime/connection/UI、bbox、临时属性与序号不产生 pending。保留真实文本/pre 空白、data-mode/data-flow-style 和内容样式。
 - 聚合 baseline 保留首次未接受版本；Accept 某页把该页当前状态写入 baseline，其他 before 保留。人工保存更新被修改范围的 baseline；全局人工修改或文档级 pending 后的人工修改接受整个审阅。派生差异不接受。
 - 保存仍使用现有 CAS、备份与原子替换。新增 review/read、review/accept、review/undo；读按需返回 before，写只收 revision/generation/scope/requestId，服务器决定恢复内容。仅当前 owner 且无 AI/待交接可处理。
+- 审阅写进行中整体关闭普通编辑与新自动保存，允许本次请求前已有修改完成 flush。Undo 响应后再检查 dirty/generation/source/busy；若出现新内容则保留 DOM/草稿并提示冲突，不导航。刷新只在实际 pagehide 时释放 token，取消导航不会提前失效连接或永久锁在 refreshing。
 - `.html-design/reviews/<canonical hash>/state.json` 为 0600，独立于10份历史轮转；prepared 内保存旧 state/from/to/next。磁盘等于 to 时 finalize，等于 from 时 rollback，否则保留证据并阻止所有写入。metadata-only 也做近端文件版本检查。
 - 轻量摘要不传 baseline；恢复后保留当前 runtime、单调序号，刷新清空旧 DOM closures。下载/离线不携带审阅状态，原离线编辑仍可用。
 - before 清洗脚本/事件/表单/导航/嵌套活动内容，并置于 sandbox（仅 allow-same-origin，无 allow-scripts/forms/top-navigation）与 script-src none CSP 中。允许同源以保留原字体/资源，iframe 内容不进入 stage、序列化、history 或导出。
