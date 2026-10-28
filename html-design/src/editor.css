@@ -400,6 +400,8 @@ button.primary:hover:not(:disabled) {
   gap: 3px;
 }
 .tbar .seg { background: #353535; }
+.tbar .seg button[aria-pressed="true"] { background: #555; color: #fff; box-shadow: none; }
+.image-tools > [data-act="image-replace"] { font-size: 12px; font-weight: 400; gap: 5px; }
 .tbar .color-control .color-swatch { box-shadow: 0 0 0 1px #ffffff90; }
 .tbar .fs {
   width: 52px;

@@ -407,8 +407,13 @@ test("image fit modes keep the frame and source, and undo restores the mode", as
     const image = p.locator("[data-el=p1-image]"),
       src = await image.getAttribute("src");
     await image.click();
+    assert.equal(await p.locator('[data-act=image-replace]').evaluate(n => getComputedStyle(n).fontSize), '12px');
+    assert.equal(await p.locator('[data-act=image-fit]').textContent(), '适应');
+    assert.equal(await p.locator('[data-act=image-cover]').textContent(), '填充');
     const before = await image.boundingBox();
     await p.locator("[data-act=image-fit]").click();
+    assert.equal(await p.locator('[data-act=image-fit]').evaluate(n => getComputedStyle(n).backgroundColor), 'rgb(85, 85, 85)');
+    assert.equal(await p.locator('[data-act=image-fit]').evaluate(n => getComputedStyle(n).color), 'rgb(255, 255, 255)');
     assert.equal(
       await image.evaluate((n) => getComputedStyle(n).objectFit),
       "contain",
