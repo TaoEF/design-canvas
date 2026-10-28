@@ -161,3 +161,23 @@ Developer先读impeccable的craft-floor（本会话已读SKILL和shape；context
 定向审查5502560..ac8b544已完成，独立7/7；唯一P2直接交Developer，Planner接纳：iframe扩大至页面1600px导致实际窗口1280px下的10vw/媒体查询渲染错误。修复应始终以父文档实际innerWidth/innerHeight作为iframe viewport，页面可大于viewport；缩放/目标偏移在隔离文档内依照现有fixed stage契约执行，外层仅裁切画布可见范围。不得通过扩大iframe或拉伸页面改变vw/vh/media语义。保留原始before尺寸、兄弟/继承CSS、sandbox、权限及异步取消保护；窗口变化后重新计算，避免沿用过期的viewport/测量。
 
 Developer在本计划提交后修复，执行I11及相关I01-I08和完整回归，冻结最终tip；Planner独立复现viewport案例并重跑候选验收。不安排常规二审，不扩大其他功能。
+
+## 10. 用户验收反馈：审阅一键执行，后台交接（2026-10-29）
+
+用户明确反馈「逻辑上需要编辑权限正确，但交互应该直接可以执行」。本节覆盖第3节/第9节及I07中要求viewer先点编辑的UI约定；服务写权限、CAS和人工修改保护不变。此反馈授权实施，不是验收df708112或授权远端交付。Planner负责编写本节和K用例，原Developer负责实现，WIP仍仅#5，基线df708112。
+
+### 10.1 产品行为与安全边界
+
+- 「放弃」「接受」「全部接受」及逐项操作无需先点「编辑」；连接正常、没有明确冲突/AI锁/他人交接时，viewer也可点击，按钮不因缺少当前写租约而灰掉。单击本身就是对该审阅动作的授权。
+- 点击后由persistence复用既有takeover→owner flush/yield→sync/grant流程，在后台取得当前写租约后继续原动作。等待期间显示「正在同步并处理…」等普通反馈、禁用重复点击，**不进入普通编辑模式、不要求用户再点一次**。干净owner的正常交接同revision/generation时，单击必须落到完成。
+- 服务端review/accept、review/undo继续只接受当前owner、有效lease和精确revision/generation；不能以UI方便为由取消权限检查、替viewer直接任意写入、强夺未保存内容或另造写通道。
+- 点击先结束当前输入/手势；若本窗口有未保存内容按原flush规则处理，源码未应用仍保护。别的owner有输入，先由其现有交接流程保存并yield。如果最新revision/generation/目标与用户点击时不一致，停止旧动作并同步可见审阅（目标可能已被人工编辑隐式接受），明确反馈；不把旧意图无条件重放到新审阅，也不通过自动重试回退人工成果。
+- 本窗口的自动交接与review写是一项串行操作；busy期间锁普通编辑/新autosave，保留请求前的合法flush。自己的等待poll不能被reviewing短路造成死锁，也不能让普通heartbeat误reload/抢先写入；陈旧heartbeat不能清除意图或引发重复takeover。
+- 保留点击时scope/generation/revision；页切换/失效目标、新AI提交、网络失败、lease丢失、交接超时后不得迟到执行。后台等待必须有界（与现有30秒交接/请求timeout相协调），停止后可重试；不能清理意图时先release有效token导致连接失效。优先复用原协议，不为此新增永久角色或复杂队列；确需新协议先报Planner。
+- hover/focus查看before仍是只读，不因悬停获取权限。只有点击/Enter/Space激活才请求交接。Accept仍不改HTML，Undo仍形成普通history边界；取得租约不等于进入editing。旧只读提示改为说明可直接处理/后台同步，不再要求先编辑。
+
+### 10.2 实现、审查与交付
+
+主要修改src/persistence.js的审阅准入/自动交接，以及review.js控件可用性和反馈；尽量沿用takeover/sync，editor只提供既有输入结束与刷新边界。服务原安全用例保留。更新旧viewer浏览器断言为「显式激活后安全交接」，不能删除直接viewer API拒写、AI锁/旧版本/草稿保护断言。同步collaboration、README、DESIGN与wiki契约。
+
+这是用户新要求带来的权限交接新边界，原审查证据不能覆盖。主验证冻结后请原Reviewer仅对df708112之后的一键交接增量做一次定向只读检查，直接回Developer；不重审原服务/Flato视觉，不做例行二审。Developer修复后Planner在干净候选以真实两窗口验收K01-K10，提供独立新稿入口（不覆盖8881/8882）。用户确认前不启动#6，不push/PR/main合并/部署。

@@ -92,3 +92,16 @@ I10 Planner在最终干净模拟集成候选上独立实际覆盖I01/I02/I03/I04
 流程：Developer主验证冻结后，原Reviewer仅检查5502560之后新增UI边界一次，直接反馈Developer；不重复原服务审查。Planner验收修复后的确定候选。用户「好的，开始」授权实施本修订，不等于验收旧候选。
 
 I11 UI增量审查修复：真实窗口1280×844及390×844、页面1600×1000等大于viewport时，仅改文案的before与实际原始渲染具有相同10vw字号、10vh行高和min/max-width媒体查询颜色；iframe innerWidth/innerHeight等于父实际viewport。fit可看到完整页面，200%/pan时只裁切可见区域；投影保持当前页屏幕原点，不拉伸。保持hover跨窗口resize后单位/媒体查询及自然尺寸刷新正确，旧测量不能滞留；原nth-child/继承/尺寸和异步/权限断言继续通过。Planner需独立实际执行此复现，而非仅核读Developer结果。
+
+## K. 用户要求的一键审阅与后台安全交接（Planner，2026-10-29）
+
+K01 真实两个浏览器窗口A owner/B viewer，B在预览态直接点击Accept（按钮不因viewer灰掉），自动takeover，A正常yield后一次操作完成；无需点Edit，不进入editing，HTML字节/revision不变，pending正确减少。
+K02 同样两窗口B一次点击Undo，先交接再撤回/刷新；before正确恢复，页码/zoom保持，普通历史边界与后续新人工编辑可用；不自动进入editing。
+K03 Accept All、展开列表逐项Accept/Undo、唯一删除页恢复都走同一自动交接；不漏掉只有页底按钮修了的情况；触摸和Enter/Space显式激活可执行。
+K04 A有最新未保存人工编辑，B点击旧Undo：A先flush保存，人工内容不丢；目标已被隐式接受或generation/revision变化则旧动作停止，B同步新状态，没有无条件重放到新审阅。
+K05 A有未应用源码/保存失败无法yield，B等待状态明确且有界，不能强抢、不能写；失败后保留原稿/草稿/有效token，可重试；超时/离开后没有迟到自动执行。
+K06 B加载的是旧revision/旧generation，或交接等待期间新AI/另一窗口已处理目标，禁止旧动作写入；保留人最新内容、清楚同步/失效反馈。不因自动reload把旧意图换到新scope。
+K07 同时双击/Enter+Space、延迟的交接前heartbeat或同token pending重入不重复takeover/review写；其他窗口/AI锁仍不能被重复请求绕过。
+K08 网络断开、lease过期、AI锁、他人pending及窗口关闭等失败路径fail closed；本窗口自动交接/写状态可恢复，无永久busy/refreshing、无删除token后循环401、无过期后台回调执行。
+K09 在takeover等待及review响应门闩期间，B普通Edit/拖动/源码应用仍锁定，A合法flush/yield和B自己的等待poll仍能完成，无reviewing短路死锁。hover/focus只预览不takeover；click才触发。
+K10 build和原A-I保护、服务端直接viewer API拒写、AI/lease/CAS/故障恢复继续通过；只改已明确变化的viewer UI断言。完整concurrency=2回归、wiki/project/graph/diff通过。Planner最终候选独立两窗口覆盖Accept/Undo/All、人工脏内容保护及无editing，并提供新稿入口。用户确认前不进下一项或远端交付。
