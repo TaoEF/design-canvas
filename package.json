@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@chenglou/pretext": "1.0.0",
+    "parse5": "8.0.0",
     "pdf-lib": "1.17.1",
     "playwright": "1.64.1",
     "pptxgenjs": "4.0.1"

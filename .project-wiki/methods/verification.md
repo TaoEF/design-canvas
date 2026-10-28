@@ -29,6 +29,7 @@ sources:
   - path: .github/workflows/ci.yml
     status: current
 related:
+  - contract.ai-review
   - architecture.html-design
   - contract.document-collaboration
   - feature.export
@@ -71,6 +72,8 @@ confidence: high
 独立工具审查增加三类回归：meta refresh 不可切换文档或执行目标脚本，无标注/嵌套直接文字不可遗漏，祖先透明/隐藏及裁切不可误报通过。内容脚本在浏览器上下文禁用，导航拦截导致的错误统一说明导航失败，不能返回其他页面的测量结果。
 
 Flex 示例回归使用真实浏览器指针拉伸边点，验证兄弟框宽度与位置联动；保存重开保持 Flex，导出为原生自动换行文本框。富文本缩小适配后保存重开保持节点与格式，PPTX 保持多字号与颜色，PDF 保持页数。真实 web font 请求失败必须拒绝测量/适配且不改原稿，移除失败字体后恢复浏览器实测。
+
+AI 审阅增加 review.test.mjs（真树语义、部分接受/恢复、私有基线、租约/并发、事务6故障点、重启/历史轮转）与 review-browser.test.mjs（真实 before 隔离、输入flush、只读、历史边界、下载/离线和导出）。完整回归固定使用 `node --test --test-concurrency=2 html-design/*.test.mjs`，避免无关高并发时序影响。
 
 ## Update Rules
 

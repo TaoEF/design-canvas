@@ -19,6 +19,7 @@ sources:
   - path: html-design/documents.test.mjs
     status: current
 related:
+  - contract.ai-review
   - architecture.html-design
   - module.editor
   - method.verification
@@ -47,9 +48,13 @@ confidence: high
 先 `node html-design/collaborate.mjs begin demos/toy-history.html`，只修改返回的 workFile，再 `commit <session.json>`；取消则 `cancel <session.json>`。可用 HTML_DESIGN_ORIGIN 指向指定本地服务。会话和工作副本只保存在忽略的 `.html-design/`。
 
 
+AI 提交后的接受/撤回、持久聚合基线、人工修改保护与双文件事务见 [AI 审阅契约](ai-review.md)。审阅是本地服务能力，私有基线不随 HTML 下载。
+
 ## Failure Modes
 
 409 表示过期 revision、失去权限或交接冲突，必须保留修改并重新同步；不能强行覆盖。浏览器失败保留草稿。保存前历史保留最近 10 份；磁盘外部写入可被检测但不能被该服务阻止。
+
+延迟的旧 viewer 心跳可能在同窗口接管已 pending 后再次触发 takeover。同 token 的 browser pending 请求必须幂等返回原请求，不能以409清除“一次点击进入编辑”的意图；其他窗口/AI锁与旧revision仍拒绝。保存/交接的串行与版本校验保持。
 
 
 ## Update Rules

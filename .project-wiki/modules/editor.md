@@ -26,6 +26,7 @@ sources:
   - path: DESIGN.md
     status: current
 related:
+  - contract.ai-review
   - architecture.html-design
   - contract.document-collaboration
   - feature.export
@@ -67,6 +68,10 @@ confidence: high
 侧栏170px，缩略图宽按列表内宽计算并保留顶部安全边距。页头模式显示「自动排版 / 手动」，内部 flow/artboard 语义不变。元素工具条为黑底浅色，文字对齐单击按左/中/右/两端循环并反映状态；文字适配位于元素更多菜单，面板锚定可见的元素更多按钮，避免隐藏菜单项造成坐标或焦点丢失。颜色入口改为圆点但原生选色器不变；图片为适应/填充、RefreshCw 替换。更多类菜单190px。预览/只读时当前项及悬停项保留缩略图更多入口；菜单提示进入编辑，页面写操作仍按原权限禁用。
 
 独立审查补充：从菜单项打开异步适配面板，键盘激活需将焦点先转给可见触发器，再在检测完成后进入可用操作；Esc 返回可见触发器。菜单方向键跳过祖先隐藏的文字项。窄窗口始终保留保存状态图标，错误、重试和草稿恢复入口不能因压缩页头消失。
+
+## AI 修改审阅
+
+顶部紧凑入口按页或文档范围列出修改，review.js 的 before 使用隔离只读 iframe；Accept 只改元数据，Undo 刷新形成普通历史边界。persistence.js 先结束编辑并 flush，再核对 revision/generation；人工保存可隐式接受相关 scope。详见 contract.ai-review。
 
 ## Failure Modes
 

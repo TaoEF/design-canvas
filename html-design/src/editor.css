@@ -976,3 +976,25 @@ textarea {
 .text-layout-panel strong { display: block; padding: 8px 10px 0; font-weight: 550; }
 .text-layout-status { margin: 8px 10px 12px; max-width: 232px; color: var(--muted); line-height: 1.6; }
 .text-layout-status[data-overflow="true"] { color: #a84c18; }
+
+/* AI review uses the existing compact workspace; the reference never enters the stage. */
+.review-trigger { background: var(--active); font-size: 12px; }
+.review-panel { position: fixed; z-index: 2147483645; top: calc(var(--head) + 8px); right: 12px; width: min(370px, calc(100vw - 24px)); max-height: calc(100vh - var(--head) - 28px); overflow: auto; background: var(--paper); border-radius: var(--radius); box-shadow: 0 8px 28px #0002; padding: 12px; }
+.review-heading, .review-item-heading, .review-item-actions, .review-footer, .review-preview-bar { display: flex; align-items: center; gap: 8px; }
+.review-heading { justify-content: space-between; }
+.review-message { color: var(--muted); margin: 4px 0 12px; line-height: 1.6; }
+.review-item { padding: 10px 0; border-top: 1px solid var(--line); }
+.review-item-heading { justify-content: space-between; }
+.review-item-heading strong { overflow-wrap: anywhere; min-width: 0; }
+.review-item-heading span, .review-footer span { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+.review-item-actions { margin-top: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.review-item-actions button { height: 30px; }
+.review-footer { border-top: 1px solid var(--line); padding-top: 12px; justify-content: space-between; flex-wrap: wrap; }
+.review-preview { position: fixed; inset: calc(var(--head) + 12px) 12px calc(var(--foot) + 12px); z-index: 2147483645; display: flex; flex-direction: column; background: var(--workspace); border-radius: var(--radius); box-shadow: 0 8px 28px #0003; overflow: hidden; }
+.review-preview-bar { padding: 8px 12px; background: var(--paper); flex-wrap: wrap; }
+.review-preview-bar strong { margin-right: auto; }
+.review-preview-bar span { color: var(--muted); font-size: 12px; }
+.review-frame { flex: 1; min-height: 0; overflow: auto; display: flex; padding: 12px; }
+.review-scaled { position: relative; flex-shrink: 0; margin: auto; }
+.review-frame iframe { position: absolute; top: 0; left: 0; border: 0; background: white; transform-origin: top left; pointer-events: none; }
+@media (max-width: 760px) { .review-trigger { padding: 0 6px; min-width: 56px; } .review-preview-bar span { display: none; } }

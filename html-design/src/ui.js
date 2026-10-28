@@ -1,5 +1,6 @@
 import styles from "./editor.css";
 import { icon, button as b } from "./icons.js";
+import { reviewHTML } from './review.js';
 export function toolbarHTML({ HANDLES }) {
   const fmt = (cmd, name, label) =>
     `<button type="button" data-fmt="${cmd}" title="${label}" aria-label="${label}" class="icon-only">${icon(name)}</button>`;
@@ -11,6 +12,7 @@ export function toolbarHTML({ HANDLES }) {
       <div class="seg layout-toggle" role="group" aria-label="编辑模式"><button type="button" data-act="flow" title="自动排版：保留页面原有布局" aria-pressed="true">自动排版</button><button type="button" data-act="artboard" title="手动：自由调整当前页位置" aria-pressed="false">手动</button></div>
       <button type="button" data-act="add-text" class="icon-only add-text" title="添加文字" aria-label="添加文字">${icon("Plus")}${icon("Type")}</button>${b("add-image", "ImagePlus", "添加图片", { cls: "icon-only" })}</div>
     <div class="grp actions">
+      <button type="button" class="review-trigger" aria-expanded="false" aria-controls="ai-review" hidden>AI 修改</button>
       ${b("edit", "Pencil", "编辑画布", { text: "编辑", cls: "edit-button", attrs: 'aria-pressed="false"' })}${b("done", "Check", "完成编辑，返回画布预览", { text: "完成", cls: "done-button", attrs: "hidden" })}
       <button data-act="preview" class="preview-button" title="播放" aria-label="播放" aria-expanded="false" aria-haspopup="menu">${icon("Play")}<span>播放</span>${icon("ChevronDown")}</button>
       <button data-act="export" class="primary" aria-expanded="false" aria-haspopup="menu">${icon("Download")}<span class="export-label">导出</span>${icon("ChevronDown")}</button>
@@ -41,5 +43,6 @@ export function toolbarHTML({ HANDLES }) {
   <div class="empty-canvas" hidden>${icon("Presentation")}<p>从第一页开始</p>${b("page-add", "Plus", "新增页面", { text: "新增页面", cls: "primary" })}</div>
   <div class="play-controls"><button data-act="prev" aria-label="上一页">${icon("ChevronLeft")}</button><span class="pageno"></span><button data-act="next" aria-label="下一页">${icon("ChevronRight")}</button><span class="play-title"></span>${b("stop", "X", "退出播放 (Esc)", { cls: "icon-only" })}</div>${b("stop", "X", "退出播放 (Esc)", { cls: "icon-only play-exit" })}
   <div class="modal" role="dialog" aria-label="HTML 源码" aria-modal="true" hidden><div class="box"><div class="mh"><b>源码</b><span class="hint">Ctrl/⌘ Enter 应用；新脚本保存后重新打开运行。</span><span class="sp"></span>${b("src-copy", "Copy", "复制源码", { text: "复制" })}${b("src-download", "Download", "下载源码", { text: "下载" })}<button data-act="src-apply" class="primary">应用</button>${b("src-close", "X", "关闭源码", { cls: "icon-only" })}</div><textarea spellcheck="false" aria-label="HTML 源码"></textarea></div></div>
+  ${reviewHTML()}
   <input type="file" accept="image/*" multiple hidden class="file"><div class="toast" role="status" aria-live="polite"></div>`;
 }

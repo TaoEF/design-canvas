@@ -1,12 +1,13 @@
 import { createDrafts } from './drafts.js';
 
-export function createPersistence({ config, serialize, pause, isBusy, hasPendingSource, applyHTML, changed, render, reload, download }) {
+export function createPersistence({ config, serialize, pause, isBusy, hasPendingSource, applyHTML, changed, render, reload, download, historyBoundary = () => {}, prepareReview = pause }) {
   let token, revision = config?.revision, role = 'viewer', blocked = false, frozen = false, connected = false;
   let dirty = false, generation = 0, timer, saving, polling = false, lastContact = 0, leaseMs = 15000, recovery;
   let draftQueue = Promise.resolve(), refreshing = false, opening = false;
+  let review = { generation: 0, items: [], reasons: [] }, locked = false, pending = false, reviewing = false;
   const managed = !!config, drafts = managed && createDrafts(config.path);
   const canEdit = () => !managed || (connected && role === 'owner' && !frozen && !blocked);
-  function show(message, options = {}) { render({ message, canEdit: canEdit(), managed, dirty, ...options }); }
+  function show(message, options = {}) { render({ message, canEdit: canEdit(), managed, dirty, review, canReview: canEdit() && !locked && !pending && !reviewing, reviewing, ...options }); }
   function markDirty() {
     dirty = true; generation++; changed(true);
     show(managed ? '尚未保存' : '离线 · 尚未下载');
@@ -38,12 +39,12 @@ export function createPersistence({ config, serialize, pause, isBusy, hasPending
       }
       show('正在保存…');
       try {
-        const result = await request('save', { revision, html }); revision = result.revision;
+        const result = await request('save', { revision, html }); revision = result.revision; adopt(result);
         if (version === generation) {
           dirty = false; changed(false);
           await draftQueue.catch(() => {}); await drafts.remove().catch(() => {});
         }
-        show(dirty ? '尚未保存' : '已自动保存');
+        show(dirty ? '尚未保存' : result.implicitAccepted?.length ? '已保存 · 人工修改已接受对应 AI 改动' : '已自动保存');
       } catch (error) {
         if (error.status === 409) { blocked = true; pause(); }
         if (error.status === 401) { connected = false; pause(); }
@@ -55,7 +56,7 @@ export function createPersistence({ config, serialize, pause, isBusy, hasPending
     try { await saving; } finally { saving = null; }
     if (dirty && canEdit()) { clearTimeout(timer); timer = setTimeout(() => flush().catch(() => {}), 800); }
   }
-  function adopt(result) { role = result.role; leaseMs = result.leaseMs || leaseMs; connected = true; }
+  function adopt(result) { role = result.role; leaseMs = result.leaseMs || leaseMs; review = result.review || review; locked = !!result.locked; pending = !!result.pending; connected = true; }
   async function refresh() {
     if (refreshing) return; refreshing = true;
     if (token) await request('release').catch(() => {});
@@ -130,6 +131,27 @@ export function createPersistence({ config, serialize, pause, isBusy, hasPending
   }
   return {
     start, canEdit, markDirty, flush,
+    async reviewRead(scope, expectedGeneration) {
+      if (!managed) throw new Error('AI 审阅需要本地服务；下载的 HTML 不包含审阅基线');
+      return request('review/read', { revision, generation: expectedGeneration, scope });
+    },
+    async reviewAction(action, scope, expectedGeneration) {
+      if (!managed || !canEdit() || locked || pending || reviewing) throw new Error('请先取得编辑权限并等待交接结束');
+      if (prepareReview() === false) throw new Error('请先应用或关闭源码，再处理 AI 修改');
+      reviewing = true;
+      try {
+        await flush();
+        if (dirty) throw new Error('当前修改尚未保存，请先完成保存');
+        const latest = await request('sync'); adopt(latest);
+        if (latest.revision !== revision || review.generation !== expectedGeneration) throw new Error('修改或审阅已有更新，请重新选择；当前内容保持不变');
+        const result = await request(`review/${action}`, { revision, generation: expectedGeneration, scope, requestId: crypto.randomUUID() });
+        adopt(result);
+        if (result.revision !== revision) {
+          historyBoundary(); await refresh();
+        } else show('已接受 AI 修改');
+        return result;
+      } finally { reviewing = false; if (!refreshing) show(dirty ? '尚未保存' : '已保存'); }
+    },
     async save() {
       if (!managed) { download(serialize()); dirty = false; changed(false); show('已下载 HTML'); return; }
       try { await flush(); if (!dirty) show('已保存到原文件'); } catch {}

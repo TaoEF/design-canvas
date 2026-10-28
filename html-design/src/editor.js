@@ -1,6 +1,7 @@
 import { toolbarHTML } from "./ui.js";
 import { createExporter } from "./export.js";
 import { createPersistence } from "./persistence.js";
+import { createReview } from './review.js';
 import { createViewport } from "./viewport.js";
 import { createPages } from "./pages.js";
 import { textMetrics, scaleText } from "./typography.js";
@@ -45,7 +46,7 @@ import {
       replace: null,
     };
 
-    let persistence = null;
+    let persistence = null, reviewUI = null;
     let canRequestEdit = false,
       editRequested = false,
       requestingEdit = false;
@@ -1094,6 +1095,7 @@ import {
     addEventListener(
       "keydown",
       (e) => {
+        if (reviewUI?.key(e)) return;
         if (S.playing) return;
         if (fromUI(e) && pages.key(e)) return;
         if (
@@ -2042,6 +2044,14 @@ import {
         return true;
       },
       reload: reloadLatest,
+      historyBoundary() { S.undo = []; S.redo = []; select(null); syncBar(); },
+      prepareReview() {
+        if (sourcePending()) return false;
+        editRequested = false;
+        if (S.drag) { S.drag.up(); S.drag = null; }
+        setEditing(false);
+        return true;
+      },
       applyHTML(html) {
         const d = new DOMParser().parseFromString(html, "text/html");
         setContent({
@@ -2053,6 +2063,7 @@ import {
         });
       },
       render(state) {
+        reviewUI?.update(state);
         canRequestEdit = !!state.takeover;
         if (state.retry || state.conflict) editRequested = false;
         host.toggleAttribute("data-readonly", !state.canEdit);
@@ -2086,6 +2097,11 @@ import {
           );
         } else $(".save-state").setAttribute("aria-label", state.message);
       },
+    });
+    reviewUI = createReview({
+      ui, persistence: () => persistence, toast,
+      navigate(id) { const b = boards().find(b => b.dataset.artboard === id); if (b) goTo(b); },
+      dimensions(id) { const b = boards().find(b => b.dataset.artboard === id) || boards()[0]; return withAll(() => ({ width: b?.offsetWidth || 1280, height: b?.offsetHeight || 720 })); },
     });
 
     /* ---------- 初始化 ---------- */
