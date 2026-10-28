@@ -107,7 +107,8 @@ export function createReview({ ui, persistence, navigate, view, restoreTarget, t
       Object.assign(projection.style, { left: `${bounds.x}px`, top: `${bounds.y}px`, width: `${bounds.w}px`, height: `${bounds.h}px` });
       const clip = projection.firstElementChild;
       Object.assign(clip.style, { left: `${r.x - bounds.x}px`, top: `${r.y - bounds.y}px`, width: `${loaded.width * v.zoom}px`, height: `${loaded.height * v.zoom}px` });
-      frame.style.transform = `translate(${-loaded.x * v.zoom}px, ${-loaded.y * v.zoom}px) scale(${v.zoom})`;
+      Object.assign(frame.style, { left: `${-r.x}px`, top: `${-r.y}px` });
+      for (const [name, value] of Object.entries({ left: `${r.x - loaded.x * v.zoom}px`, top: `${r.y - loaded.y * v.zoom}px`, transform: `scale(${v.zoom})` })) loaded.stage.style.setProperty(name, value, 'important');
     }
   }
   function setExpandedSilently(on) { expanded = on; panel.hidden = !on; trigger.setAttribute('aria-expanded', String(on)); }
@@ -130,7 +131,7 @@ export function createReview({ ui, persistence, navigate, view, restoreTarget, t
       if (![...doc.querySelectorAll('[data-artboard]')].some(n => n.dataset.artboard === targetId)) { hint.textContent = '新增页面没有修改前版本'; return; }
       const v = view(), width = v.layoutWidth || 1280;
       frame = document.createElement('iframe'); const ownFrame = frame; frame.title = 'AI 修改前，只读预览'; frame.setAttribute('sandbox', 'allow-same-origin'); frame.tabIndex = -1; frame.setAttribute('aria-hidden', 'true');
-      Object.assign(frame.style, { width: `${Math.max(innerWidth, width)}px`, height: `${Math.max(innerHeight, v.layoutHeight || 720)}px` });
+      Object.assign(frame.style, { width: `${innerWidth}px`, height: `${innerHeight}px` });
       const clip = document.createElement('div'); clip.className = 'review-projection'; clip.append(frame); projection.style.visibility = 'hidden'; projection.hidden = false; projection.replaceChildren(clip);
       frame.addEventListener('load', async () => {
         try {
@@ -138,12 +139,11 @@ export function createReview({ ui, persistence, navigate, view, restoreTarget, t
         if (serial !== epoch || frame !== ownFrame || current !== pageId()) return;
         const d = ownFrame.contentDocument, target = [...d.querySelectorAll('[data-artboard]')].find(n => n.dataset.artboard === targetId);
         for (const n of d.querySelectorAll('[data-artboard]')) if (n === target || n.contains(target) || target.contains(n)) n.setAttribute('data-review-projection-target', '');
-        const fix = d.createElement('style'); fix.textContent = `[data-artboard]:not([data-review-projection-target]){display:none!important}[data-stage]{display:block!important;width:${width}px!important;position:static!important;transform:none!important;gap:0!important;margin:0!important;padding:0!important}[data-artboard]{margin:0!important;flex:none!important}`; d.head.append(fix);
+        const fix = d.createElement('style'); fix.textContent = `html,body{overflow:hidden!important}[data-artboard]:not([data-review-projection-target]){display:none!important}[data-stage]{display:block!important;width:${width}px!important;position:fixed!important;inset:auto!important;left:0!important;top:0!important;transform:none!important;transform-origin:0 0!important;min-width:0!important;min-height:0!important;max-width:none!important;max-height:none!important;gap:0!important;margin:0!important;padding:0!important;overflow:visible!important}[data-artboard]{margin:0!important;flex:none!important}`; d.head.append(fix);
         const rect = target.getBoundingClientRect();
-        // Keep the layout viewport fixed while enlarging the rendering surface.
-        d.documentElement.style.width = `${Math.max(innerWidth, width)}px`;
-        ownFrame.style.width = `${Math.max(innerWidth, width, rect.right)}px`; ownFrame.style.height = `${Math.max(innerHeight, rect.bottom)}px`;
-        loaded = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+        // Transform the stage inside the real window viewport, so vw/vh and media queries stay faithful.
+        loaded = { x: rect.x, y: rect.y, width: rect.width, height: rect.height, stage: target.closest('[data-stage]') };
+        if (!loaded.stage) throw new Error('页面缺少画布容器');
         hint.hidden = true; projection.style.visibility = ''; projection.hidden = false; position();
         } catch (error) { if (serial === epoch) { endBefore(); toast(`无法显示修改前：${error.message}`, 6000); } }
       }, { once: true });

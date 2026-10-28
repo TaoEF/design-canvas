@@ -324,6 +324,45 @@ test('I02/I06: controls clamp at fixed pixel size through zoom/pan/sidebar; befo
   const old = await f.page.locator('.review-projection').boundingBox(); assert.ok(old.width < after.width - 50); assert.ok(Math.abs(old.x - after.x) < 1);
 });
 
+test('I11: before keeps the real viewport for vw/vh/media while large pages fit, pan, zoom and resize', async t => {
+  const f = await fixture(t, 'viewport-units');
+  await writeFile(f.file, (await readFile(f.file, 'utf8')).replace('h1{font:40px Arial}', '[data-artboard]{box-sizing:border-box;width:1600px;height:1000px}h1{font:10vw/10vh Arial;color:green}@media(min-width:1400px){h1{color:red}}@media(max-width:500px){h1{color:blue}}'));
+  await f.page.setViewportSize({ width:1280, height:844 }); await f.load();
+  const metrics = n => { const s = getComputedStyle(n); return { font:s.fontSize, line:s.lineHeight, color:s.color }; };
+  assert.deepEqual(await f.page.locator('[data-el=p1-title]').evaluate(metrics), { font:'128px', line:'84.4px', color:'rgb(0, 128, 0)' });
+  await f.ai(h => h.replace('Original one', 'Changed text only'));
+  await f.page.locator('[data-el=p1-title]').filter({ hasText:'Changed text only' }).waitFor();
+  const undo = f.action('p1', 'undo');
+  async function faithful(width) {
+    await f.page.waitForFunction(({width}) => {
+      const s = document.querySelector('html-design-editor').shadowRoot, frame = s.querySelector('.review-before iframe');
+      return !s.querySelector('.review-before').hidden && s.querySelector('.review-before').style.visibility !== 'hidden' && frame?.contentWindow?.innerWidth === width;
+    }, {width}, {timeout:10000});
+    const frame = f.page.frameLocator('iframe[title="AI 修改前，只读预览"]');
+    assert.deepEqual(await frame.locator('[data-el=p1-title]').evaluate(metrics), await f.page.locator('[data-el=p1-title]').evaluate(metrics));
+    assert.deepEqual(await frame.locator('html').evaluate(() => [innerWidth, innerHeight]), [width,844]);
+    const actual = await f.page.locator('[data-artboard=p1]').boundingBox(), old = await f.page.locator('.review-projection').boundingBox();
+    assert.ok(Math.abs(old.x - actual.x) < 1 && Math.abs(old.y - actual.y) < 1);
+    assert.ok(Math.abs(old.width - actual.width) < 1 && Math.abs(old.height - actual.height) < 1);
+    const inside = await frame.locator('[data-artboard=p1]').boundingBox();
+    assert.ok(Math.abs(inside.x - actual.x) < 1 && Math.abs(inside.y - actual.y) < 1);
+  }
+  await f.page.mouse.move(5,5); await f.action('p1','accept').focus(); await undo.focus(); await faithful(1280);
+  const fit = await f.page.locator('.review-projection').boundingBox();
+  assert.ok(fit.x >= 0 && fit.y >= 52 && fit.x + fit.width <= 1280 && fit.y + fit.height <= 804, 'fit renders the whole large page within the canvas viewport');
+  // Keep focus across resize: a new projection must use the new real viewport and measurements.
+  await f.page.setViewportSize({width:390,height:844}); await faithful(390);
+  assert.deepEqual(await f.page.frameLocator('iframe[title="AI 修改前，只读预览"]').locator('[data-el=p1-title]').evaluate(metrics), {font:'39px',line:'84.4px',color:'rgb(0, 0, 255)'});
+  await f.page.setViewportSize({width:1280,height:844}); await faithful(1280);
+  await f.action('p1','accept').hover(); await f.page.locator('[data-act=zoom-reset]').click();
+  for(let n=0;n<5;n++) await f.page.locator('[data-act=zoom-in]').click();
+  await f.page.mouse.move(5,5); await f.action('p1','accept').focus(); await undo.focus(); await faithful(1280);
+  await f.action('p1','accept').hover(); await f.page.locator('[data-act=edit]').click();
+  await f.page.mouse.move(1200,300); await f.page.mouse.wheel(400,300);
+  await f.page.locator('[data-act=done]').click(); await f.page.mouse.move(5,5); await f.action('p1','accept').focus(); await undo.focus(); await faithful(1280);
+  assert.equal((await f.page.locator('[data-artboard=p1]').boundingBox()).width,3200);
+});
+
 test('I03/I04: collapsed summary discovers another singleton, supports scrolling rows and retains deleted-last recovery', async t => {
   const f = await fixture(t, 'summary'); await f.load(); await f.ai(h => h.replace('Original two', 'AI other page'));
   await f.page.locator('.review-summary:not([hidden])').waitFor(); assert.ok(await f.page.locator('.review-panel').isHidden()); assert.ok(await f.page.locator('.review-actions').isHidden());

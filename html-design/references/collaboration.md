@@ -44,7 +44,7 @@ AI commit 后，当前pending页底自动显示「放弃｜接受」，多页右
 
 涉及 HTML 的写入先原子落盘 prepared envelope（旧 state、fromRevision、toRevision、next state），再原子替换并同步 HTML 所在目录，最后原子 finalize state。每次读取/服务重启遇到 prepared 时，以实际 HTML 哈希选择：等于 to 完成 next；等于 from 回到旧 state；都不同则保留 journal 和基线、报告冲突并拒绝写入/撤回。存储失败会报错，不声称无待审阅。显式请求标识与最近完成的 AI token 支持丢响应后的相同请求重试；新版本后的旧请求不能覆盖。
 
-审阅摘要只包含 scope、变更列表、原因、generation 和冲突标志；before HTML 按需单独获取。before 在独立 sandbox iframe 中原位呈现（保留兄弟DOM语义，仅在iframe内隐藏其他页，使用before自然尺寸和当前zoom；异步迟到结果不显示），只允许同源资源，不允许脚本、表单或上层导航，另清除脚本/事件/导航元素并使用 CSP；它不进入正式 stage、保存、普通历史或导出。保留原文档资源基址。离线下载不携带服务端基线，不提供服务审阅。
+审阅摘要只包含 scope、变更列表、原因、generation 和冲突标志；before HTML 按需单独获取。before 在独立 sandbox iframe 中原位呈现（保留兄弟DOM语义，仅在iframe内隐藏其他页，使用before自然尺寸和当前zoom，iframe保持实际窗口viewport、在内部stage缩放定位以保留vw/vh/媒体查询；异步迟到结果不显示），只允许同源资源，不允许脚本、表单或上层导航，另清除脚本/事件/导航元素并使用 CSP；它不进入正式 stage、保存、普通历史或导出。保留原文档资源基址。离线下载不携带服务端基线，不提供服务审阅。
 
 恢复保留当前编辑器 bundle 与不递减的 page/element 序号。不能协调多个服务进程，也不自动合并外部编辑；外部冲突需要保留副本与恢复记录后排查，不能删除审阅文件并假装完成撤回。
 

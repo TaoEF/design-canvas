@@ -7,7 +7,7 @@ owners:
   - html-design/review-html.mjs
   - html-design/review-store.mjs
   - html-design/src/review.js
-updated: 2026-10-28
+updated: 2026-10-29
 sources:
   - path: html-design/review-html.mjs
     status: current
@@ -52,7 +52,7 @@ review-html.mjs 使用服务端 parse5@8.0.0 真树和 source locations 分析�
 - 审阅写进行中整体关闭普通编辑与新自动保存，允许本次请求前已有修改完成 flush。Undo 响应后再检查 dirty/generation/source/busy；若出现新内容则保留 DOM/草稿并提示冲突，不导航。刷新只在实际 pagehide 时释放 token，取消导航不会提前失效连接或永久锁在 refreshing。
 - `.html-design/reviews/<canonical hash>/state.json` 为 0600，独立于10份历史轮转；prepared 内保存旧 state/from/to/next。磁盘等于 to 时 finalize，等于 from 时 rollback，否则保留证据并阻止所有写入。metadata-only 也做近端文件版本检查。
 - 轻量摘要不传 baseline；恢复后保留当前 runtime、单调序号，刷新清空旧 DOM closures。下载/离线不携带审阅状态，原离线编辑仍可用。
-- before 按revision/generation/scope缓存并取消迟到投影，保留兄弟DOM与stage继承，iframe内仅隐藏非目标页；投影以真实after锚点、before自然尺寸和相同zoom呈现。before 清洗脚本/事件/表单/导航/嵌套活动内容，并置于 sandbox（仅 allow-same-origin，无 allow-scripts/forms/top-navigation）与 script-src none CSP 中。允许同源以保留原字体/资源，iframe 内容不进入 stage、序列化、history 或导出。
+- before 按revision/generation/scope缓存并取消迟到投影，保留兄弟DOM与stage继承，iframe内仅隐藏非目标页；投影以真实after锚点、before自然尺寸和相同zoom呈现。iframe始终保持父文档实际窗口宽高，隔离文档内的fixed stage执行投影缩放/偏移，避免大页改变vw/vh/媒体查询；resize重建测量。before 清洗脚本/事件/表单/导航/嵌套活动内容，并置于 sandbox（仅 allow-same-origin，无 allow-scripts/forms/top-navigation）与 script-src none CSP 中。允许同源以保留原字体/资源，iframe 内容不进入 stage、序列化、history 或导出。
 
 ## Workflows
 
