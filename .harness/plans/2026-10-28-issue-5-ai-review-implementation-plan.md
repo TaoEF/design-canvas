@@ -155,3 +155,9 @@ Developer先读impeccable的craft-floor（本会话已读SKILL和shape；context
 新增用户反馈形成未被原审查覆盖的交互边界（原位sandbox预览、异步hover生命周期、几何定位）。主验证冻结后，只请原Reviewer对5502560之后的本次UI增量做一次定向只读检查，Findings直接回Developer；不重审已审查的服务实现，不启动常规第二轮全量审查。修复后Developer定向验证，Planner最终候选验收。
 
 测试I01-I10见测试计划；全量回归保留原断言的产品语义，只把旧顶部/弹窗操作步骤更新为新UI，不能删除保护用例。新建独立候选/新文件提供试用；不更新旧8881稿，不启动#6，不合main或远端交付。
+
+### 9.4 唯一UI增量审查后的viewport修复（Planner，2026-10-29）
+
+定向审查5502560..ac8b544已完成，独立7/7；唯一P2直接交Developer，Planner接纳：iframe扩大至页面1600px导致实际窗口1280px下的10vw/媒体查询渲染错误。修复应始终以父文档实际innerWidth/innerHeight作为iframe viewport，页面可大于viewport；缩放/目标偏移在隔离文档内依照现有fixed stage契约执行，外层仅裁切画布可见范围。不得通过扩大iframe或拉伸页面改变vw/vh/media语义。保留原始before尺寸、兄弟/继承CSS、sandbox、权限及异步取消保护；窗口变化后重新计算，避免沿用过期的viewport/测量。
+
+Developer在本计划提交后修复，执行I11及相关I01-I08和完整回归，冻结最终tip；Planner独立复现viewport案例并重跑候选验收。不安排常规二审，不扩大其他功能。
