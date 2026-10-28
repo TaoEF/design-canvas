@@ -214,7 +214,9 @@ test("browser autosaves text mid-edit, keeps zoom out of HTML, and hands latest 
     assert.equal(await b.locator("[data-act=add-text]").isEnabled(), false);
     assert.equal(await a.locator("html").getAttribute("data-editing"), null);
     await a.locator("[data-act=edit]").click();
+    await a.locator("html[data-editing]").waitFor();
     await a.locator("[data-el=p1-title]").dblclick();
+    await a.locator("[data-el=p1-title][contenteditable=true]").waitFor();
     await a.locator("[data-el=p1-title]").fill("Manual preserved");
     const file = path.join(root, "demos/test.html");
     await waitDisk(file, "Manual preserved");

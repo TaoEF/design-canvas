@@ -22,6 +22,8 @@ sources:
     status: current
   - path: html-design/selection.test.mjs
     status: current
+  - path: html-design/text-measure.test.mjs
+    status: current
   - path: html-design/text-layout.test.mjs
     status: current
   - path: .github/workflows/ci.yml
@@ -31,6 +33,7 @@ related:
   - contract.document-collaboration
   - feature.export
   - architecture.ai-development-system
+  - contract.text-measurement
 confidence: high
 ---
 
@@ -62,6 +65,8 @@ confidence: high
 
 
 Pretext 分支回归补充中英文预测/浏览器对照、复杂样式回退、50%/100%/200%缩放、富文本比例与单步撤销、离线保存重开、最小字号失败和字体异步期间退出编辑。演示页只使用分支新建稿，不覆盖主目录人工稿。
+
+本地文字 CLI 回归补充多候选宽度与 DOM 对照、源文件不写回/版本标记、脚本禁用、相对 CSS 和失败字体、隐藏/未知/无效ID/截断不可误报通过。浏览器编辑测试需等待实际 editing/contenteditable 状态；双击后立即 fill 在并行负载下曾读到尚未可编辑节点。
 
 ## Update Rules
 

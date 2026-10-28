@@ -57,6 +57,8 @@ HTML 本身仍然自包含，可离线查看、编辑和下载 HTML。直接下�
 
 这是准确性验证版，每次仍进行 DOM 校验，尚不声称有性能提升。不会自动缩小文字，不改变 PDF/PPTX 的浏览器布局真值。Pretext 使用 MIT 许可，许可与代码均内嵌，离线 HTML 无需额外加载资源。主目录的手动演示稿不随实验更新。
 
+AI 可按需运行 `node html-design/text.mjs measure request.json` 比较多个候选宽度，或 `node html-design/text.mjs check design.html` 检查生成文件的文字溢出。只读命令复用本机浏览器，返回 JSON，不运行内容脚本、不写回 HTML，也不需要新的外部接口或密钥。读取的是保存快照，已有人工稿仍需先协作交接取得最新工作副本。字体/相对资源和完整参数见 [文字测量说明](html-design/references/text-measurement.md)。
+
 ## 开发与测试
 
 编辑器源码按职责拆分在 `html-design/src/`：`editor.js` 负责编辑交互，`ui.js` / `editor.css` 提供界面，`pages.js` 管理缩略图和页面操作，`viewport.js` 管理居中/缩放/播放，`typography.js` 处理文字缩放，`guides.js` 处理对齐吸附和辅助线，`layers.js` 处理跨容器的叠放层级，`selection.js` 处理多选、框选和方向扩选，`icons.js` 封装图标，`identifiers.js` 管理复制时的引用，`persistence.js` / `drafts.js` 处理保存和草稿，`export.js` 处理导出。服务端的保存协议、导出和 PPTX 映射也分别独立。

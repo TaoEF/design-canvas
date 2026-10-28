@@ -142,6 +142,8 @@ body{margin:0;background:#e9e9ec;font-family:var(--font);color:var(--text)}
 
 ## 9. 生成后自检
 
+- 文字密集或文本框尺寸不确定时，按需使用本地[文字测量](references/text-measurement.md)比较候选宽度、检查生成文件的文字溢出，再按内容和美学约束局部调整；测量不替代最终浏览器检查。
+
 - [ ] 有 `<meta charset="utf-8">`、`<main data-stage>`，`<script data-editor>` 放在 body 最后
 - [ ] 每页是 `section[data-artboard][data-title][data-mode="flow"]`，编号唯一
 - [ ] 所有可见内容块都有 `data-el`，全文件唯一，文字放在没有嵌套 `data-el` 的元素上

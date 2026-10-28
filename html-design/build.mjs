@@ -18,3 +18,8 @@ await build({
       " */\n/*! Pretext: " + pretextLicense + " */",
   },
 });
+await build({
+  entryPoints: ["html-design/src/text-measure.js"], bundle: true, format: "iife", target: ["es2022"],
+  outfile: "html-design/text-measure.js", legalComments: "none", charset: "utf8",
+  banner: { js: "/*! Pretext: " + pretextLicense + " */" },
+});

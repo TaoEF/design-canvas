@@ -30,6 +30,7 @@ related:
   - contract.document-collaboration
   - feature.export
   - method.verification
+  - contract.text-measurement
 confidence: high
 ---
 
@@ -57,7 +58,7 @@ confidence: high
 
 ## Pretext 实验边界
 
-当前分支新增文字「适配」菜单：溢出检测、保持字号调整高度、保持框按比例缩小字号（最小6px）。纯文本预测通过浏览器校验后采用，否则回退实测；混合字号不宣称由 Pretext rich-inline 覆盖。排版计划在隐藏副本上计算，仅操作确认时修改原节点，保留 HTML 结构；无布局缓存/分行持久化，PPTX 仍按浏览器实测导出。复杂块结构/伪元素/多栏/竖排/截断不自动适配。每次仍测量 DOM，不承诺性能收益。
+当前分支新增文字「适配」菜单：溢出检测、保持字号调整高度、保持框按比例缩小字号（最小6px）。纯文本预测通过浏览器校验后采用，否则回退实测；混合字号不宣称由 Pretext rich-inline 覆盖。排版计划在隐藏副本上计算，仅操作确认时修改原节点，保留 HTML 结构；无布局缓存/分行持久化，PPTX 仍按浏览器实测导出。复杂块结构/伪元素/多栏/竖排/截断不自动适配。每次仍测量 DOM，不承诺性能收益。AI 只读测量/扫描通过独立本地命令提供，见 contract.text-measurement；不会改变编辑 UI 或重建旧文档。
 
 ## Failure Modes
 
