@@ -5880,6 +5880,10 @@ property of their respective owners.
         minHeight: "0px",
         maxHeight: "none",
         overflow: "visible",
+        aspectRatio: "auto",
+        contain: "none",
+        containerType: "normal",
+        contentVisibility: "visible",
         width: cs.width,
         minWidth: cs.width,
         maxWidth: cs.width
@@ -5909,7 +5913,10 @@ property of their respective owners.
         height,
         borderBox,
         adaptable,
-        natural: () => clone.getBoundingClientRect().height,
+        natural: () => Math.max(
+          clone.getBoundingClientRect().height,
+          clone.scrollHeight + number(cs.borderTopWidth) + number(cs.borderBottomWidth)
+        ),
         wide: () => clone.scrollWidth > clone.clientWidth + 1
       };
     }
@@ -5948,7 +5955,9 @@ property of their respective owners.
       check(el) {
         const p = probe(el);
         try {
-          return report(p);
+          const result = report(p);
+          result.overflow ||= el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1;
+          return result;
         } finally {
           p.clone.remove();
         }
@@ -5957,7 +5966,9 @@ property of their respective owners.
         await ready(el);
         const p = probe(el);
         try {
-          return report(p);
+          const result = report(p);
+          result.overflow ||= el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1;
+          return result;
         } finally {
           p.clone.remove();
         }

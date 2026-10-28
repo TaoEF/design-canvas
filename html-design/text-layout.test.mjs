@@ -126,3 +126,19 @@ test('document CSS that prevents fitting rolls back every style rather than keep
   assert.equal(await p.locator('[data-act=undo]').isDisabled(),true);
  }finally{await p.close();}
 });
+
+test('aspect ratio and size containment cannot conceal vertical overflow or turn content height into zero',async()=>{
+ for(const constraint of ['aspect-ratio:2','contain:size','container-type:size']){
+  const p=await open(true);try{
+   await p.locator('#plain').evaluate((n,css)=>n.style.cssText=`width:300px;height:80px;${css}`,constraint);
+   const before=await p.locator('#plain').evaluate(n=>({style:n.getAttribute('style'),scroll:n.scrollHeight}));
+   const measured=await inspect(p,'plain');assert.ok(measured.overflow);assert.ok(measured.requiredHeight>=before.scroll);
+   await panel(p,'plain');await p.locator('[data-act=text-height]').click();
+   await p.waitForFunction(()=>parseFloat(document.querySelector('#plain').style.height)>150);
+   assert.equal((await inspect(p,'plain')).overflow,false);
+   assert.ok(await p.locator('#plain').evaluate(n=>n.scrollHeight<=n.clientHeight+1));
+   await p.locator('[data-act=undo]').click();assert.equal(await p.locator('#plain').getAttribute('style'),before.style);
+   assert.equal((await inspect(p,'plain')).overflow,true);
+  }finally{await p.close();}
+ }
+});

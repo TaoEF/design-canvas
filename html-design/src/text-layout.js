@@ -40,6 +40,7 @@ export function createTextLayout({ ui }) {
       transform: "none", translate: "none", rotate: "none", scale: "none",
       visibility: "hidden", pointerEvents: "none", zIndex: "-1",
       height: "auto", minHeight: "0px", maxHeight: "none", overflow: "visible",
+      aspectRatio: "auto", contain: "none", containerType: "normal", contentVisibility: "visible",
       width: cs.width, minWidth: cs.width, maxWidth: cs.width,
     });
     clone.setAttribute("data-pretext-probe", "");
@@ -61,7 +62,8 @@ export function createTextLayout({ ui }) {
           && ["inline", "contents"].includes(s.display) && s.position === "static" && s.float === "none" && s.transform === "none";
       });
     return { clone, copies, nodes, cs, edges, width, height, borderBox, adaptable,
-      natural: () => clone.getBoundingClientRect().height,
+      natural: () => Math.max(clone.getBoundingClientRect().height,
+        clone.scrollHeight + number(cs.borderTopWidth) + number(cs.borderBottomWidth)),
       wide: () => clone.scrollWidth > clone.clientWidth + 1,
     };
   }
@@ -103,12 +105,20 @@ export function createTextLayout({ ui }) {
   return {
     check(el) {
       const p = probe(el);
-      try { return report(p); } finally { p.clone.remove(); }
+      try {
+        const result = report(p);
+        result.overflow ||= el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1;
+        return result;
+      } finally { p.clone.remove(); }
     },
     async inspect(el) {
       await ready(el);
       const p = probe(el);
-      try { return report(p); } finally { p.clone.remove(); }
+      try {
+        const result = report(p);
+        result.overflow ||= el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1;
+        return result;
+      } finally { p.clone.remove(); }
     },
     async plan(el, mode) {
       await ready(el);
