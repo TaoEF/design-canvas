@@ -1,0 +1,45 @@
+name: Feedback
+description: Capture user, design, QA, or internal feedback for triage.
+title: "feedback: "
+labels:
+  - type:feedback
+  - status:triage
+  - ai-needs-context
+body:
+  - type: textarea
+    id: feedback
+    attributes:
+      label: Feedback
+      description: What did the user, tester, or team observe?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: User scenario, project file, release, screenshot, or conversation link.
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - usability
+        - reliability
+        - performance
+        - visual quality
+        - AI behavior
+        - documentation
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_next_step
+    attributes:
+      label: Proposed next step
+      placeholder: "Convert to requirement, bug, RFC, or close with explanation."
+  - type: textarea
+    id: triage_investigation
+    attributes:
+      label: Triage investigation
+      description: Record the code, docs, wiki pages, commits, issues, or Project objects checked before converting this feedback to work.
+      placeholder: "- Checked files/modules:\n- Related issues/wiki:\n- Assumptions:\n- Open questions:"

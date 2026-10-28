@@ -1,0 +1,66 @@
+{
+  "version": 2,
+  "profile": "seven-stage-server-release",
+  "localFirstDelivery": {
+    "requiredBeforeRemoteCodeDelivery": true,
+    "candidateIdentity": [
+      "base_sha",
+      "feature_tip_sha",
+      "local_integration_commit",
+      "local_integration_tree",
+      "test_profile",
+      "local_entry_point"
+    ],
+    "invalidatedBySemanticRemoteBaseDrift": true,
+    "productionRequiresSeparateAuthorization": true
+  },
+  "intake": {
+    "projectStageKey": "planned",
+    "issueLabel": "status:triage",
+    "readinessLabel": "ai-needs-context"
+  },
+  "stages": [
+    {
+      "key": "planned",
+      "projectStatus": "待处理",
+      "issueLabel": "status:planned",
+      "evidence": "definition_of_ready_and_stable_order"
+    },
+    {
+      "key": "in_progress",
+      "projectStatus": "进行中",
+      "issueLabel": "status:in-progress",
+      "evidence": "dev_manager_admission_and_active_local_delivery"
+    },
+    {
+      "key": "ready_for_staging",
+      "projectStatus": "待测试服发布",
+      "issueLabel": "status:ready-for-staging",
+      "evidence": "product_accepted_local_candidate_integrated"
+    },
+    {
+      "key": "staging_validation",
+      "projectStatus": "测试服验证中",
+      "issueLabel": "status:staging-validation",
+      "evidence": "exact_revision_live_on_test_server"
+    },
+    {
+      "key": "ready_for_production",
+      "projectStatus": "待正式服发布",
+      "issueLabel": "status:ready-for-production",
+      "evidence": "test_acceptance_for_exact_revision"
+    },
+    {
+      "key": "production_validation",
+      "projectStatus": "正式服待验收",
+      "issueLabel": "status:production-validation",
+      "evidence": "exact_accepted_revision_live_on_production"
+    },
+    {
+      "key": "done",
+      "projectStatus": "已完成",
+      "issueLabel": "status:done",
+      "evidence": "production_acceptance_and_required_observation"
+    }
+  ]
+}

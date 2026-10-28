@@ -1,0 +1,23 @@
+{
+  "name": "html-design-local",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node html-design/server.mjs",
+    "test": "node --test html-design/*.test.mjs",
+    "build": "node html-design/build.mjs",
+    "wiki:check": "node scripts/verify-wiki.mjs .",
+    "wiki:graph": "node scripts/wiki-graph.mjs .",
+    "project:check": "node scripts/verify-project-initial.mjs . --with ai-wiki,github"
+  },
+  "dependencies": {
+    "pdf-lib": "1.17.1",
+    "playwright": "1.64.1",
+    "pptxgenjs": "4.0.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12",
+    "jszip": "^3.10.1",
+    "lucide": "1.62.0"
+  }
+}

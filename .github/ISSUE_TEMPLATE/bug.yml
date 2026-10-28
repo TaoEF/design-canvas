@@ -1,0 +1,99 @@
+name: Bug
+description: Report a defect or regression.
+title: "fix: "
+labels:
+  - type:bug
+  - status:triage
+  - ai-needs-context
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is broken?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: affected_surface
+    attributes:
+      label: Affected surface
+      description: UI, API, data, integrations, AI tools, persistence, build, deployment, or other area.
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+      placeholder: "- Included:\n- Excluded:"
+    validations:
+      required: true
+  - type: textarea
+    id: regression_context
+    attributes:
+      label: Regression context
+      description: Known related PRs, commits, releases, or previous behavior.
+  - type: textarea
+    id: pre_submission_investigation
+    attributes:
+      label: Pre-submission investigation
+      description: Record the code, docs, wiki pages, commits, issues, or Project objects checked before filing.
+      placeholder: "- Checked files/modules:\n- Checked wiki/harness docs:\n- Assumptions:\n- Open questions:"
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risk level
+      options:
+        - risk:low
+        - risk:medium
+        - risk:high
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Fix verification
+      placeholder: "- [ ] Reproduction no longer fails\n- [ ] Regression test added or explained"
+    validations:
+      required: true
+  - type: dropdown
+    id: task_size
+    attributes:
+      label: Task size
+      options:
+        - S
+        - M
+        - L
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and parallel-work boundaries
+      description: Record blocked-by, depends-on-merge, external-owner, and conflicts-with. Write "None" when empty.
+    validations:
+      required: true
+  - type: textarea
+    id: effect_tracking
+    attributes:
+      label: Effect tracking
+      description: For runtime, product, operational, or user-facing fixes, describe the 24-48 hour validation task or why this is exempt.
+      placeholder: "- Tracking issue/task: #...\n- Target environment:\n- Success/failure signals:\n- Owner/deadline:\n- Exemption reason:"

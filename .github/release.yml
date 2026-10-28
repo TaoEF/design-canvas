@@ -1,0 +1,13 @@
+changelog:
+  exclude:
+    labels:
+      - duplicate
+      - invalid
+      - wontfix
+  categories:
+    - title: 新功能
+      labels: ['type:requirement']
+    - title: 问题修复
+      labels: ['type:bug']
+    - title: 工程与文档
+      labels: ['*']

@@ -1,0 +1,41 @@
+name: Intake
+description: Capture a loose request, observation, or idea before it is ready for execution.
+title: "intake: "
+labels:
+  - status:triage
+  - ai-needs-context
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use Intake for unplanned or incomplete work. Repo-Issue-Manager will investigate,
+        deduplicate, classify, and promote it only after Definition of Ready is satisfied.
+  - type: textarea
+    id: observation
+    attributes:
+      label: Request or observation
+      description: What happened, what is wanted, or what opportunity was noticed?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and context
+      description: Add links, screenshots, examples, affected users, environment, or reproduction notes.
+  - type: textarea
+    id: desired_outcome
+    attributes:
+      label: Desired outcome
+      description: What should be different if this becomes executable work?
+  - type: textarea
+    id: known_boundaries
+    attributes:
+      label: Known constraints or non-goals
+      description: Record only known boundaries; unknowns are expected at Intake.
+  - type: checkboxes
+    id: intake_contract
+    attributes:
+      label: Intake contract
+      options:
+        - label: This item is captured for triage and is not authorized for implementation yet.
+          required: true

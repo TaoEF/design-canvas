@@ -1,0 +1,13 @@
+node_modules/
+.export-test/
+
+.html-design/
+
+.DS_Store
+.env
+.env.*
+!.env.example
+.project-initial-backup/
+
+# Local recovery snapshots; preserve on disk, exclude from source import.
+/demos/recovered/

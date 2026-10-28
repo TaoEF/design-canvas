@@ -1,0 +1,124 @@
+name: Development Plan
+description: Plan a goal, epic, requirement, or AI-executable task.
+title: "plan: "
+labels:
+  - status:triage
+  - ai-needs-context
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for product goals, epics, requirements, and development tasks.
+        Stable architecture facts and decisions belong in `.project-wiki/`; this issue tracks execution.
+  - type: dropdown
+    id: object_type
+    attributes:
+      label: Planning object type
+      options:
+        - goal
+        - epic
+        - requirement
+        - task
+    validations:
+      required: true
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: What outcome should this issue produce?
+      placeholder: "Describe the user, product, or engineering outcome."
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What is included?
+      placeholder: "- Included behavior\n- Included modules\n- Included deliverables"
+    validations:
+      required: true
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: What should stay out of this issue?
+      placeholder: "- Not changing runtime contracts\n- Not redesigning..."
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How do we know the work is done?
+      placeholder: "- [ ] ...\n- [ ] ..."
+    validations:
+      required: true
+  - type: textarea
+    id: related_objects
+    attributes:
+      label: Related objects
+      description: Link related issues, PRs, milestones, wiki pages, plans, and files.
+      placeholder: "- Related issues: #...\n- Wiki: .project-wiki/...\n- Harness: .harness/..."
+  - type: textarea
+    id: pre_submission_investigation
+    attributes:
+      label: Pre-submission investigation
+      description: Record the code, docs, wiki pages, commits, issues, or Project objects checked before filing.
+      placeholder: "- Checked files/modules:\n- Checked wiki/harness docs:\n- Assumptions:\n- Open questions:"
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risk level
+      options:
+        - risk:low
+        - risk:medium
+        - risk:high
+    validations:
+      required: true
+  - type: dropdown
+    id: task_size
+    attributes:
+      label: Task size
+      description: S is one established boundary, M is cross-module/cross-layer, and L is architecture, migration, data contract, or coupled workflows.
+      options:
+        - S
+        - M
+        - L
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and parallel-work boundaries
+      description: Record blocked-by, depends-on-merge, external-owner, and conflicts-with. Write "None" when empty.
+      placeholder: "- blocked-by: #...\n- depends-on-merge: PR #...\n- external-owner: ...\n- conflicts-with: #..."
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification plan
+      description: List automated tests, manual checks, and regression surfaces.
+      placeholder: "- [ ] pnpm ...\n- [ ] Manual check ..."
+    validations:
+      required: true
+  - type: textarea
+    id: local_acceptance
+    attributes:
+      label: Local acceptance and remote-delivery gate
+      description: Define the clean local simulated merge, stable acceptance entry point, exact candidate identity, and remote-base drift audit. Plan confirmation does not authorize push, PR, merge, or test deployment.
+      placeholder: "- Local acceptance entry point:\n- Base / feature tip / integration commit+tree:\n- Remote-base drift audit:\n- Product authorization for test delivery:"
+    validations:
+      required: true
+  - type: checkboxes
+    id: ai_readiness
+    attributes:
+      label: AI readiness
+      options:
+        - label: The issue has enough context for an AI agent to start investigation.
+        - label: The relevant `.harness/` workflow is identified.
+        - label: The relevant `.project-wiki/` pages are linked or intentionally absent.
+        - label: Large-change work has an implementation plan and test-cases path.
+        - label: Use `ai-needs-context` instead of `ai-ready` if investigation was intentionally deferred.

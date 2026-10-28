@@ -1,0 +1,68 @@
+name: Release Checklist
+description: Track release readiness, scope, verification, and follow-up.
+title: "release: "
+labels:
+  - type:release
+  - status:triage
+  - ai-needs-context
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version or release name
+      placeholder: "v..."
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Release scope
+      description: Link included issues, PRs, and milestones.
+      placeholder: "- #...\n- #..."
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification checklist
+      placeholder: "- [ ] Exact local candidate accepted by product owner\n- [ ] Remote-base drift / equivalence audited\n- [ ] Build\n- [ ] Unit tests\n- [ ] Integration or E2E checks\n- [ ] Manual smoke\n- [ ] High-risk regression surfaces"
+    validations:
+      required: true
+  - type: textarea
+    id: local_acceptance_evidence
+    attributes:
+      label: Local acceptance authorization evidence
+      description: Required before test delivery. Record the exact accepted candidate and the post-acceptance remote-base audit; plan confirmation is insufficient.
+      placeholder: "- Base SHA:\n- Feature tip SHA:\n- Local integration commit/tree:\n- Local entry point and results:\n- Product acceptance reference:\n- Post-acceptance remote-base drift / forward audit:"
+    validations:
+      required: true
+  - type: textarea
+    id: promotion_evidence
+    attributes:
+      label: Server release and status-promotion evidence
+      description: Record the exact revision and evidence for every reached environment. A merge or release request does not prove deployment.
+      placeholder: "- Integration revision / merge:\n- Current Project status:\n- Current Issue label:\n- Next Project status:\n- Next Issue label:\n- Test server revision / deploy run / deployed at:\n- Test smoke / acceptance:\n- Production revision / deploy run / deployed at:\n- Production smoke / acceptance:\n- Rollback / follow-up:"
+    validations:
+      required: true
+  - type: checkboxes
+    id: status_contract
+    attributes:
+      label: Seven-stage status contract
+      options:
+        - label: Current/next Project status and Issue label match `.harness/release-status-profile.json`; each promotion has the required integration, server, or acceptance evidence.
+          required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Known risks and mitigations
+  - type: textarea
+    id: effect_tracking
+    attributes:
+      label: 24-48 hour effect tracking
+      description: Link or create follow-up tasks for runtime, product, operational, or user-facing changes included in this release.
+      placeholder: "- Tracking tasks:\n- Target environments:\n- Success/failure signals:\n- Owners/deadlines:"
+  - type: textarea
+    id: docs
+    attributes:
+      label: Documentation and wiki sync
+      placeholder: "- [ ] Release notes\n- [ ] .project-wiki updates if durable knowledge changed\n- [ ] Harness sync if workflow changed"

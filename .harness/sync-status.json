@@ -1,0 +1,11 @@
+{
+  "scope": ".harness,.project-wiki",
+  "lastSyncedCommit": "",
+  "lastSyncedDate": "2026-10-28",
+  "notes": [
+    "首次初始化；空 commit 表示没有声明任意历史提交已完成知识同步。",
+    "能力仅 ai-wiki,github；未选择 review-loopback 或 MCM。",
+    "初始化配置独立只读审查 No findings；project/wiki/graph 检查通过。产品工作区仍变化，最新31项测试3失败，不声明固定基线已验收。",
+    "用户确认私有 TaoEF/design-canvas，并要求等待编辑器工作完成后推送。原编辑器任务已完成，报告34项测试通过；现在冻结并独立复核首次导入。"
+  ]
+}

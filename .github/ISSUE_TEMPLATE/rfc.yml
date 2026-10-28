@@ -1,0 +1,49 @@
+name: RFC
+description: Propose an architecture, workflow, or product decision before implementation.
+title: "rfc: "
+labels:
+  - type:rfc
+  - status:triage
+  - ai-needs-context
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What decision is needed and why now?
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options considered
+      placeholder: "Option A:\n- Pros:\n- Cons:\n\nOption B:\n- Pros:\n- Cons:"
+    validations:
+      required: true
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Recommended direction
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Architecture, compatibility, product, data, AI-agent, and verification impact.
+    validations:
+      required: true
+  - type: textarea
+    id: pre_submission_investigation
+    attributes:
+      label: Pre-submission investigation
+      description: Record the code, docs, wiki pages, commits, issues, or Project objects checked before filing.
+      placeholder: "- Checked files/modules:\n- Checked wiki/harness docs:\n- Assumptions:\n- Open questions:"
+    validations:
+      required: true
+  - type: textarea
+    id: wiki_sync
+    attributes:
+      label: Project wiki sync
+      description: Which `.project-wiki/` page should be created or updated if this is accepted?
+      placeholder: ".project-wiki/decisions/..."

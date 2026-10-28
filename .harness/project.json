@@ -1,0 +1,50 @@
+{
+  "name": "Design Canvas / HTML Design",
+  "capabilities": [
+    "ai-wiki",
+    "github"
+  ],
+  "github": {
+    "repository": "TaoEF/design-canvas",
+    "url": "https://github.com/TaoEF/design-canvas",
+    "visibility": "private",
+    "defaultBranch": "main",
+    "integrationBranch": "main",
+    "projectOwner": "TaoEF",
+    "projectNumber": 4,
+    "projectId": "PVT_kwHOC53Xnc4BpEtD",
+    "projectUrl": "https://github.com/users/TaoEF/projects/4",
+    "statusFieldId": "PVTSSF_lAHOC53Xnc4BpEtDzhnh734",
+    "statusOptionIds": {
+      "planned": "03ba1782",
+      "in_progress": "108f9490",
+      "ready_for_staging": "20cc72eb",
+      "staging_validation": "3419a9d7",
+      "ready_for_production": "6aead854",
+      "production_validation": "8d71b120",
+      "done": "70dd5ab0"
+    },
+    "queueFieldIds": {
+      "Risk": "PVTSSF_lAHOC53Xnc4BpEtDzhnh9ZU",
+      "Task size": "PVTSSF_lAHOC53Xnc4BpEtDzhnh9a4",
+      "Priority": "PVTSSF_lAHOC53Xnc4BpEtDzhnh9f0",
+      "Queue order": "PVTF_lAHOC53Xnc4BpEtDzhnh9gg",
+      "Target release": "PVTF_lAHOC53Xnc4BpEtDzhnh9hY"
+    }
+  },
+  "ownership": {
+    "productOwner": "TaoEF",
+    "repoIssueManager": "Task-scoped coordinating agent, appointed by TaoEF; no persistent manager assigned",
+    "devManager": "Task-scoped coordinating agent; coding WIP 1",
+    "releaseOwner": "TaoEF or explicitly delegated release agent"
+  },
+  "environments": {
+    "local": "http://127.0.0.1:8876/demos/toy-history.html",
+    "staging": null,
+    "production": null
+  },
+  "automation": {
+    "recurringManager": "not configured: no ongoing ownership requested",
+    "projectAutoAdd": "manual by Repo-Issue-Manager; no PAT stored in repository"
+  }
+}
