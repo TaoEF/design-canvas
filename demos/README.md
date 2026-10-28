@@ -23,6 +23,7 @@
 
 ## 文件
 
+- `flex-text-layout.html`：真实 Flex 联动示例。点「编辑」并保持「排版」，拖左栏右侧中点，右栏会让位并重新折行；角点则同比缩放文字。此文件独立于人工编辑的旧实验稿。
 - `toy-history.html`：交付文件，包含 `html-design/editor.js` 原文。
 - `assets/*.jpg`：四幅静物插图的本地副本，已经嵌入 HTML，不影响单文件使用。
 - `build_demo.py`：首次生成示例的构建源，运行 `python3 demos/build_demo.py` 可重新生成。**浏览器中修改并保存后，请直接局部编辑保存文件，重新构建会覆盖那些手工修改。**

@@ -19,10 +19,10 @@ before(async()=>{
  browser=await chromium.launch(browserOptions());
 });
 after(async()=>browser?.close());
-async function open(edit=false){
+async function open(edit=false,html=fixture){
  const p=await browser.newPage({viewport:{width:1440,height:1000}});
  p.errors=[];p.on('pageerror',e=>p.errors.push(e.message));
- await p.setContent(fixture);
+ await p.setContent(html.replace(/<script data-editor>[\s\S]*?<\/script>/g,''));
  if(edit){await p.addScriptTag({content:editor});await p.locator('[data-act=edit]').click();}
  await p.addScriptTag({content:measurement});
  await p.evaluate(()=>{const host=document.createElement('div');document.documentElement.append(host);window.measurement=TextLayoutModule.createTextLayout({ui:host.attachShadow({mode:'open'})});});
@@ -79,6 +79,9 @@ test('font fit saves and reopens without measurement state or network dependenci
  const p=await open(true);let saved;try{
   await panel(p,'plain');await p.locator('[data-act=text-fit]').click();
   await p.waitForFunction(()=>parseFloat(document.querySelector('#plain').style.fontSize)<32);
+  await panel(p,'rich');await p.locator('[data-act=text-fit]').click();
+  await p.waitForFunction(()=>parseFloat(document.querySelector('#rich').style.fontSize)<32);
+  const rich=await p.locator('#rich').evaluate(n=>({html:n.innerHTML,text:n.textContent,font:n.style.fontSize}));
   await p.locator('[data-act=export]').click();
   const downloading=p.waitForEvent('download');await p.locator('[data-act=download]').click();const file=await downloading;
   saved=await readFile(await file.path(),'utf8');
@@ -87,6 +90,9 @@ test('font fit saves and reopens without measurement state or network dependenci
   const shape=xml.split('<p:sp>').find(s=>s.includes('name="p1-plain"'));
   assert.ok(shape);assert.match(shape,/<a:t>Design/);
   const size=Number(shape.match(/<a:rPr[^>]*sz="(\d+)"/)[1]);assert.ok(size<2400 && size>=450);
+  const richShape=xml.split('<p:sp>').find(s=>s.includes('name="p1-rich"'));
+  assert.match(richShape,/FF0000/);assert.match(richShape,/wrap="square"/);
+  assert.ok(new Set([...richShape.matchAll(/<a:rPr[^>]*sz="(\d+)"/g)].map(m=>m[1])).size>1);
   const pdf=await exportDocument({html:saved,format:'pdf',baseUrl:'http://127.0.0.1/',title:'Adapted text'});
   assert.equal((await PDFDocument.load(pdf.bytes)).getPageCount(),1);
   // Check the saved DOM, not the bundled source's strings.
@@ -96,8 +102,62 @@ test('font fit saves and reopens without measurement state or network dependenci
    assert.equal(await q.locator('[data-stage] .text-layout-status').count(),0);
    assert.equal(await q.locator('[data-stage] [contenteditable]').count(),0);
    assert.equal((await q.locator('#plain').evaluate(n=>n.style.fontSize)),await p.locator('#plain').evaluate(n=>n.style.fontSize));
+   assert.deepEqual(await q.locator('#rich').evaluate(n=>({html:n.innerHTML,text:n.textContent,font:n.style.fontSize})),rich);
    await q.locator('[data-act=edit]').click();await panel(q,'plain');assert.equal(await q.locator('.text-layout-status').getAttribute('data-engine'),'pretext');
   }finally{await q.close();}
+ }finally{await p.close();}
+});
+
+test('real Flex siblings reflow during a side resize and survive undo, save/reopen and editable PPTX export',async()=>{
+ const demo=await readFile('demos/flex-text-layout.html','utf8');
+ const p=await open(true,demo);
+ const geometry=()=>p.locator('.comparison').evaluate(row=>({display:getComputedStyle(row).display,gap:parseFloat(getComputedStyle(row).gap),width:row.getBoundingClientRect().width,children:[...row.children].map(n=>({x:n.offsetLeft,w:n.offsetWidth,h:n.offsetHeight,position:getComputedStyle(n).position,font:getComputedStyle(n).fontSize}))}));
+ try{
+  const initial=await geometry();assert.equal(initial.display,'flex');assert.ok(initial.children.every(n=>n.position==='static'));
+  const beforeMeasure=await p.locator('[data-stage]').evaluate(n=>n.outerHTML);
+  const leftReport=await inspect(p,'flex-left');assert.equal(leftReport.engine,'pretext');assert.equal((await inspect(p,'flex-right')).engine,'browser');
+  assert.equal(await p.locator('[data-stage]').evaluate(n=>n.outerHTML),beforeMeasure);
+  await p.locator('#flex-left').click();
+  const handle=await p.locator('[data-h=e]').boundingBox();
+  const zoom=await p.locator('[data-artboard]').evaluate(n=>n.getBoundingClientRect().width/n.offsetWidth);
+  await p.mouse.move(handle.x+handle.width/2,handle.y+handle.height/2);await p.mouse.down();
+  await p.mouse.move(handle.x+handle.width/2+96*zoom,handle.y+handle.height/2,{steps:8});await p.mouse.up();
+  const resized=await geometry();
+  assert.ok(Math.abs(resized.children[0].w-initial.children[0].w-96)<=1);
+  assert.ok(Math.abs(initial.children[1].w-resized.children[1].w-96)<=1);
+  assert.ok(Math.abs(resized.children[1].x-initial.children[1].x-96)<=1);
+  assert.ok(resized.children[1].h>=initial.children[1].h);assert.equal(resized.children[0].font,initial.children[0].font);
+  assert.ok((await inspect(p,'flex-left')).requiredHeight<leftReport.requiredHeight,'wider text needs fewer lines without font scaling');
+  assert.ok(resized.children.every(n=>n.position==='static'));
+  await p.locator('[data-act=undo]').click();assert.deepEqual(await geometry(),initial);
+  await p.locator('[data-act=redo]').click();assert.deepEqual(await geometry(),resized);
+  await p.locator('[data-act=export]').click();const downloading=p.waitForEvent('download');await p.locator('[data-act=download]').click();
+  const saved=await readFile(await (await downloading).path(),'utf8');
+  const q=await browser.newPage({viewport:{width:1440,height:1000}});
+  try{await q.setContent(saved);await q.waitForSelector('html-design-editor',{state:'attached'});
+   const widths=await q.locator('.comparison p').evaluateAll(nodes=>nodes.map(n=>({w:n.offsetWidth,position:getComputedStyle(n).position})));
+   assert.deepEqual(widths,resized.children.map(n=>({w:n.w,position:n.position})));
+   assert.equal(await q.locator('[data-stage] [data-pretext-probe]').count(),0);
+  }finally{await q.close();}
+  const {bytes}=await exportDocument({html:saved,format:'pptx',baseUrl:'http://127.0.0.1/',title:'Flex reflow'});
+  const xml=await (await JSZip.loadAsync(bytes)).file('ppt/slides/slide1.xml').async('string');
+  for(const name of ['flex-left','flex-right']){const shape=xml.split('<p:sp>').find(s=>s.includes(`name="${name}"`)&&s.includes('<p:txBody>'));assert.ok(shape);assert.match(shape,/wrap="square"/);assert.equal([...shape.matchAll(/<a:p>/g)].length,1);}
+  assert.deepEqual(p.errors,[]);
+ }finally{await p.close();}
+});
+
+test('a failed web font leaves text untouched and removing that font restores rich-text browser measurement',async()=>{
+ const p=await open();try{
+  await p.route('**/missing-font.woff2',r=>r.abort());
+  const sheet=await p.addStyleTag({content:'@font-face{font-family:MissingDemoFont;src:url(http://127.0.0.1:1/missing-font.woff2)}#rich{font-family:MissingDemoFont,Arial}'});
+  const before=await p.locator('#rich').evaluate(n=>n.outerHTML);
+  await assert.rejects(inspect(p,'rich'));
+  await assert.rejects(p.evaluate(()=>measurement.plan(document.querySelector('#rich'),'fit')));
+  assert.equal(await p.locator('#rich').evaluate(n=>n.outerHTML),before);
+  assert.equal(await p.locator('[data-pretext-probe]').count(),0);
+  await sheet.evaluate(n=>n.remove());
+  const report=await inspect(p,'rich');assert.equal(report.engine,'browser');assert.ok(report.adaptable);
+  assert.equal(await p.locator('#rich').evaluate(n=>n.outerHTML),before);assert.deepEqual(p.errors,[]);
  }finally{await p.close();}
 });
 

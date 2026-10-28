@@ -5,6 +5,27 @@ the installed local browser and bundled Pretext. No API key, remote conversion
 service, HTTP endpoint, or editor interaction is required. Use the project's
 normal dependency/browser installation. Run commands from the project root.
 
+## Stable contract (v1)
+
+The documented arguments, units, nullable values, and exit codes are stable.
+Consumers may ignore additional result fields. Existing fields will not change
+meaning or type within this contract. No remote API or editor integration is needed.
+
+Successful execution always returns `status` (`ok` or `issues`), `units: css-px`,
+`box` (`content-box` for measure, `border-box` for check), and `resourceErrors`
+(an array, empty when no CSS/font request failed). Measure returns `layouts` in
+input width order; check returns `pageCount`, `textCount`, `checkedCount`,
+`truncated`, and `issues`. A measurable overflow item counts as checked; hidden,
+unmarked, unsupported, invalid-ID, and failed items do not. Files include the
+saved-byte SHA-256 `source.revision`. Execution errors return `status: error`
+with `error.code` and `error.message`, without fabricated layout metrics.
+
+`engine: pretext` means its metrics passed browser validation; `browser` is an
+actual-layout fallback, not a failure. Unsupported or failed measurements are
+explicit issues. Browser layout remains authoritative for Flex/Grid and rich
+text; resizing retains the document's existing layout rules. Adaptation is
+explicit, never an automatic resize or rewrite during measurement.
+
 ## Measure candidate widths
 
 Save a JSON request, then run:

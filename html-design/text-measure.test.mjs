@@ -21,6 +21,8 @@ function command(args){return new Promise((resolve,reject)=>{const p=spawn(proce
 test('candidate widths return natural width and validated line metrics without a running server',async()=>{
  const request=path.join(dir,'request.json');await writeFile(request,JSON.stringify(input));
  const {code,result}=await command(['measure',request]);assert.equal(code,0);assert.equal(result.status,'ok');assert.equal(result.units,'css-px');assert.equal(result.box,'content-box');
+ assert.deepEqual(result.layouts.map(l=>l.width),input.widths);assert.deepEqual(result.resourceErrors,[]);
+ for(const l of result.layouts){assert.ok(['pretext','browser'].includes(l.engine));assert.equal(typeof l.requiredHeight,'number');assert.equal(typeof l.maxLineWidth,'number');assert.equal(typeof l.horizontalOverflow,'boolean');assert.ok(l.lineCount===null||Number.isInteger(l.lineCount));}
  assert.ok(result.naturalWidth>400);assert.ok(result.layouts[0].requiredHeight>result.layouts[2].requiredHeight);
  assert.ok(result.layouts.every(l=>l.maxHeight===null && l.verticalOverflow===null));assert.ok(result.layouts.every(l=>l.lineCount>0));
  const browser=await chromium.launch(browserOptions());try{
