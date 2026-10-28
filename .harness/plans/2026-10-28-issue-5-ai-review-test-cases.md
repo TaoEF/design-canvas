@@ -67,3 +67,11 @@ F06 新增独立审阅样例，含两页、共享CSS与内容脚本样本，并�
 5. Planner 独立行为验收至少覆盖：B01/B04、C01/C04、D02/D04、E01/E04、F01/F04；用服务/API复现与真实浏览器组合，避免重复整轮审查。
 6. 稳定独立URL提供给用户。用户体验路径：AI改p1 → 修改前对照 → Undo；再改两页 → 接受一页；删页 → 恢复；人工改字后旧Undo不可覆盖；共享CSS → 文档级审阅。
 7. 记录 base/feature tip/integration commit/tree、clean fact、test profile、审查范围与处置、入口、局限。用户确认前不启动 #6，不更换原服务、不升级人工稿、不合 main/远端交付。
+
+## H. 独立审查 Findings 的修复验收（Planner追加）
+
+H01 修改页内style/stylesheet link中的跨页选择器，应产生单一文档级审阅；不得在其他页已接受/人工修改后通过某页Undo改变其共享样式。普通内联style属性仍可页级。
+H02 white-space:pre的stage、inline-block页面之间换行改空格，实际布局可变，必须有文档级审阅；保留pre/inline文字，不用格式忽略漏报。
+H03 真实浏览器门闩延迟Undo响应：请求发出后普通Edit、改字、拖动/源码应用均不可创建新持久修改；响应后内容和连接可继续正常使用。
+H04 在响应期间强制制造dirty/未应用源码，验证刷新保护：不释放有效token后再盲目导航，不丢DOM/草稿，不永久refreshing；明确冲突或可恢复状态，不用忽略beforeunload断言代替修复。
+H05 修复后针对review Node/browser与原交接流程定向验证；不常规二次独立审查。最终干净候选运行完整相同断言，并由Planner实际覆盖H01-H04。
