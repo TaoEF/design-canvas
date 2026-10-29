@@ -7,6 +7,7 @@ import { chromium } from 'playwright';
 import PptxGenJS from 'pptxgenjs';
 import { browserOptions } from './export.mjs';
 import { groupEditableSlideXml } from './pptx.mjs';
+import { mkdir, writeFile } from 'node:fs/promises';
 
 let server, origin, xmlBrowser;
 before(async () => {
@@ -232,10 +233,12 @@ test('PPTX container mapping preserves transparent, absent and differing borders
   assert.doesNotMatch(xml, /name="transparent-fill-border"|name="transparent-border-border"|name="no-border-border"|name="invisible(?:-border)?"/);
   assert.match(namedShape(xml, 'no-border'), /<a:prstGeom prst="rect"/);
   assert.match(namedShape(xml, 'transparent-border'), /<a:off x="2857500" y="190500"/);
-  for (const id of ['different-color', 'different-width', 'different-style', 'different-corners', 'elliptic-corners', 'transformed', 'tiny-radius']) {
+  for (const id of ['different-color', 'different-width', 'different-style', 'different-corners', 'elliptic-corners', 'tiny-radius']) {
     assert.equal(shapesOf(xml).filter(s => s.includes(`name="${id}-border"`)).length, 4, `${id} keeps its side-specific fallback`);
     assert.match(namedShape(xml, id), /<a:ln[^>]*>.*?<a:alpha val="0"/s, 'fallback fill must not add a uniform stroke');
   }
+  assert.equal(shapesOf(xml).filter(s => s.includes('name="transformed-border"')).length, 0, 'positive uniform scale now retains one native fill/stroke');
+  assert.match(namedShape(xml, 'transformed'), /<a:ln w="15240"/);
   assert.match(namedShape(xml, 'pill'), /<a:prstGeom prst="roundRect"/);
   assert.match(namedShape(xml, 'pill'), /fmla="val 50000"/);
   assert.match(namedShape(xml, 'small-radius'), /<a:prstGeom prst="roundRect"/);
@@ -320,4 +323,54 @@ test('PPTX reports incompatible page ratios rather than stretching slides', asyn
   const response = await request('pptx', fixture.replace('width:800px;height:400px', 'width:800px;height:600px'));
   assert.equal(response.status, 500);
   assert.match((await response.json()).error, /相同比例/);
+});
+
+test('PPTX native rotation uses true local dimensions, accumulated scale/angle and DOM centers while semantic groups stay identity', async () => {
+  const html = `<!doctype html><html><head><style>
+  body{margin:0}[data-artboard]{width:900px;height:600px;position:relative;background:#fff}p{margin:0;font:20px/28px Arial}
+  [data-el=card]{position:absolute;left:230px;top:180px;width:300px;height:200px;box-sizing:border-box;padding:20px;border:2px solid #a0b0c0;border-radius:16px;background:#edf7ff;rotate:25deg;scale:1.25;transform-origin:20px 40px}
+  [data-el=title]{width:200px;height:60px;box-sizing:border-box;padding:8px;border:1px solid #204060;border-radius:4px;background:#b7e4cc;transform:rotate(10deg) scale(1.2);rotate:5deg;transform-origin:12px 22px}
+  [data-el=photo]{position:absolute;left:190px;top:100px;width:80px;height:60px;object-fit:cover;rotate:-15deg}
+  [data-el=inner]{position:absolute;left:20px;top:110px;width:100px;height:50px;background:#f8d6aa;rotate:-30deg;scale:.8;transform-origin:0 0}
+  [data-el=nested]{width:80px;height:30px;padding:0;font-size:14px}
+  </style></head><body><main data-stage><section data-artboard="rotation"><div data-el="card"><p data-el="title">Editable title</p><a href="https://example.com/rotation"><img data-el="photo" src="/demos/assets/bricks.jpg"></a><div data-el="inner"><p data-el="nested">Nested</p></div></div></section></main></body></html>`;
+  const actualCenters = await xmlPage(async page => {
+    await page.setContent(`<base href="${origin}/">` + html);
+    await page.evaluate(async () => { await document.fonts.ready; await Promise.all([...document.images].map(i => i.decode())); });
+    await mkdir('.export-test/issue19-test', { recursive: true });
+    await page.locator('[data-artboard]').screenshot({ path: '.export-test/issue19-test/export-browser.png' });
+    return page.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-el]')].map(el => { const r = el.getBoundingClientRect(); return [el.dataset.el, { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 }]; })));
+  });
+  const { xml, zip } = await slideXml(html);
+  const native = await xmlPage(page => page.evaluate(xml => {
+    const doc = new DOMParser().parseFromString(xml, 'application/xml'), p = 'http://schemas.openxmlformats.org/presentationml/2006/main', a = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+    return [...doc.getElementsByTagNameNS(p, 'sp'), ...doc.getElementsByTagNameNS(p, 'pic')].map(node => {
+      const xfrm = [...node.children].find(n => n.localName === 'spPr').getElementsByTagNameNS(a, 'xfrm')[0];
+      const off = xfrm.getElementsByTagNameNS(a, 'off')[0], ext = xfrm.getElementsByTagNameNS(a, 'ext')[0];
+      const w = Number(ext.getAttribute('cx')) / 9525, h = Number(ext.getAttribute('cy')) / 9525;
+      const body = node.getElementsByTagNameNS(a, 'bodyPr')[0];
+      return { name: node.getElementsByTagNameNS(p, 'cNvPr')[0].getAttribute('name'), text: !!body, kind: node.localName,
+        angle: Number(xfrm.getAttribute('rot') || 0) / 60000, w, h, cx: Number(off.getAttribute('x')) / 9525 + w / 2, cy: Number(off.getAttribute('y')) / 9525 + h / 2,
+        margin: body ? Number(body.getAttribute('lIns')) / 9525 : null };
+    });
+  }, xml));
+  const expected = [ ['card', false, 25, 372.5, 247.5], ['title', false, 40, 298.5, 88.5], ['title', true, 40, 300, 90], ['photo', false, 10, 100, 75], ['inner', false, 355, 100, 50], ['nested', true, 355, 80, 30] ];
+  for (const [name, text, angle, w, h] of expected) {
+    const item = native.find(n => n.name === name && n.text === text); assert.ok(item, `${name}/${text}`);
+    assert.ok(Math.abs(item.angle - angle) < .001, JSON.stringify(item));
+    assert.ok(Math.abs(item.w - w) < .002 && Math.abs(item.h - h) < .002, JSON.stringify(item));
+    assert.ok(Math.abs(item.cx - actualCenters[name].x) < .02 && Math.abs(item.cy - actualCenters[name].y) < .02, JSON.stringify({ item, actual: actualCenters[name] }));
+  }
+  assert.ok(Math.abs(native.find(n => n.name === 'title' && n.text).margin - 13.5) < .002, 'text margin includes scaled CSS padding and border');
+  assert.match(namedShape(xml, 'title'), /<a:ln w="14288"/);
+  assert.match(xml, /sz="2250"/); assert.match(xml, /<a:srcRect/);
+  const structure = await inspectSlide(xml); assert.equal(structure.groups.length, 2); assert.equal(new Set(structure.ids).size, structure.ids.length);
+  for (const group of structure.groups) { assert.deepEqual(group.transform.off, group.transform.chOff); assert.deepEqual(group.transform.ext, group.transform.chExt); }
+  assert.match(await zip.file('ppt/slides/_rels/slide1.xml.rels').async('string'), /https:\/\/example.com\/rotation/);
+  const pdfResponse = await request('pdf', html); assert.equal(pdfResponse.status, 200);
+  const pdfBytes = Buffer.from(await pdfResponse.arrayBuffer()), pdf = await PDFDocument.load(pdfBytes);
+  assert.equal(pdf.getPageCount(), 1); assert.ok(Math.abs(pdf.getPage(0).getWidth() - 675) < .5); assert.ok(Math.abs(pdf.getPage(0).getHeight() - 450) < .5);
+  await writeFile('.export-test/issue19-test/export-rotation.pdf', pdfBytes);
+  await writeFile('.export-test/issue19-test/export-rotation.pptx', await zip.generateAsync({ type: 'nodebuffer' }));
+  await writeFile('.export-test/issue19-test/export-rotation.html', html);
 });

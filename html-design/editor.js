@@ -275,7 +275,7 @@ property of their respective owners.
  */
 (() => {
   // html-design/src/editor.css
-  var editor_default = ':host {\n  all: initial;\n  --paper: #fff;\n  --workspace: #f2f2f2;\n  --hover: #ededed;\n  --active: #e4e4e4;\n  --ink: #202020;\n  --muted: #646464;\n  --line: #e7e7e7;\n  --selection: #258bff;\n  --guide: #10b981;\n  --radius: 8px;\n  --nav: 170px;\n  --head: 52px;\n  --foot: 40px;\n  font:\n    13px/1.35 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    "PingFang SC",\n    sans-serif;\n  color: var(--ink);\n  color-scheme: light;\n}\n* {\n  box-sizing: border-box;\n}\n[hidden] {\n  display: none !important;\n}\n::selection {\n  background: #d5d5d5;\n  color: #171717;\n}\nbutton,\ninput,\nselect,\ntextarea {\n  font: inherit;\n  color: inherit;\n}\nbutton {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 7px;\n  min-width: 32px;\n  height: 32px;\n  padding: 0 9px;\n  border: 0;\n  border-radius: var(--radius);\n  background: transparent;\n  cursor: pointer;\n  white-space: nowrap;\n  line-height: 1.2;\n}\nbutton:hover:not(:disabled) {\n  background: var(--hover);\n}\nbutton[aria-pressed="true"] {\n  background: var(--active);\n}\nbutton:disabled {\n  opacity: 0.35;\n  cursor: default;\n}\nbutton:focus-visible,\ninput:focus-visible,\nselect:focus-visible,\n[role="button"]:focus-visible {\n  outline: 2px solid var(--selection);\n  outline-offset: 2px;\n}\nbutton.primary {\n  background: #202020;\n  color: #fff;\n}\nbutton.primary:hover:not(:disabled) {\n  background: #3c3c3c;\n}\n.icon {\n  display: block;\n  flex-shrink: 0;\n  pointer-events: none;\n}\n.icon-only {\n  width: 32px;\n  padding: 0;\n}\n.head {\n  position: fixed;\n  inset: 0 0 auto;\n  height: var(--head);\n  z-index: 2147483647;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 20px;\n  padding: 0 16px;\n  background: var(--paper);\n}\n.grp {\n  display: flex;\n  align-items: center;\n  gap: 3px;\n  min-width: 0;\n}\n.document {\n  flex: 1;\n  gap: 9px;\n}\n.document-title {\n  min-width: 0;\n  max-width: 260px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-weight: 550;\n}\n.save-state {\n  min-width: 0;\n  max-width: 155px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  justify-content: flex-start;\n  white-space: nowrap;\n  color: var(--muted);\n  font-size: 11px;\n  padding: 0 5px;\n}\n.save-state .state-text {\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.save-state .icon {\n  width: 14px;\n  height: 14px;\n}\n.tools {\n  flex-shrink: 0;\n}\n.layout-toggle {\n  margin: 0 7px;\n}\n.layout-toggle button {\n  gap: 5px;\n}\n.done-button {\n  background: var(--hover);\n}\n.actions {\n  flex: 1;\n  justify-content: flex-end;\n}\n.group-gap {\n  margin-left: 13px;\n}\n.view-seg {\n  display: flex;\n  align-items: center;\n  gap: 0;\n}\n.view-seg button {\n  border-radius: 7px;\n}\n.view-seg .fullscreen {\n  padding-inline: 6px;\n  min-width: 26px;\n}\n.view-seg .fullscreen .icon {\n  width: 16px;\n  height: 16px;\n}\n.nav {\n  position: fixed;\n  left: 0;\n  top: var(--head);\n  bottom: 0;\n  width: var(--nav);\n  z-index: 2147483645;\n  display: flex;\n  flex-direction: column;\n  background: #f8f8f8;\n}\n.nav-head {\n  height: 47px;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 13px 0 20px;\n  flex-shrink: 0;\n}\n.nav-head strong {\n  font-size: 12px;\n  font-weight: 550;\n  color: var(--muted);\n}\n.thumb-list {\n  flex: 1;\n  min-height: 0;\n  overflow: auto;\n  padding: 6px 12px 24px;\n  scrollbar-width: thin;\n  scrollbar-color: #cecece transparent;\n  overscroll-behavior: contain;\n}\n.thumb {\n  position: relative;\n  margin-bottom: 18px;\n  border-radius: 7px;\n}\n.thumb-main {\n  outline: 0;\n  cursor: pointer;\n  position: relative;\n}\n.frame {\n  position: relative;\n  width: 146px;\n  overflow: hidden;\n  background: white;\n  border-radius: 3px;\n  box-shadow: 0 0 0 1px #dedede;\n}\n.frame iframe {\n  position: absolute;\n  left: 0;\n  top: 0;\n  border: 0;\n  transform-origin: 0 0;\n  pointer-events: none;\n  background: #fff;\n}\n.thumb.active .frame {\n  box-shadow: 0 0 0 1.5px var(--selection);\n}\n.thumb.active .label {\n  color: #171717;\n}\n.thumb-main:hover .frame {\n  box-shadow: 0 0 0 1.5px #8a8a8a;\n}\n.thumb-main:focus-visible .frame {\n  outline: 2px solid var(--selection);\n  outline-offset: 3px;\n}\n.label {\n  padding: 8px 28px 0 2px;\n  color: #666;\n  font-size: 11px;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  line-height: 16px;\n}\n.thumb-more {\n  position: absolute;\n  right: 0;\n  bottom: -4px;\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  opacity: 0;\n  background: #f8f8f8;\n}\n.thumb:hover .thumb-more,\n.thumb:focus-within .thumb-more,\n.thumb.active .thumb-more {\n  opacity: 1;\n}\n.thumb-more .icon {\n  width: 15px;\n  height: 15px;\n}\n.thumb.dragging {\n  opacity: 0.35;\n}\n.thumb.drop-before::before,\n.thumb.drop-after::after {\n  content: "";\n  position: absolute;\n  left: 0;\n  right: 0;\n  height: 2px;\n  background: #333;\n  pointer-events: none;\n}\n.thumb.drop-before::before {\n  top: -10px;\n}\n.thumb.drop-after::after {\n  bottom: -10px;\n}\n.rename-input {\n  width: 100%;\n  height: 25px;\n  padding: 2px 4px;\n  border: 1px solid #999;\n  border-radius: 4px;\n  background: #fff;\n  font-size: 12px;\n}\n.empty-list {\n  font-size: 12px;\n  color: var(--muted);\n  padding: 10px 5px;\n  line-height: 1.7;\n}\n.footer {\n  position: fixed;\n  bottom: 0;\n  left: var(--nav);\n  right: 0;\n  height: var(--foot);\n  z-index: 2147483645;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 12px;\n  background: #fff;\n  gap: 14px;\n}\n.footer button {\n  height: 28px;\n  min-width: 28px;\n  padding: 0 5px;\n}\n.page-controls {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  min-width: 0;\n}\n.pageno {\n  font-size: 12px;\n  color: #555;\n  font-variant-numeric: tabular-nums;\n  white-space: nowrap;\n  text-align: center;\n  min-width: 46px;\n}\n.page-title {\n  max-width: 260px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-size: 12px;\n  color: #666;\n  margin-left: 9px;\n  justify-content: flex-start;\n}\n.page-title:disabled {\n  opacity: 1;\n}\n.zoom {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n}\n.zoom .zv {\n  min-width: 49px;\n  font-size: 12px;\n  font-variant-numeric: tabular-nums;\n}\n.zoom .fit {\n  margin-left: 7px;\n}\n.footer .icon {\n  width: 16px;\n  height: 16px;\n}\n.tbar {\n  --hover: #353535;\n  --active: #4a4a4a;\n  --muted: #d0d0d0;\n  position: fixed;\n  left: calc(var(--nav) + (100vw - var(--nav)) / 2);\n  top: calc(var(--head) + 10px);\n  transform: translateX(-50%);\n  z-index: 2147483646;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 5px 6px;\n  background: #202020;\n  color: #f8f8f8;\n  border-radius: 10px;\n  box-shadow: 0 3px 16px #00000014;\n  max-width: calc(100vw - var(--nav) - 24px);\n}\n.text-tools,\n.image-tools,\n.object-tools {\n  display: flex;\n  align-items: center;\n  gap: 3px;\n}\n.tbar .seg { background: #353535; }\n.tbar .seg button[aria-pressed="true"] { background: #555; color: #fff; box-shadow: none; }\n.image-tools > [data-act="image-replace"] { font-size: 12px; font-weight: 400; gap: 5px; }\n.tbar .color-control .color-swatch { box-shadow: 0 0 0 1px #ffffff90; }\n.tbar .fs {\n  width: 52px;\n  height: 29px;\n  background: #383838;\n  border: 0;\n  border-radius: 5px;\n  padding: 0 4px;\n  text-align: center;\n  font-variant-numeric: tabular-nums;\n  appearance: textfield;\n}\n.fs::-webkit-inner-spin-button {\n  appearance: none;\n}\n.color-control { position: relative; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:7px; cursor:pointer; }\n.color-control:hover { background:var(--hover); }\n.color-control input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }\n.color-control .color-swatch {\n  display: block;\n  width: 19px;\n  height: 19px;\n  border-radius: 50%;\n  background: currentColor;\n  box-shadow: inset 0 0 0 1px #0002;\n}\n.add-text { gap: 0; width: 36px; }\n.add-text .icon:first-child { width: 12px; height: 12px; }\n.add-text .icon:last-child { width: 17px; height: 17px; }\n.menu-panel[data-menu="more"], .menu-panel[data-menu="element"], .menu-panel[data-menu="page"] { width: 190px; min-width: 190px; }\n.seg {\n  display: flex;\n  padding: 2px;\n  border-radius: 7px;\n  background: #f3f3f3;\n}\n.seg button {\n  height: 27px;\n  font-size: 12px;\n  padding: 0 10px;\n}\n.seg button[aria-pressed="true"] {\n  background: #fff;\n  box-shadow: 0 1px 3px #0001;\n}\n.compact-select {\n  border: 0;\n  background: #f4f4f4;\n  height: 29px;\n  padding: 0 7px;\n  border-radius: 5px;\n  font-size: 12px;\n}\n.tbar .icon {\n  width: 17px;\n  height: 17px;\n}\n.sel {\n  position: fixed;\n  display: none;\n  border: 1px solid var(--selection);\n  box-shadow: 0 0 0 1px #ffffffb3;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.sel.typing {\n  border-style: dashed;\n}\n.sel i {\n  position: absolute;\n  width: 8px;\n  height: 8px;\n  margin: -4px 0 0 -4px;\n  background: #fff;\n  border: 1px solid var(--selection);\n  border-radius: 1px;\n  pointer-events: auto;\n  box-shadow: 0 0 0 1px #ffffff80;\n}\n.sel.typing i {\n  display: none;\n}\n.sel.multiple i {\n  display: none;\n}\n.selection-member {\n  position: fixed;\n  border: 1px dashed var(--selection);\n  box-shadow: 0 0 0 1px #ffffffb3;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.marquee {\n  position: fixed;\n  border: 1px solid var(--selection);\n  background: #258bff18;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.selection-count {\n  padding: 0 7px;\n  color: var(--muted);\n  font-size: 12px;\n  white-space: nowrap;\n}\n.guides {\n  position: fixed;\n  left: var(--nav);\n  top: var(--head);\n  width: calc(100vw - var(--nav));\n  height: calc(100vh - var(--head) - var(--foot));\n  overflow: hidden;\n  pointer-events: none;\n  z-index: 2147483643;\n  fill: none;\n}\n.guide-halo {\n  stroke: #ffffffb3;\n  stroke-width: 3px;\n}\n.guide-line {\n  stroke: var(--guide);\n  stroke-width: 1px;\n}\n.guide-distance {\n  fill: #047857;\n  stroke: #fff;\n  stroke-width: 3px;\n  paint-order: stroke;\n  stroke-linejoin: round;\n  font: 11px system-ui, sans-serif;\n  font-variant-numeric: tabular-nums;\n}\n:host([data-nav-hidden]) .guides {\n  left: 0;\n  width: 100vw;\n}\n.sel i::before {\n  content: "";\n  position: absolute;\n  inset: -5px;\n}\n[data-h="nw"] {\n  left: 0;\n  top: 0;\n  cursor: nwse-resize;\n}\n[data-h="n"] {\n  left: 50%;\n  top: 0;\n  cursor: ns-resize;\n}\n[data-h="ne"] {\n  left: 100%;\n  top: 0;\n  cursor: nesw-resize;\n}\n[data-h="e"] {\n  left: 100%;\n  top: 50%;\n  cursor: ew-resize;\n}\n[data-h="se"] {\n  left: 100%;\n  top: 100%;\n  cursor: nwse-resize;\n}\n[data-h="s"] {\n  left: 50%;\n  top: 100%;\n  cursor: ns-resize;\n}\n[data-h="sw"] {\n  left: 0;\n  top: 100%;\n  cursor: nesw-resize;\n}\n[data-h="w"] {\n  left: 0;\n  top: 50%;\n  cursor: ew-resize;\n}\n.menu-panel {\n  position: fixed;\n  z-index: 2147483647;\n  min-width: 180px;\n  max-width: min(330px, calc(100vw - 20px));\n  max-height: 70vh;\n  overflow: auto;\n  padding: 6px;\n  border-radius: 10px;\n  background: white;\n  box-shadow: 0 6px 28px #00000024;\n  font-size: 12px;\n}\n.menu-panel button {\n  width: 100%;\n  justify-content: flex-start;\n  height: 34px;\n  padding: 0 9px;\n  border-radius: 6px;\n  font-size: 12px;\n}\n.menu-panel .icon {\n  width: 16px;\n  height: 16px;\n}\n.menu-caption {\n  font-size: 11px;\n  color: #6a6a6a;\n  padding: 8px 9px 4px;\n}\n.menu-separator {\n  height: 1px;\n  background: #eee;\n  margin: 5px 7px;\n}\n.status-detail {\n  font-size: 12px;\n  line-height: 1.65;\n  white-space: normal;\n  margin: 6px 8px;\n  color: #555;\n  max-width: 265px;\n}\n.status-panel button {\n  height: auto;\n  min-height: 34px;\n  white-space: normal;\n  text-align: left;\n}\n.modal {\n  position: fixed;\n  inset: 0;\n  z-index: 2147483647;\n  background: #0005;\n  display: flex;\n  padding: 36px;\n  font:\n    13px/1.4 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    sans-serif;\n  color: #222;\n}\n.box {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  background: #fff;\n  border-radius: 12px;\n  overflow: hidden;\n  min-width: 0;\n}\n.mh {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  padding: 11px 16px;\n  background: #f6f6f6;\n  flex-wrap: wrap;\n}\n.mh .hint {\n  color: #666;\n  font-size: 11px;\n}\n.mh .sp {\n  flex: 1;\n}\ntextarea {\n  flex: 1;\n  min-height: 0;\n  border: 0;\n  outline: none;\n  resize: none;\n  padding: 18px;\n  font:\n    12px/1.6 ui-monospace,\n    Menlo,\n    Consolas,\n    monospace;\n  white-space: pre;\n  tab-size: 2;\n  caret-color: #222;\n}\n.toast {\n  position: fixed;\n  left: 50%;\n  bottom: 65px;\n  transform: translateX(-50%);\n  max-width: calc(100vw - 40px);\n  padding: 10px 16px;\n  border-radius: 9px;\n  background: #222;\n  color: #fff;\n  font:\n    12px/1.5 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    sans-serif;\n  opacity: 0;\n  transition: opacity 0.15s;\n  pointer-events: none;\n  z-index: 2147483647;\n}\n.toast.show {\n  opacity: 1;\n}\n.empty-canvas {\n  position: fixed;\n  left: var(--nav);\n  right: 0;\n  top: var(--head);\n  bottom: var(--foot);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-direction: column;\n  gap: 14px;\n  color: #666;\n  font-size: 13px;\n}\n.empty-canvas p {\n  margin: 0;\n}\n.empty-canvas > .icon {\n  width: 30px;\n  height: 30px;\n  color: #aaa;\n}\n.play-controls {\n  position: fixed;\n  bottom: 22px;\n  left: 50%;\n  transform: translateX(-50%);\n  z-index: 2147483647;\n  display: flex;\n  align-items: center;\n  gap: 5px;\n  padding: 5px 8px;\n  background: #ffffffed;\n  border-radius: 10px;\n  box-shadow: 0 4px 18px #0002;\n  opacity: 0;\n  transition: opacity 0.15s;\n}\n.play-controls button {\n  height: 31px;\n  min-width: 31px;\n}\n.play-controls.visible,\n.play-controls:hover,\n.play-controls:focus-within {\n  opacity: 1;\n}\n.play-controls .play-title {\n  max-width: 190px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-size: 12px;\n  color: #555;\n  margin: 0 7px;\n}\n.play-controls .pageno {\n  font-size: 12px;\n}\n.play-exit {\n  position: fixed;\n  top: 16px;\n  right: 16px;\n  z-index: 2147483647;\n  background: #fffffff0;\n  color: #222;\n}\n:host([data-playing]) .head,\n:host([data-playing]) .nav,\n:host([data-playing]) .footer,\n:host([data-playing]) .tbar,\n:host([data-playing]) .sel,\n:host([data-playing]) .guides,\n:host([data-playing]) .selection-members,\n:host([data-playing]) .marquee,\n:host([data-playing]) .empty-canvas {\n  display: none !important;\n}\n:host(:not([data-playing])) .play-controls,\n:host(:not([data-playing])) .play-exit {\n  display: none !important;\n}\n:host([data-nav-hidden]) .nav {\n  display: none;\n}\n:host([data-nav-hidden]) .footer {\n  left: 0;\n}\n:host([data-nav-hidden]) .tbar {\n  left: 50%;\n  max-width: calc(100vw - 24px);\n}\n:host([data-nav-hidden]) .empty-canvas {\n  left: 0;\n}\n@media (max-width: 1050px) {\n  .head {\n    gap: 9px;\n    padding: 0 10px;\n  }\n  .document-title {\n    max-width: 140px;\n  }\n  .save-state {\n    max-width: 95px;\n    font-size: 10px;\n  }\n  .group-gap {\n    margin-left: 6px;\n  }\n  .actions {\n    flex: initial;\n  }\n  .document {\n    flex: 1;\n  }\n  .head button {\n    padding-inline: 7px;\n  }\n  .actions .button-label {\n    display: none;\n  }\n}\n@media (max-width: 760px) {\n  :host {\n    --nav: 170px;\n  }\n  .head {\n    gap: 4px;\n  }\n  .document-title {\n    max-width: 100px;\n    font-size: 12px;\n  }\n  .save-state {\n    max-width: 27px;\n  }\n  .save-state .state-text {\n    display: none;\n  }\n  .head .preview-button span,\n  .head .export-label {\n    display: none;\n  }\n  .head .group-gap {\n    margin-left: 2px;\n  }\n  .head .layout-toggle {\n    margin-inline: 3px;\n  }\n  .head .layout-toggle button { padding-inline: 6px; font-size: 11px; }\n  .page-title {\n    max-width: 110px;\n  }\n  .footer {\n    padding: 0 7px;\n  }\n  .tbar {\n    gap: 1px;\n    padding: 4px;\n  }\n  .tbar button {\n    padding-inline: 5px;\n    min-width: 28px;\n  }\n  .nav-head {\n    padding-inline: 12px;\n  }\n}\n@media (max-width: 540px) {\n  :host {\n    --nav: 0px;\n  }\n  .nav {\n    display: none !important;\n  }\n  .footer {\n    left: 0;\n  }\n  .tbar {\n    left: 50%;\n    max-width: calc(100vw - 16px);\n  }\n  .document-title {\n    max-width: 80px;\n  }\n  .head {\n    padding-inline: 6px;\n  }\n  .head button {\n    padding-inline: 5px;\n    min-width: 28px;\n  }\n  .head .document {\n    gap: 2px;\n  }\n  .head .nav-toggle {\n    display: inline-flex;\n  }\n  .head .selection-tool {\n    display: none;\n  }\n  .head .done-button span,\n  .head .preview-button > .icon:last-child {\n    display: none;\n  }\n  :host([data-editing]) .head .preview-button {\n    display: none;\n  }\n  .head .document { flex: 0; gap: 3px; }\n  .head .document-title { display: none; }\n  .head .save-state { width: 22px; min-width: 22px; max-width: 22px; padding: 0; flex-shrink: 0; }\n  .head .tools > [data-act="undo"], .head .tools > [data-act="redo"] { display: none; }\n  .head .actions { flex: initial; }\n  .head [data-act="export"] > .icon:last-child {\n    display: none;\n  }\n  :host([data-mobile-nav]) .nav {\n    display: flex !important;\n    width: 170px;\n    bottom: 40px;\n    box-shadow: 5px 0 20px #0001;\n  }\n  .head .actions {\n    gap: 1px;\n  }\n  .page-title {\n    max-width: 90px;\n  }\n  .footer .fit span {\n    display: none;\n  }\n  .modal {\n    padding: 10px;\n  }\n  .mh .hint {\n    display: none;\n  }\n}\n@media (prefers-reduced-motion: reduce) {\n  * {\n    transition: none !important;\n    scroll-behavior: auto !important;\n  }\n}\n@media print {\n  :host {\n    display: none !important;\n  }\n}\n\n.more-text-formats {\n  display: flex;\n  gap: 4px;\n  padding: 3px 6px;\n}\n.more-text-formats button {\n  width: 32px;\n  padding: 0;\n  justify-content: center;\n}\n:host([data-readonly]) .tools {\n  display: none;\n}\n\n.play-exit:focus-visible {\n  opacity: 1 !important;\n}\n\n/* Experimental text sizing; diagnostics stay inside the editor shadow root. */\n.text-layout-panel { width: 268px; }\n.text-layout-panel strong { display: block; padding: 8px 10px 0; font-weight: 550; }\n.text-layout-status { margin: 8px 10px 12px; max-width: 232px; color: var(--muted); line-height: 1.6; }\n.text-layout-status[data-overflow="true"] { color: #a84c18; }\n\n/* AI review controls live outside the scaled content. */\n.review-actions { position:fixed; z-index:2147483645; display:flex; align-items:center; padding:3px; gap:0; background:var(--paper); border-radius:8px; box-shadow:0 3px 12px #0002; }\n.review-actions button { height:30px; min-width:62px; font-size:12px; border-radius:6px; }\n.review-accept { background:#202020; color:#fff; }\nbutton.review-accept:hover:not(:disabled) { background:#3c3c3c; }\nbutton[aria-disabled=true] { opacity:.45; cursor:default; }\n.review-scope { color:var(--muted); font-size:12px; padding:0 8px; }\n.review-summary { position:fixed; z-index:2147483646; width:280px; background:var(--paper); border-radius:8px; box-shadow:0 5px 20px #0002; }\n.review-summary-bar { display:flex; padding:4px; gap:4px; }\n.review-trigger { flex:1; justify-content:space-between; font-size:12px; }\n.review-trigger .icon { transform:rotate(180deg); }\n.review-trigger[aria-expanded=true] .icon { transform:none; }\n.review-summary-bar .review-accept { height:30px; font-size:12px; }\n.review-panel { padding:10px 12px 4px; overflow:auto; }\n.review-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; }\n.review-message { color:var(--muted); font-size:12px; line-height:1.5; margin:4px 0 10px; }\n.review-item { display:flex; gap:8px; padding:8px 0; border-top:1px solid var(--line); align-items:center; }\n.review-item[data-current] .review-name { font-weight:600; }\n.review-info { flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:4px; }\n.review-name { width:100%; min-width:0; display:flex; justify-content:flex-start; gap:4px; text-align:left; padding:0; font-size:12px; }\n.review-page { flex-shrink:0; white-space:nowrap; }\n.review-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.review-name:disabled { opacity:1; }\n.review-kind { display:inline-block; padding:1px 5px; border-radius:3px; background:var(--hover); font-size:10px; line-height:16px; color:var(--muted); }\n.review-item-actions { display:flex; flex-shrink:0; gap:2px; margin-left:auto; }\n.review-item-actions button { height:28px; padding:0 6px; font-size:12px; }\n.review-before { position:fixed; z-index:2147483643; overflow:hidden; background:var(--workspace); pointer-events:none; }\n.review-projection { position:absolute; overflow:hidden; pointer-events:none; }\n.review-projection iframe { position:absolute; left:0; top:0; border:0; transform-origin:top left; background:white; pointer-events:none; }\n.review-hint { position:fixed; right:16px; bottom:112px; pointer-events:none; z-index:2147483646; font-size:12px; color:var(--muted); background:var(--paper); padding:6px 10px; border-radius:6px; }\n';
+  var editor_default = ':host {\n  all: initial;\n  --paper: #fff;\n  --workspace: #f2f2f2;\n  --hover: #ededed;\n  --active: #e4e4e4;\n  --ink: #202020;\n  --muted: #646464;\n  --line: #e7e7e7;\n  --selection: #258bff;\n  --guide: #10b981;\n  --radius: 8px;\n  --nav: 170px;\n  --head: 52px;\n  --foot: 40px;\n  font:\n    13px/1.35 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    "PingFang SC",\n    sans-serif;\n  color: var(--ink);\n  color-scheme: light;\n}\n* {\n  box-sizing: border-box;\n}\n[hidden] {\n  display: none !important;\n}\n::selection {\n  background: #d5d5d5;\n  color: #171717;\n}\nbutton,\ninput,\nselect,\ntextarea {\n  font: inherit;\n  color: inherit;\n}\nbutton {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 7px;\n  min-width: 32px;\n  height: 32px;\n  padding: 0 9px;\n  border: 0;\n  border-radius: var(--radius);\n  background: transparent;\n  cursor: pointer;\n  white-space: nowrap;\n  line-height: 1.2;\n}\nbutton:hover:not(:disabled) {\n  background: var(--hover);\n}\nbutton[aria-pressed="true"] {\n  background: var(--active);\n}\nbutton:disabled {\n  opacity: 0.35;\n  cursor: default;\n}\nbutton:focus-visible,\ninput:focus-visible,\nselect:focus-visible,\n[role="button"]:focus-visible {\n  outline: 2px solid var(--selection);\n  outline-offset: 2px;\n}\nbutton.primary {\n  background: #202020;\n  color: #fff;\n}\nbutton.primary:hover:not(:disabled) {\n  background: #3c3c3c;\n}\n.icon {\n  display: block;\n  flex-shrink: 0;\n  pointer-events: none;\n}\n.icon-only {\n  width: 32px;\n  padding: 0;\n}\n.head {\n  position: fixed;\n  inset: 0 0 auto;\n  height: var(--head);\n  z-index: 2147483647;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 20px;\n  padding: 0 16px;\n  background: var(--paper);\n}\n.grp {\n  display: flex;\n  align-items: center;\n  gap: 3px;\n  min-width: 0;\n}\n.document {\n  flex: 1;\n  gap: 9px;\n}\n.document-title {\n  min-width: 0;\n  max-width: 260px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-weight: 550;\n}\n.save-state {\n  min-width: 0;\n  max-width: 155px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  justify-content: flex-start;\n  white-space: nowrap;\n  color: var(--muted);\n  font-size: 11px;\n  padding: 0 5px;\n}\n.save-state .state-text {\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.save-state .icon {\n  width: 14px;\n  height: 14px;\n}\n.tools {\n  flex-shrink: 0;\n}\n.layout-toggle {\n  margin: 0 7px;\n}\n.layout-toggle button {\n  gap: 5px;\n}\n.done-button {\n  background: var(--hover);\n}\n.actions {\n  flex: 1;\n  justify-content: flex-end;\n}\n.group-gap {\n  margin-left: 13px;\n}\n.view-seg {\n  display: flex;\n  align-items: center;\n  gap: 0;\n}\n.view-seg button {\n  border-radius: 7px;\n}\n.view-seg .fullscreen {\n  padding-inline: 6px;\n  min-width: 26px;\n}\n.view-seg .fullscreen .icon {\n  width: 16px;\n  height: 16px;\n}\n.nav {\n  position: fixed;\n  left: 0;\n  top: var(--head);\n  bottom: 0;\n  width: var(--nav);\n  z-index: 2147483645;\n  display: flex;\n  flex-direction: column;\n  background: #f8f8f8;\n}\n.nav-head {\n  height: 47px;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 13px 0 20px;\n  flex-shrink: 0;\n}\n.nav-head strong {\n  font-size: 12px;\n  font-weight: 550;\n  color: var(--muted);\n}\n.thumb-list {\n  flex: 1;\n  min-height: 0;\n  overflow: auto;\n  padding: 6px 12px 24px;\n  scrollbar-width: thin;\n  scrollbar-color: #cecece transparent;\n  overscroll-behavior: contain;\n}\n.thumb {\n  position: relative;\n  margin-bottom: 18px;\n  border-radius: 7px;\n}\n.thumb-main {\n  outline: 0;\n  cursor: pointer;\n  position: relative;\n}\n.frame {\n  position: relative;\n  width: 146px;\n  overflow: hidden;\n  background: white;\n  border-radius: 3px;\n  box-shadow: 0 0 0 1px #dedede;\n}\n.frame iframe {\n  position: absolute;\n  left: 0;\n  top: 0;\n  border: 0;\n  transform-origin: 0 0;\n  pointer-events: none;\n  background: #fff;\n}\n.thumb.active .frame {\n  box-shadow: 0 0 0 1.5px var(--selection);\n}\n.thumb.active .label {\n  color: #171717;\n}\n.thumb-main:hover .frame {\n  box-shadow: 0 0 0 1.5px #8a8a8a;\n}\n.thumb-main:focus-visible .frame {\n  outline: 2px solid var(--selection);\n  outline-offset: 3px;\n}\n.label {\n  padding: 8px 28px 0 2px;\n  color: #666;\n  font-size: 11px;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  line-height: 16px;\n}\n.thumb-more {\n  position: absolute;\n  right: 0;\n  bottom: -4px;\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  opacity: 0;\n  background: #f8f8f8;\n}\n.thumb:hover .thumb-more,\n.thumb:focus-within .thumb-more,\n.thumb.active .thumb-more {\n  opacity: 1;\n}\n.thumb-more .icon {\n  width: 15px;\n  height: 15px;\n}\n.thumb.dragging {\n  opacity: 0.35;\n}\n.thumb.drop-before::before,\n.thumb.drop-after::after {\n  content: "";\n  position: absolute;\n  left: 0;\n  right: 0;\n  height: 2px;\n  background: #333;\n  pointer-events: none;\n}\n.thumb.drop-before::before {\n  top: -10px;\n}\n.thumb.drop-after::after {\n  bottom: -10px;\n}\n.rename-input {\n  width: 100%;\n  height: 25px;\n  padding: 2px 4px;\n  border: 1px solid #999;\n  border-radius: 4px;\n  background: #fff;\n  font-size: 12px;\n}\n.empty-list {\n  font-size: 12px;\n  color: var(--muted);\n  padding: 10px 5px;\n  line-height: 1.7;\n}\n.footer {\n  position: fixed;\n  bottom: 0;\n  left: var(--nav);\n  right: 0;\n  height: var(--foot);\n  z-index: 2147483645;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 12px;\n  background: #fff;\n  gap: 14px;\n}\n.footer button {\n  height: 28px;\n  min-width: 28px;\n  padding: 0 5px;\n}\n.page-controls {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  min-width: 0;\n}\n.pageno {\n  font-size: 12px;\n  color: #555;\n  font-variant-numeric: tabular-nums;\n  white-space: nowrap;\n  text-align: center;\n  min-width: 46px;\n}\n.page-title {\n  max-width: 260px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-size: 12px;\n  color: #666;\n  margin-left: 9px;\n  justify-content: flex-start;\n}\n.page-title:disabled {\n  opacity: 1;\n}\n.zoom {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n}\n.zoom .zv {\n  min-width: 49px;\n  font-size: 12px;\n  font-variant-numeric: tabular-nums;\n}\n.zoom .fit {\n  margin-left: 7px;\n}\n.footer .icon {\n  width: 16px;\n  height: 16px;\n}\n.tbar {\n  --hover: #353535;\n  --active: #4a4a4a;\n  --muted: #d0d0d0;\n  position: fixed;\n  left: calc(var(--nav) + (100vw - var(--nav)) / 2);\n  top: calc(var(--head) + 10px);\n  transform: translateX(-50%);\n  z-index: 2147483646;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 5px 6px;\n  background: #202020;\n  color: #f8f8f8;\n  border-radius: 10px;\n  box-shadow: 0 3px 16px #00000014;\n  max-width: calc(100vw - var(--nav) - 24px);\n}\n.text-tools,\n.image-tools,\n.object-tools {\n  display: flex;\n  align-items: center;\n  gap: 3px;\n}\n.tbar .seg { background: #353535; }\n.tbar .seg button[aria-pressed="true"] { background: #555; color: #fff; box-shadow: none; }\n.image-tools > [data-act="image-replace"] { font-size: 12px; font-weight: 400; gap: 5px; }\n.tbar .color-control .color-swatch { box-shadow: 0 0 0 1px #ffffff90; }\n.tbar .fs {\n  width: 52px;\n  height: 29px;\n  background: #383838;\n  border: 0;\n  border-radius: 5px;\n  padding: 0 4px;\n  text-align: center;\n  font-variant-numeric: tabular-nums;\n  appearance: textfield;\n}\n.fs::-webkit-inner-spin-button {\n  appearance: none;\n}\n.color-control { position: relative; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:7px; cursor:pointer; }\n.color-control:hover { background:var(--hover); }\n.color-control input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }\n.color-control .color-swatch {\n  display: block;\n  width: 19px;\n  height: 19px;\n  border-radius: 50%;\n  background: currentColor;\n  box-shadow: inset 0 0 0 1px #0002;\n}\n.add-text { gap: 0; width: 36px; }\n.add-text .icon:first-child { width: 12px; height: 12px; }\n.add-text .icon:last-child { width: 17px; height: 17px; }\n.menu-panel[data-menu="more"], .menu-panel[data-menu="element"], .menu-panel[data-menu="page"] { width: 190px; min-width: 190px; }\n.seg {\n  display: flex;\n  padding: 2px;\n  border-radius: 7px;\n  background: #f3f3f3;\n}\n.seg button {\n  height: 27px;\n  font-size: 12px;\n  padding: 0 10px;\n}\n.seg button[aria-pressed="true"] {\n  background: #fff;\n  box-shadow: 0 1px 3px #0001;\n}\n.compact-select {\n  border: 0;\n  background: #f4f4f4;\n  height: 29px;\n  padding: 0 7px;\n  border-radius: 5px;\n  font-size: 12px;\n}\n.tbar .icon {\n  width: 17px;\n  height: 17px;\n}\n.sel {\n  position: fixed;\n  display: none;\n  border: 1px solid var(--selection);\n  box-shadow: 0 0 0 1px #ffffffb3;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.sel.typing {\n  border-style: dashed;\n}\n.sel i {\n  position: absolute;\n  width: 8px;\n  height: 8px;\n  margin: -4px 0 0 -4px;\n  background: #fff;\n  border: 1px solid var(--selection);\n  border-radius: 1px;\n  pointer-events: auto;\n  box-shadow: 0 0 0 1px #ffffff80;\n}\n.sel.typing i {\n  display: none;\n}\n.sel.multiple i {\n  display: none;\n}\n.sel.unsupported i { display:none; }\n.rotate-handle {\n  position:fixed; width:24px; height:24px; padding:4px; margin:-12px;\n  border:1px solid var(--selection); border-radius:50%; background:var(--paper);\n  color:var(--selection); z-index:2147483645; cursor:grab;\n  box-shadow:0 0 0 1px #ffffff80;\n}\n.rotate-handle .icon { width:14px; height:14px; }\n.rotate-handle:active { cursor:grabbing; }\n.rotation-feedback {\n  position:fixed; padding:3px 6px; border-radius:5px; background:#202020;\n  color:#fff; font-size:11px; font-variant-numeric:tabular-nums;\n  pointer-events:none; z-index:2147483645;\n}\n.rotation-panel label { display:flex; align-items:center; gap:6px; margin:4px 6px 8px; }\n.rotation-angle { width:80px; height:28px; border:1px solid var(--line); border-radius:5px; padding:3px 6px; }\n.rotation-multiple { margin:4px 6px; font-size:12px; color:var(--muted); line-height:1.5; }\n.selection-member {\n  position: fixed;\n  border: 1px dashed var(--selection);\n  box-shadow: 0 0 0 1px #ffffffb3;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.marquee {\n  position: fixed;\n  border: 1px solid var(--selection);\n  background: #258bff18;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.selection-count {\n  padding: 0 7px;\n  color: var(--muted);\n  font-size: 12px;\n  white-space: nowrap;\n}\n.guides {\n  position: fixed;\n  left: var(--nav);\n  top: var(--head);\n  width: calc(100vw - var(--nav));\n  height: calc(100vh - var(--head) - var(--foot));\n  overflow: hidden;\n  pointer-events: none;\n  z-index: 2147483643;\n  fill: none;\n}\n.guide-halo {\n  stroke: #ffffffb3;\n  stroke-width: 3px;\n}\n.guide-line {\n  stroke: var(--guide);\n  stroke-width: 1px;\n}\n.guide-distance {\n  fill: #047857;\n  stroke: #fff;\n  stroke-width: 3px;\n  paint-order: stroke;\n  stroke-linejoin: round;\n  font: 11px system-ui, sans-serif;\n  font-variant-numeric: tabular-nums;\n}\n:host([data-nav-hidden]) .guides {\n  left: 0;\n  width: 100vw;\n}\n.sel i::before {\n  content: "";\n  position: absolute;\n  inset: -5px;\n}\n[data-h="nw"] {\n  left: 0;\n  top: 0;\n  cursor: nwse-resize;\n}\n[data-h="n"] {\n  left: 50%;\n  top: 0;\n  cursor: ns-resize;\n}\n[data-h="ne"] {\n  left: 100%;\n  top: 0;\n  cursor: nesw-resize;\n}\n[data-h="e"] {\n  left: 100%;\n  top: 50%;\n  cursor: ew-resize;\n}\n[data-h="se"] {\n  left: 100%;\n  top: 100%;\n  cursor: nwse-resize;\n}\n[data-h="s"] {\n  left: 50%;\n  top: 100%;\n  cursor: ns-resize;\n}\n[data-h="sw"] {\n  left: 0;\n  top: 100%;\n  cursor: nesw-resize;\n}\n[data-h="w"] {\n  left: 0;\n  top: 50%;\n  cursor: ew-resize;\n}\n.menu-panel {\n  position: fixed;\n  z-index: 2147483647;\n  min-width: 180px;\n  max-width: min(330px, calc(100vw - 20px));\n  max-height: 70vh;\n  overflow: auto;\n  padding: 6px;\n  border-radius: 10px;\n  background: white;\n  box-shadow: 0 6px 28px #00000024;\n  font-size: 12px;\n}\n.menu-panel button {\n  width: 100%;\n  justify-content: flex-start;\n  height: 34px;\n  padding: 0 9px;\n  border-radius: 6px;\n  font-size: 12px;\n}\n.menu-panel .icon {\n  width: 16px;\n  height: 16px;\n}\n.menu-caption {\n  font-size: 11px;\n  color: #6a6a6a;\n  padding: 8px 9px 4px;\n}\n.menu-separator {\n  height: 1px;\n  background: #eee;\n  margin: 5px 7px;\n}\n.status-detail {\n  font-size: 12px;\n  line-height: 1.65;\n  white-space: normal;\n  margin: 6px 8px;\n  color: #555;\n  max-width: 265px;\n}\n.status-panel button {\n  height: auto;\n  min-height: 34px;\n  white-space: normal;\n  text-align: left;\n}\n.modal {\n  position: fixed;\n  inset: 0;\n  z-index: 2147483647;\n  background: #0005;\n  display: flex;\n  padding: 36px;\n  font:\n    13px/1.4 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    sans-serif;\n  color: #222;\n}\n.box {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  background: #fff;\n  border-radius: 12px;\n  overflow: hidden;\n  min-width: 0;\n}\n.mh {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  padding: 11px 16px;\n  background: #f6f6f6;\n  flex-wrap: wrap;\n}\n.mh .hint {\n  color: #666;\n  font-size: 11px;\n}\n.mh .sp {\n  flex: 1;\n}\ntextarea {\n  flex: 1;\n  min-height: 0;\n  border: 0;\n  outline: none;\n  resize: none;\n  padding: 18px;\n  font:\n    12px/1.6 ui-monospace,\n    Menlo,\n    Consolas,\n    monospace;\n  white-space: pre;\n  tab-size: 2;\n  caret-color: #222;\n}\n.toast {\n  position: fixed;\n  left: 50%;\n  bottom: 65px;\n  transform: translateX(-50%);\n  max-width: calc(100vw - 40px);\n  padding: 10px 16px;\n  border-radius: 9px;\n  background: #222;\n  color: #fff;\n  font:\n    12px/1.5 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    sans-serif;\n  opacity: 0;\n  transition: opacity 0.15s;\n  pointer-events: none;\n  z-index: 2147483647;\n}\n.toast.show {\n  opacity: 1;\n}\n.empty-canvas {\n  position: fixed;\n  left: var(--nav);\n  right: 0;\n  top: var(--head);\n  bottom: var(--foot);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-direction: column;\n  gap: 14px;\n  color: #666;\n  font-size: 13px;\n}\n.empty-canvas p {\n  margin: 0;\n}\n.empty-canvas > .icon {\n  width: 30px;\n  height: 30px;\n  color: #aaa;\n}\n.play-controls {\n  position: fixed;\n  bottom: 22px;\n  left: 50%;\n  transform: translateX(-50%);\n  z-index: 2147483647;\n  display: flex;\n  align-items: center;\n  gap: 5px;\n  padding: 5px 8px;\n  background: #ffffffed;\n  border-radius: 10px;\n  box-shadow: 0 4px 18px #0002;\n  opacity: 0;\n  transition: opacity 0.15s;\n}\n.play-controls button {\n  height: 31px;\n  min-width: 31px;\n}\n.play-controls.visible,\n.play-controls:hover,\n.play-controls:focus-within {\n  opacity: 1;\n}\n.play-controls .play-title {\n  max-width: 190px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-size: 12px;\n  color: #555;\n  margin: 0 7px;\n}\n.play-controls .pageno {\n  font-size: 12px;\n}\n.play-exit {\n  position: fixed;\n  top: 16px;\n  right: 16px;\n  z-index: 2147483647;\n  background: #fffffff0;\n  color: #222;\n}\n:host([data-playing]) .head,\n:host([data-playing]) .nav,\n:host([data-playing]) .footer,\n:host([data-playing]) .tbar,\n:host([data-playing]) .sel,\n:host([data-playing]) .guides,\n:host([data-playing]) .selection-members,\n:host([data-playing]) .marquee,\n:host([data-playing]) .empty-canvas {\n  display: none !important;\n}\n:host(:not([data-playing])) .play-controls,\n:host(:not([data-playing])) .play-exit {\n  display: none !important;\n}\n:host([data-nav-hidden]) .nav {\n  display: none;\n}\n:host([data-nav-hidden]) .footer {\n  left: 0;\n}\n:host([data-nav-hidden]) .tbar {\n  left: 50%;\n  max-width: calc(100vw - 24px);\n}\n:host([data-nav-hidden]) .empty-canvas {\n  left: 0;\n}\n@media (max-width: 1050px) {\n  .head {\n    gap: 9px;\n    padding: 0 10px;\n  }\n  .document-title {\n    max-width: 140px;\n  }\n  .save-state {\n    max-width: 95px;\n    font-size: 10px;\n  }\n  .group-gap {\n    margin-left: 6px;\n  }\n  .actions {\n    flex: initial;\n  }\n  .document {\n    flex: 1;\n  }\n  .head button {\n    padding-inline: 7px;\n  }\n  .actions .button-label {\n    display: none;\n  }\n}\n@media (max-width: 760px) {\n  :host {\n    --nav: 170px;\n  }\n  .head {\n    gap: 4px;\n  }\n  .document-title {\n    max-width: 100px;\n    font-size: 12px;\n  }\n  .save-state {\n    max-width: 27px;\n  }\n  .save-state .state-text {\n    display: none;\n  }\n  .head .preview-button span,\n  .head .export-label {\n    display: none;\n  }\n  .head .group-gap {\n    margin-left: 2px;\n  }\n  .head .layout-toggle {\n    margin-inline: 3px;\n  }\n  .head .layout-toggle button { padding-inline: 6px; font-size: 11px; }\n  .page-title {\n    max-width: 110px;\n  }\n  .footer {\n    padding: 0 7px;\n  }\n  .tbar {\n    gap: 1px;\n    padding: 4px;\n  }\n  .tbar button {\n    padding-inline: 5px;\n    min-width: 28px;\n  }\n  .nav-head {\n    padding-inline: 12px;\n  }\n}\n@media (max-width: 540px) {\n  :host {\n    --nav: 0px;\n  }\n  .nav {\n    display: none !important;\n  }\n  .footer {\n    left: 0;\n  }\n  .tbar {\n    left: 50%;\n    max-width: calc(100vw - 16px);\n  }\n  .document-title {\n    max-width: 80px;\n  }\n  .head {\n    padding-inline: 6px;\n  }\n  .head button {\n    padding-inline: 5px;\n    min-width: 28px;\n  }\n  .head .document {\n    gap: 2px;\n  }\n  .head .nav-toggle {\n    display: inline-flex;\n  }\n  .head .selection-tool {\n    display: none;\n  }\n  .head .done-button span,\n  .head .preview-button > .icon:last-child {\n    display: none;\n  }\n  :host([data-editing]) .head .preview-button {\n    display: none;\n  }\n  .head .document { flex: 0; gap: 3px; }\n  .head .document-title { display: none; }\n  .head .save-state { width: 22px; min-width: 22px; max-width: 22px; padding: 0; flex-shrink: 0; }\n  .head .tools > [data-act="undo"], .head .tools > [data-act="redo"] { display: none; }\n  .head .actions { flex: initial; }\n  .head [data-act="export"] > .icon:last-child {\n    display: none;\n  }\n  :host([data-mobile-nav]) .nav {\n    display: flex !important;\n    width: 170px;\n    bottom: 40px;\n    box-shadow: 5px 0 20px #0001;\n  }\n  .head .actions {\n    gap: 1px;\n  }\n  .page-title {\n    max-width: 90px;\n  }\n  .footer .fit span {\n    display: none;\n  }\n  .modal {\n    padding: 10px;\n  }\n  .mh .hint {\n    display: none;\n  }\n}\n@media (prefers-reduced-motion: reduce) {\n  * {\n    transition: none !important;\n    scroll-behavior: auto !important;\n  }\n}\n@media print {\n  :host {\n    display: none !important;\n  }\n}\n\n.more-text-formats {\n  display: flex;\n  gap: 4px;\n  padding: 3px 6px;\n}\n.more-text-formats button {\n  width: 32px;\n  padding: 0;\n  justify-content: center;\n}\n:host([data-readonly]) .tools {\n  display: none;\n}\n\n.play-exit:focus-visible {\n  opacity: 1 !important;\n}\n\n/* Experimental text sizing; diagnostics stay inside the editor shadow root. */\n.text-layout-panel { width: 268px; }\n.text-layout-panel strong { display: block; padding: 8px 10px 0; font-weight: 550; }\n.text-layout-status { margin: 8px 10px 12px; max-width: 232px; color: var(--muted); line-height: 1.6; }\n.text-layout-status[data-overflow="true"] { color: #a84c18; }\n\n/* AI review controls live outside the scaled content. */\n.review-actions { position:fixed; z-index:2147483645; display:flex; align-items:center; padding:3px; gap:0; background:var(--paper); border-radius:8px; box-shadow:0 3px 12px #0002; }\n.review-actions button { height:30px; min-width:62px; font-size:12px; border-radius:6px; }\n.review-accept { background:#202020; color:#fff; }\nbutton.review-accept:hover:not(:disabled) { background:#3c3c3c; }\nbutton[aria-disabled=true] { opacity:.45; cursor:default; }\n.review-scope { color:var(--muted); font-size:12px; padding:0 8px; }\n.review-summary { position:fixed; z-index:2147483646; width:280px; background:var(--paper); border-radius:8px; box-shadow:0 5px 20px #0002; }\n.review-summary-bar { display:flex; padding:4px; gap:4px; }\n.review-trigger { flex:1; justify-content:space-between; font-size:12px; }\n.review-trigger .icon { transform:rotate(180deg); }\n.review-trigger[aria-expanded=true] .icon { transform:none; }\n.review-summary-bar .review-accept { height:30px; font-size:12px; }\n.review-panel { padding:10px 12px 4px; overflow:auto; }\n.review-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; }\n.review-message { color:var(--muted); font-size:12px; line-height:1.5; margin:4px 0 10px; }\n.review-item { display:flex; gap:8px; padding:8px 0; border-top:1px solid var(--line); align-items:center; }\n.review-item[data-current] .review-name { font-weight:600; }\n.review-info { flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:4px; }\n.review-name { width:100%; min-width:0; display:flex; justify-content:flex-start; gap:4px; text-align:left; padding:0; font-size:12px; }\n.review-page { flex-shrink:0; white-space:nowrap; }\n.review-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.review-name:disabled { opacity:1; }\n.review-kind { display:inline-block; padding:1px 5px; border-radius:3px; background:var(--hover); font-size:10px; line-height:16px; color:var(--muted); }\n.review-item-actions { display:flex; flex-shrink:0; gap:2px; margin-left:auto; }\n.review-item-actions button { height:28px; padding:0 6px; font-size:12px; }\n.review-before { position:fixed; z-index:2147483643; overflow:hidden; background:var(--workspace); pointer-events:none; }\n.review-projection { position:absolute; overflow:hidden; pointer-events:none; }\n.review-projection iframe { position:absolute; left:0; top:0; border:0; transform-origin:top left; background:white; pointer-events:none; }\n.review-hint { position:fixed; right:16px; bottom:112px; pointer-events:none; z-index:2147483646; font-size:12px; color:var(--muted); background:var(--paper); padding:6px 10px; border-radius:6px; }\n';
 
   // node_modules/lucide/dist/esm/icons/arrow-down.mjs
   var ArrowDown = [
@@ -486,6 +486,12 @@ property of their respective owners.
     ["path", { d: "M8 16H3v5" }]
   ];
 
+  // node_modules/lucide/dist/esm/icons/rotate-cw.mjs
+  var RotateCw = [
+    ["path", { d: "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" }],
+    ["path", { d: "M21 3v5h-5" }]
+  ];
+
   // node_modules/lucide/dist/esm/icons/rows-3.mjs
   var Rows3 = [
     ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2" }],
@@ -646,7 +652,8 @@ property of their respective owners.
     Scan,
     GripVertical,
     TextCursorInput,
-    CheckCheck
+    CheckCheck,
+    RotateCw
   };
   var escape = (text) => String(text).replace(
     /[&"<>]/g,
@@ -1018,9 +1025,11 @@ property of their respective owners.
       <label class="color-control" title="文字颜色" aria-label="文字颜色"><span class="color-swatch"></span><input type="color" class="cpick" aria-label="文字颜色"></label>
       ${button("text-align", "AlignLeft", "左对齐；点击切换为居中", { cls: "icon-only text-align" })}</div>
     <div class="image-tools" hidden>${button("image-replace", "RefreshCw", "替换图片", { text: "替换" })}<div class="seg" role="group" aria-label="图片填充模式"><button data-act="image-fit" title="完整显示，保持比例">适应</button><button data-act="image-cover" title="裁切铺满，保持比例">填充</button></div></div>
-    <div class="object-tools">${button("element-more", "Ellipsis", "元素操作", { cls: "icon-only", attrs: 'aria-expanded="false" aria-haspopup="menu"' })}</div>
+    <div class="object-tools">${button("rotation", "RotateCw", "旋转", { cls: "icon-only", attrs: 'aria-expanded="false" aria-haspopup="menu"' })}${button("element-more", "Ellipsis", "元素操作", { cls: "icon-only", attrs: 'aria-expanded="false" aria-haspopup="menu"' })}</div>
   </div>
   <div class="sel">${HANDLES.map((h) => `<i data-h="${h}" title="${h.length === 2 ? "拖动缩放（文字角点同步缩放字号）" : "调整边界，不改变字号"}"></i>`).join("")}</div>
+  <button type="button" class="rotate-handle" aria-label="旋转选中元素" title="拖动旋转；Shift 15°步进，Alt 自由旋转" hidden>${icon("RotateCw")}</button><output class="rotation-feedback" aria-live="off" hidden></output>
+  <div class="menu-panel rotation-panel" data-menu="rotation" role="dialog" aria-label="旋转" hidden><div class="rotation-single"><label>角度 <input type="number" class="rotation-angle" step="1" aria-label="旋转角度"><span>°</span></label>${button("rotation-reset", "RotateCw", "重置旋转为0°", { text: "重置为 0°" })}</div><p class="rotation-multiple" hidden>拖动旋转手柄，以整体中心旋转。</p></div>
   <div class="menu-panel text-layout-panel" data-menu="text-layout" role="menu" hidden><strong>文字适配</strong><p class="text-layout-status" role="status" aria-live="polite"></p>${button("text-height", "TextCursorInput", "保持字号，按内容调整文本框高度", { text: "高度随内容" })}${button("text-fit", "Type", "保持文本框，缩小字号以完整显示（最小 6px）", { text: "缩小字号适配" })}</div>
   <div class="menu-panel" data-menu="play" role="menu" hidden>${button("scroll-play", "PanelsTopBottom", "滚动播放：上下滚动浏览全部页面", { text: "滚动播放" })}${button("fullscreen", "Maximize", "全屏播放", { text: "全屏播放" })}</div>
   <div class="menu-panel pop" data-menu="export" role="menu" hidden>
@@ -6740,6 +6749,72 @@ property of their respective owners.
     };
   }
 
+  // html-design/src/geometry.js
+  function elementGeometry(el) {
+    const number2 = (value) => parseFloat(value) || 0;
+    const angleValue = (value) => {
+      if (value === "none") return 0;
+      const parts = value.trim().split(/\s+/), angle = parts.pop();
+      if (parts.length && parts.join(" ") !== "z" && parts.join(" ") !== "0 0 1") return NaN;
+      const n = parseFloat(angle);
+      return angle.endsWith("rad") && !angle.endsWith("grad") ? n * 180 / Math.PI : angle.endsWith("grad") ? n * 0.9 : angle.endsWith("turn") ? n * 360 : n;
+    };
+    const cs = getComputedStyle(el), r = el.getBoundingClientRect();
+    const chain = [];
+    for (let n = el; n; n = n.parentElement) chain.unshift(n);
+    let matrix = new DOMMatrix(), parent = matrix, supported = true;
+    for (const n of chain) {
+      const s = getComputedStyle(n), t = new DOMMatrix(s.transform), angle = angleValue(s.rotate);
+      const scales = s.scale === "none" ? [1, 1] : s.scale.split(/\s+/).map(Number);
+      if (scales.length === 1) scales.push(scales[0]);
+      const x = Math.hypot(t.a, t.b), y = Math.hypot(t.c, t.d), tolerance = 1e-4 * Math.max(1, x * y);
+      if (!t.is2D || t.a * t.d - t.b * t.c <= 0 || x < 1e-6 || Math.abs(x - y) > 1e-4 * Math.max(x, y) || Math.abs(t.a * t.c + t.b * t.d) > tolerance || !Number.isFinite(angle) || scales.length !== 2 || scales[0] <= 0 || Math.abs(scales[0] - scales[1]) > 1e-4 || s.perspective !== "none" || s.offsetPath !== "none") supported = false;
+      const zoom = Number(s.zoom) || 1;
+      if (n === el) parent = matrix.scale(zoom);
+      if (s.display !== "inline" || n.matches("img,svg,canvas,video,iframe")) {
+        matrix = matrix.rotate(Number.isFinite(angle) ? angle : 0).scale(scales[0] || 1).multiply(new DOMMatrix([t.a, t.b, t.c, t.d, 0, 0]));
+      }
+      matrix = matrix.scale(zoom);
+    }
+    const scale = Math.hypot(matrix.a, matrix.b);
+    const border = (axis) => {
+      const sides = axis === "width" ? ["Left", "Right"] : ["Top", "Bottom"];
+      const value = parseFloat(cs[axis]);
+      return Number.isFinite(value) ? value + (cs.boxSizing === "border-box" ? 0 : sides.reduce((sum, side) => sum + number2(cs[`padding${side}`]) + number2(cs[`border${side}Width`]), 0)) : NaN;
+    };
+    const inline = cs.display === "inline" && !el.matches("img,svg,canvas,video,iframe");
+    const w = inline ? r.width / scale : border("width"), h = inline ? r.height / scale : border("height");
+    if (!scale || !Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0 || inline && el.getClientRects().length > 1) supported = false;
+    const plain = (m) => ({ a: m.a, b: m.b, c: m.c, d: m.d });
+    return {
+      supported,
+      inline,
+      w,
+      h,
+      cx: (r.left + r.right) / 2,
+      cy: (r.top + r.bottom) / 2,
+      scale,
+      angle: Math.atan2(matrix.b, matrix.a) * 180 / Math.PI,
+      individual: angleValue(cs.rotate),
+      matrix: plain(matrix),
+      parent: plain(parent)
+    };
+  }
+  function inverseDelta(matrix, x, y) {
+    const d = matrix.a * matrix.d - matrix.b * matrix.c;
+    return { x: (matrix.d * x - matrix.c * y) / d, y: (matrix.a * y - matrix.b * x) / d };
+  }
+  function mappedDelta(matrix, x, y) {
+    return { x: matrix.a * x + matrix.c * y, y: matrix.b * x + matrix.d * y };
+  }
+  var normalizedAngle = (angle) => ((angle + 180) % 360 + 360) % 360 - 180;
+  function snappedAngle(angle, event) {
+    if (event.altKey) return angle;
+    if (event.shiftKey) return Math.round(angle / 15) * 15;
+    const nearest = Math.round(angle / 90) * 90;
+    return Math.abs(nearest - angle) <= 3 ? nearest : angle;
+  }
+
   // html-design/src/selection.js
   function selectionRoots(nodes) {
     const unique = [...new Set(nodes)].filter((n) => n?.isConnected);
@@ -7203,11 +7278,12 @@ property of their respective owners.
         if (abs)
           return {
             abs,
-            x: parseFloat(el.style.left) || 0,
-            y: parseFloat(el.style.top) || 0
+            x: parseFloat(getComputedStyle(el).left) || 0,
+            y: parseFloat(getComputedStyle(el).top) || 0
           };
-        const t = (el.style.translate || "").split(/\s+/);
-        return { abs, x: parseFloat(t[0]) || 0, y: parseFloat(t[1]) || 0 };
+        const t = getComputedStyle(el).translate.split(/\s+/), g = elementGeometry(el);
+        const value = (v, size) => (parseFloat(v) || 0) * (v?.endsWith("%") ? size / 100 : 1);
+        return { abs, x: value(t[0], g.w), y: value(t[1], g.h) };
       }
       function setPos(el, p, x, y) {
         x = Math.round(x * 1e3) / 1e3;
@@ -7239,17 +7315,22 @@ property of their respective owners.
         const el = S.sel;
         if (!el || !el.isConnected || !visible(el)) selBox.style.display = "none";
         else {
-          const r = unionRect(S.selection);
+          const r = unionRect(S.selection), g = S.selection.length === 1 ? elementGeometry(el) : null;
+          const oriented = g?.supported;
+          const width = oriented ? g.w * g.scale : r.width, height = oriented ? g.h * g.scale : r.height;
           Object.assign(selBox.style, {
             display: "block",
-            left: r.left + "px",
-            top: r.top + "px",
-            width: r.width + "px",
-            height: r.height + "px"
+            left: (oriented ? g.cx - width / 2 : r.left) + "px",
+            top: (oriented ? g.cy - height / 2 : r.top) + "px",
+            width: width + "px",
+            height: height + "px",
+            transform: oriented ? `rotate(${g.angle}deg)` : "none"
           });
+          selBox.classList.toggle("unsupported", S.selection.some((n) => !elementGeometry(n).supported));
           selBox.classList.toggle("typing", !!S.text);
           selBox.classList.toggle("multiple", S.selection.length > 1);
         }
+        positionRotation();
         placeTbar();
       }
       addEventListener("scroll", drawSel, true);
@@ -7297,14 +7378,23 @@ property of their respective owners.
         };
       }
       function startDrag(e, el) {
-        const b = el.closest("[data-artboard]"), s = scaleOf(b), nodes = selectionRoots(S.selection), positions = nodes.map((node) => ({ node, p: getPos(node) })), before = snap(nodes);
-        const alignment = guides.begin(nodes, b);
+        const b = el.closest("[data-artboard]"), s = scaleOf(b), nodes = selectionRoots(S.selection), positions = nodes.map((node) => ({ node, p: getPos(node), g: elementGeometry(node) })), before = snap(nodes);
+        if (positions.some((item) => !item.g.supported)) return toast("这种变换暂不支持拖动、缩放或旋转");
+        let alignment = guides.begin(nodes, b);
         const x0 = e.clientX, y0 = e.clientY;
         let moved = false;
         S.drag = {
           move(ev) {
             if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 3)
               return;
+            if (!moved) {
+              positions.forEach((item) => {
+                prepareTransform(item.node, item.g, item.p);
+                item.p = getPos(item.node);
+                item.g = elementGeometry(item.node);
+              });
+              alignment = guides.begin(nodes, b);
+            }
             moved = true;
             const delta = alignment.move(
               {
@@ -7313,9 +7403,10 @@ property of their respective owners.
               },
               ev.altKey
             );
-            positions.forEach(
-              ({ node, p }) => setPos(node, p, p.x + delta.x, p.y + delta.y)
-            );
+            positions.forEach(({ node, p, g }) => {
+              const d = inverseDelta(g.parent, delta.x * s, delta.y * s);
+              setPos(node, p, p.x + d.x, p.y + d.y);
+            });
             drawSel();
             alignment.draw(delta.matches);
           },
@@ -7330,26 +7421,51 @@ property of their respective owners.
           }
         };
       }
+      function resizeAnchor(g, dir) {
+        const x = dir.includes("w") ? g.w / 2 : dir.includes("e") ? -g.w / 2 : 0;
+        const y = dir.includes("n") ? g.h / 2 : dir.includes("s") ? -g.h / 2 : 0;
+        const d = mappedDelta(g.matrix, x, y);
+        return { x: g.cx + d.x, y: g.cy + d.y };
+      }
+      function keepCenter(el, p, target) {
+        const g = elementGeometry(el), d = inverseDelta(g.parent, target.x - g.cx, target.y - g.cy);
+        setPos(el, p, p.x + d.x, p.y + d.y);
+      }
+      function prepareTransform(el, initial, p) {
+        if (!initial.inline) return;
+        el.style.display = "inline-block";
+        const g = elementGeometry(el), change = normalizedAngle(initial.angle - g.angle);
+        if (Math.abs(change) > 1e-4) el.style.rotate = `${g.individual + change}deg`;
+        keepCenter(el, p, { x: initial.cx, y: initial.cy });
+      }
       function startResize(e, dir) {
         if (S.selection.length !== 1) return;
         endText();
-        const el = S.sel, b = el.closest("[data-artboard]"), s = scaleOf(b), r = el.getBoundingClientRect();
-        const w0 = r.width / s, h0 = r.height / s, p = getPos(el), media = el.matches(MEDIA);
-        const text = !media && !el.querySelector("[data-el],img,svg,canvas,video,iframe") && !!el.textContent.trim();
+        const el = S.sel, b = el.closest("[data-artboard]"), initial = elementGeometry(el);
+        if (!initial.supported) return toast("这种变换暂不支持拖动、缩放或旋转");
+        const media = el.matches(MEDIA), text = !media && !el.querySelector("[data-el],img,svg,canvas,video,iframe") && !!el.textContent.trim();
         const metrics = text && dir.length === 2 ? textMetrics(el) : null;
         const before = snap(metrics ? metrics.map((m) => m.node) : [el]);
         const hp = media || el.style.height ? "height" : "minHeight";
-        if (getComputedStyle(el).display === "inline")
-          el.style.display = "inline-block";
         const x0 = e.clientX, y0 = e.clientY;
+        let g = initial, p = getPos(el), anchor, moved = false;
         S.drag = {
           move(ev) {
-            const dx = (ev.clientX - x0) / s, dy = (ev.clientY - y0) / s;
+            if (!moved) {
+              if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 3) return;
+              prepareTransform(el, initial, p);
+              g = elementGeometry(el);
+              p = getPos(el);
+              anchor = resizeAnchor(g, dir);
+              moved = true;
+            }
+            const { x: dx, y: dy } = inverseDelta(g.matrix, ev.clientX - x0, ev.clientY - y0);
+            const w0 = g.w, h0 = g.h;
             let w = w0, h = h0;
-            if (dir.includes("e")) w = w0 + dx;
-            if (dir.includes("w")) w = w0 - dx;
-            if (dir.includes("s")) h = h0 + dy;
-            if (dir.includes("n")) h = h0 - dy;
+            if (dir.includes("e")) w += dx;
+            if (dir.includes("w")) w -= dx;
+            if (dir.includes("s")) h += dy;
+            if (dir.includes("n")) h -= dy;
             if (metrics) {
               const sx = dir.includes("w") ? -1 : 1, sy = dir.includes("n") ? -1 : 1;
               const k = Math.max(
@@ -7366,35 +7482,123 @@ property of their respective owners.
               w = w0 * k;
               h = h0 * k;
             }
-            w = Math.max(8, w);
-            h = Math.max(8, h);
             el.style.boxSizing = "border-box";
             el.style.maxWidth = "none";
-            if (dir !== "n" && dir !== "s")
-              el.style.width = Math.round(w * 1e3) / 1e3 + "px";
-            if (dir !== "e" && dir !== "w")
-              el.style[hp] = Math.round(h * 1e3) / 1e3 + "px";
-            setPos(
-              el,
-              p,
-              p.x + (dir.includes("w") ? w0 - w : 0),
-              p.y + (dir.includes("n") ? h0 - h : 0)
-            );
+            if (dir !== "n" && dir !== "s") el.style.width = Math.round(Math.max(8, w) * 1e3) / 1e3 + "px";
+            if (dir !== "e" && dir !== "w") el.style[hp] = Math.round(Math.max(8, h) * 1e3) / 1e3 + "px";
+            setPos(el, p, p.x, p.y);
+            const now = elementGeometry(el), current = resizeAnchor(now, dir);
+            const d = inverseDelta(now.parent, anchor.x - current.x, anchor.y - current.y);
+            setPos(el, p, p.x + d.x, p.y + d.y);
             drawSel();
           },
           up() {
-            commit(before, b);
+            if (moved) commit(before, b);
+          },
+          cancel() {
+            apply(before);
+            drawSel();
           }
         };
+      }
+      function rotationItems() {
+        return selectionRoots(S.selection).map((node) => ({ node, g: elementGeometry(node), p: getPos(node) }));
+      }
+      function applyRotation(items, center, delta) {
+        const rad = delta * Math.PI / 180, cos = Math.cos(rad), sin = Math.sin(rad);
+        for (const item of items) {
+          const { node, g, p } = item;
+          if (!item.ready) {
+            prepareTransform(node, g, p);
+            item.base = elementGeometry(node);
+            item.position = getPos(node);
+            item.ready = true;
+          }
+          setPos(node, item.position, item.position.x, item.position.y);
+          node.style.rotate = `${Math.round((item.base.individual + delta) * 1e4) / 1e4}deg`;
+          const x = g.cx - center.x, y = g.cy - center.y;
+          keepCenter(node, item.position, { x: center.x + cos * x - sin * y, y: center.y + sin * x + cos * y });
+        }
+      }
+      function rotateTo(value) {
+        if (!S.sel || S.selection.length !== 1 || !S.editing || !persistence?.canEdit() || !Number.isFinite(value)) return;
+        endText();
+        const items = rotationItems(), g = items[0].g, delta = normalizedAngle(value - g.angle);
+        if (!g.supported) return toast("这种变换暂不支持拖动、缩放或旋转");
+        if (Math.abs(delta) < 1e-4) return;
+        const before = snap([S.sel]);
+        applyRotation(items, { x: g.cx, y: g.cy }, delta);
+        commit(before, activeBoard());
+        drawSel();
+      }
+      function startRotation(e) {
+        if (e.button !== 0 || !S.sel || !S.editing || !persistence?.canEdit()) return;
+        endText();
+        closeMenus();
+        const items = rotationItems();
+        if (items.some((item) => !item.g.supported)) return toast("这种变换暂不支持拖动、缩放或旋转");
+        const r = unionRect(S.selection), center = { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
+        const before = snap(items.map((item) => item.node)), b = activeBoard();
+        let last = Math.atan2(e.clientY - center.y, e.clientX - center.x) * 180 / Math.PI, total = 0, changed = false;
+        const operation = {
+          rotation: true,
+          delta: 0,
+          move(ev) {
+            const current = Math.atan2(ev.clientY - center.y, ev.clientX - center.x) * 180 / Math.PI;
+            total += normalizedAngle(current - last);
+            last = current;
+            const base = items.length === 1 ? items[0].g.angle : 0;
+            const delta = snappedAngle(base + total, ev) - base;
+            operation.delta = delta;
+            if (Math.abs(delta) < 1e-4 && !changed) return;
+            changed = true;
+            applyRotation(items, center, delta);
+            drawSel();
+          },
+          up() {
+            const delta = operation.delta;
+            operation.rotation = false;
+            if (changed && Math.abs(normalizedAngle(delta)) > 0.01) commit(before, b);
+            else if (changed) apply(before);
+            drawSel();
+          },
+          cancel() {
+            operation.rotation = false;
+            apply(before);
+            drawSel();
+          }
+        };
+        S.drag = operation;
+      }
+      function positionRotation() {
+        const button2 = $(".rotate-handle"), feedback = $(".rotation-feedback");
+        const show = S.editing && !S.playing && !S.text && S.sel && S.selection.every((n) => elementGeometry(n).supported);
+        button2.hidden = !show;
+        feedback.hidden = !show || !S.drag?.rotation;
+        if (!show) return;
+        const r = unionRect(S.selection), g = S.selection.length === 1 ? elementGeometry(S.sel) : null;
+        const rad = (g?.angle || 0) * Math.PI / 180, height = g ? g.h * g.scale : r.height;
+        const x = (r.left + r.right) / 2 + Math.sin(rad) * (height / 2 + 26);
+        const y = (r.top + r.bottom) / 2 - Math.cos(rad) * (height / 2 + 26);
+        const v = viewport.bounds(), left = Math.max(v.x + 15, Math.min(v.x + v.w - 15, x)), top = Math.max(v.y + 15, Math.min(v.y + v.h - 15, y));
+        Object.assign(button2.style, { left: `${left}px`, top: `${top}px` });
+        const degrees = Math.round((S.selection.length === 1 ? g.angle : S.drag?.delta || 0) * 10) / 10;
+        feedback.textContent = `${S.selection.length > 1 && degrees > 0 ? "+" : ""}${degrees}°`;
+        Object.assign(feedback.style, { left: `${Math.min(v.x + v.w - 62, left + 20)}px`, top: `${Math.max(v.y + 5, top - 13)}px` });
+        if (ui.activeElement !== $(".rotation-angle") && S.selection.length === 1) $(".rotation-angle").value = degrees;
       }
       function nudge(el, k, n) {
         const nodes = S.selection.includes(el) ? selectionRoots(S.selection) : [el];
         const dx = k === "arrowleft" ? -n : k === "arrowright" ? n : 0, dy = k === "arrowup" ? -n : k === "arrowdown" ? n : 0;
+        if (nodes.some((node) => !elementGeometry(node).supported)) return toast("这种变换暂不支持拖动、缩放或旋转");
         record(
           nodes,
           () => nodes.forEach((node) => {
-            const p = getPos(node);
-            setPos(node, p, p.x + dx, p.y + dy);
+            const initial = elementGeometry(node);
+            prepareTransform(node, initial, getPos(node));
+            const p = getPos(node), g = elementGeometry(node), s = scaleOf(node.closest("[data-artboard]"));
+            const d = inverseDelta(g.parent, dx * s, dy * s);
+            setPos(node, p, p.x + d.x, p.y + d.y);
           }),
           el.closest("[data-artboard]")
         );
@@ -7688,10 +7892,17 @@ property of their respective owners.
         tbar.hidden = !show;
         if (!show) {
           $("[data-menu=text-layout]").hidden = true;
+          $("[data-menu=rotation]").hidden = true;
+          $("[data-act=rotation]").setAttribute("aria-expanded", "false");
           ++layoutRequest;
           return;
         }
         const multi = S.selection.length > 1;
+        const supported = S.selection.every((n) => elementGeometry(n).supported);
+        $("[data-act=rotation]").disabled = !supported;
+        $(".rotation-single").hidden = multi;
+        $(".rotation-multiple").hidden = !multi;
+        if (!supported) $("[data-menu=rotation]").hidden = true;
         $(".selection-count").hidden = !multi;
         $(".selection-count").textContent = multi ? `已选 ${S.selection.length} 个元素` : "";
         const image = !multi && el.matches("img"), text = !multi && !el.matches(MEDIA) && !el.querySelector("[data-el]") && !!el.textContent.trim();
@@ -7734,10 +7945,40 @@ property of their respective owners.
           e.target.blur();
         }
       });
+      $(".rotation-angle").addEventListener("change", (e) => rotateTo(e.target.valueAsNumber));
+      $(".rotation-angle").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.target.blur();
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          e.target.value = Math.round(elementGeometry(S.sel).angle * 10) / 10;
+          e.target.blur();
+          positionRotation();
+          closeMenus();
+          $("[data-act=rotation]").focus();
+        }
+      });
+      $(".rotate-handle").addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        startRotation(e);
+      });
+      $(".rotate-handle").addEventListener("keydown", (e) => {
+        if (["ArrowLeft", "ArrowRight"].includes(e.key) && S.selection.length === 1) {
+          e.preventDefault();
+          rotateTo(elementGeometry(S.sel).angle + (e.key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 15 : 1));
+        } else if (["Enter", " "].includes(e.key)) {
+          e.preventDefault();
+          ACTS.rotation($("[data-act=rotation]"));
+        }
+      });
       addEventListener(
         "keydown",
         (e) => {
           if (reviewUI?.key(e)) return;
+          if (fromUI(e) && ui.activeElement?.matches(".rotate-handle") && ["ArrowLeft", "ArrowRight", "Enter", " "].includes(e.key)) return;
           if (S.playing) return;
           if (fromUI(e) && pages.key(e)) return;
           if (fromUI(e) && ["Enter", " "].includes(e.key) && !e.ctrlKey && !e.metaKey)
@@ -8151,6 +8392,14 @@ property of their respective owners.
         more: (btn) => openMenu("more", btn),
         status: (btn) => openMenu("status", btn),
         "element-more": (btn) => openMenu("element", btn),
+        rotation: (btn) => {
+          openMenu("rotation", btn);
+          if (!$("[data-menu=rotation]").hidden && S.selection.length === 1) {
+            $(".rotation-angle").focus();
+            $(".rotation-angle").select();
+          }
+        },
+        "rotation-reset": () => rotateTo(0),
         save: () => save(),
         download: () => download(serialize()),
         copy: () => copyText(serialize()),
@@ -8196,7 +8445,8 @@ property of their respective owners.
         "element-duplicate",
         "element-delete",
         "element-front",
-        "element-back"
+        "element-back",
+        "rotation-reset"
       ]);
       ui.addEventListener("click", (e) => {
         const btn = e.target.closest("button");
@@ -8208,13 +8458,14 @@ property of their respective owners.
         }
         const act = btn.dataset.act;
         if (!act) return;
-        if (!["preview", "export", "more", "status", "element-more", "text-layout"].includes(act))
+        if (!["preview", "export", "more", "status", "element-more", "text-layout", "rotation"].includes(act))
           closeMenus();
         if (mutations.has(act) && (!persistence?.canEdit() || !S.editing || S.playing))
           return;
         ACTS[act]?.(btn);
       });
       ui.addEventListener("keydown", (e) => {
+        if (e.target.matches(".rotation-angle")) return;
         if (!modal.hidden && e.key === "Tab") {
           const controls = [
             ...modal.querySelectorAll("button:not(:disabled),textarea")

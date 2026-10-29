@@ -69,7 +69,8 @@ test('Flex/Grid layout and CSS pixel facts are invariant under editor stage zoom
   for (const r of results) { assert.equal(r.status, 'ok', JSON.stringify(r)); assert.equal(r.coverage.text.linesChecked, 2); }
   assert.deepEqual(results[0], results[1]); assert.deepEqual(results[1], results[2]);
   const rotated = await qa(wrap('<p data-el="rotated" style="transform:rotate(30deg)">Uncertain geometry</p>'));
-  assert.equal(rotated.status, 'issues'); assert.ok(codes(rotated).includes('GEOMETRY_UNSUPPORTED')); assert.equal(rotated.coverage.text.linesChecked, 0);
+  assert.equal(rotated.status, 'issues'); assert.ok(codes(rotated).includes('LINE_UNSUPPORTED')); assert.equal(rotated.coverage.text.linesChecked, 0);
+  assert.equal(rotated.coverage.elements.checked, 1); assert.ok(codes(rotated).includes('ELEMENT_OUT_OF_BOUNDS'), 'rotated BCR still provides reliable page-boundary facts');
 });
 
 test('temporary resources and explicit original base load CSS/images; broken images/fonts and outside-root symlinks stay visible', async () => {

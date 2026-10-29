@@ -5,6 +5,7 @@ import JSZip from 'jszip';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { collectEditableSlide, addEditableSlide, groupEditableSlideXml } from './pptx.mjs';
+import { elementGeometry } from './src/geometry.js';
 
 export function browserOptions() {
   const executablePath = process.env.HTML_DESIGN_CHROME;
@@ -55,6 +56,7 @@ export async function exportDocument({ html, baseUrl, title = 'design', format }
     await page.goto(renderUrl, { waitUntil: 'load', timeout: 45_000 });
     await page.emulateMedia({ media: 'screen', reducedMotion: 'reduce' });
     await page.addStyleTag({ content: RESET });
+    await page.evaluate(`globalThis.__htmlDesignGeometry = ${elementGeometry.toString()}`);
     const sizes = await page.evaluate(async () => {
       document.querySelectorAll('[data-artboard] img').forEach(image => { image.loading = 'eager'; });
       await document.fonts.ready;

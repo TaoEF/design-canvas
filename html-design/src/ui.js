@@ -26,9 +26,11 @@ export function toolbarHTML({ HANDLES }) {
       <label class="color-control" title="文字颜色" aria-label="文字颜色"><span class="color-swatch"></span><input type="color" class="cpick" aria-label="文字颜色"></label>
       ${b("text-align", "AlignLeft", "左对齐；点击切换为居中", { cls: "icon-only text-align" })}</div>
     <div class="image-tools" hidden>${b("image-replace", "RefreshCw", "替换图片", { text: "替换" })}<div class="seg" role="group" aria-label="图片填充模式"><button data-act="image-fit" title="完整显示，保持比例">适应</button><button data-act="image-cover" title="裁切铺满，保持比例">填充</button></div></div>
-    <div class="object-tools">${b("element-more", "Ellipsis", "元素操作", { cls: "icon-only", attrs: 'aria-expanded="false" aria-haspopup="menu"' })}</div>
+    <div class="object-tools">${b("rotation", "RotateCw", "旋转", { cls: "icon-only", attrs: 'aria-expanded="false" aria-haspopup="menu"' })}${b("element-more", "Ellipsis", "元素操作", { cls: "icon-only", attrs: 'aria-expanded="false" aria-haspopup="menu"' })}</div>
   </div>
   <div class="sel">${HANDLES.map((h) => `<i data-h="${h}" title="${h.length === 2 ? "拖动缩放（文字角点同步缩放字号）" : "调整边界，不改变字号"}"></i>`).join("")}</div>
+  <button type="button" class="rotate-handle" aria-label="旋转选中元素" title="拖动旋转；Shift 15°步进，Alt 自由旋转" hidden>${icon('RotateCw')}</button><output class="rotation-feedback" aria-live="off" hidden></output>
+  <div class="menu-panel rotation-panel" data-menu="rotation" role="dialog" aria-label="旋转" hidden><div class="rotation-single"><label>角度 <input type="number" class="rotation-angle" step="1" aria-label="旋转角度"><span>°</span></label>${b('rotation-reset', 'RotateCw', '重置旋转为0°', {text:'重置为 0°'})}</div><p class="rotation-multiple" hidden>拖动旋转手柄，以整体中心旋转。</p></div>
   <div class="menu-panel text-layout-panel" data-menu="text-layout" role="menu" hidden><strong>文字适配</strong><p class="text-layout-status" role="status" aria-live="polite"></p>${b("text-height", "TextCursorInput", "保持字号，按内容调整文本框高度", { text: "高度随内容" })}${b("text-fit", "Type", "保持文本框，缩小字号以完整显示（最小 6px）", { text: "缩小字号适配" })}</div>
   <div class="menu-panel" data-menu="play" role="menu" hidden>${b("scroll-play", "PanelsTopBottom", "滚动播放：上下滚动浏览全部页面", { text: "滚动播放" })}${b("fullscreen", "Maximize", "全屏播放", { text: "全屏播放" })}</div>
   <div class="menu-panel pop" data-menu="export" role="menu" hidden>

@@ -21,6 +21,10 @@ sources:
     status: current
   - path: html-design/src/guides.js
     status: current
+  - path: html-design/src/geometry.js
+    status: current
+  - path: html-design/rotation.test.mjs
+    status: current
   - path: html-design/guides.test.mjs
     status: current
   - path: html-design/src/text-layout.js
@@ -77,7 +81,13 @@ confidence: high
 
 `guides.js` 在现有边缘/中心对齐上增加水平、垂直等距居中与相邻间距延续。候选使用实际 BCR 的画布坐标，相关对象须有共同正交投影和非负间隙，只取局部相邻对象；画板不作为重复间隔对象。第三个可见对象侵入任一候选间隔时拒绝该候选，包括跨过参考对象边缘的重叠对象，不能过滤掉阻挡物后向远处寻找参考间隔。排除选中对象、自身祖先/后代、其他页及隐藏/透明祖先内的对象，多选使用整体外框。每轴取最小修正量，平局保持原边缘/中心吸附，其他轴修正后失去投影相交时回退原对齐。
 
-吸附范围仍为6屏幕px、Alt/Option绕过；每轴最多一组间距标记，数值为设计像素、显示取到一位小数但不反向量化几何。标记使用现有翠绿SVG叠加层、固定屏幕字体/端点，随缩放刷新，位于Shadow DOM而非正式stage。结束、Escape、pointercancel、切页/失权沿原拖动生命周期清理，单次拖动仍单步Undo。此能力不修改Flex/Grid gap、模式或容器结构，不提供一键分布；旋转对象暂按浏览器轴对齐BCR，旋转几何在后续Issue处理。
+吸附范围仍为6屏幕px、Alt/Option绕过；每轴最多一组间距标记，数值为设计像素、显示取到一位小数但不反向量化几何。标记使用现有翠绿SVG叠加层、固定屏幕字体/端点，随缩放刷新，位于Shadow DOM而非正式stage。结束、Escape、pointercancel、切页/失权沿原拖动生命周期清理，单次拖动仍单步Undo。此能力不修改Flex/Grid gap、模式或容器结构，不提供一键分布；旋转对象继续按浏览器轴对齐BCR参与对齐/等距，旋转编辑使用下面的独立局部几何。
+
+## 旋转与局部几何
+
+geometry.js的自包含elementGeometry由编辑器和PPTX浏览器复用：CSS border-box局部尺寸、实际BCR中心、累积2D方向/正向均匀尺度与父级线性逆变换（元素自身CSS zoom也影响其定位基），不重置作者transform/scale/origin、不持久化第二套矩阵。新旋转写individual rotate，必要位移补偿保留单选中心；多根选择绕共同外框中心转动，自身角度同步变化。反射、skew、3D/perspective等不可靠几何保留原稿并禁用几何动作；普通inline首次有效变换时可逆转为inline-block。
+
+单选方向选框/控制点、固定屏幕外侧手柄和实时角度，窄屏夹紧。90°附近3°吸附、Shift15°、Alt自由；数值和重置仅单选，为页面绝对方向（包含祖先/原transform）。指针角度连续跨360，整圈0.01°误差内no-op。resize按局部轴和原border-box尺寸，重新测实际对侧锚点并用父级逆矩阵补偿；文字角点保留富文本比例与6px下限，拖动/键盘微移按页面方向转入父坐标。沿既有Undo/取消/切页/失权收尾，AI交接完成当前拖动后保存；收尾闭包不依赖可能已被清空的S.drag。选框/反馈只在Shadow DOM。
 
 ## AI 修改审阅
 

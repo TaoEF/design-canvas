@@ -10,6 +10,7 @@ import { icon } from "./icons.js";
 import { rekeyDOMIds } from "./identifiers.js";
 import { createGuides } from "./guides.js";
 import { layerChanges } from "./layers.js";
+import { elementGeometry, inverseDelta, mappedDelta, normalizedAngle, snappedAngle } from './geometry.js';
 import {
   selectionRoots,
   unionRect,
@@ -479,11 +480,12 @@ import {
       if (abs)
         return {
           abs,
-          x: parseFloat(el.style.left) || 0,
-          y: parseFloat(el.style.top) || 0,
+          x: parseFloat(getComputedStyle(el).left) || 0,
+          y: parseFloat(getComputedStyle(el).top) || 0,
         };
-      const t = (el.style.translate || "").split(/\s+/);
-      return { abs, x: parseFloat(t[0]) || 0, y: parseFloat(t[1]) || 0 };
+      const t = getComputedStyle(el).translate.split(/\s+/), g = elementGeometry(el);
+      const value = (v, size) => (parseFloat(v) || 0) * (v?.endsWith('%') ? size / 100 : 1);
+      return { abs, x: value(t[0], g.w), y: value(t[1], g.h) };
     }
     function setPos(el, p, x, y) {
       x = Math.round(x * 1000) / 1000;
@@ -520,17 +522,22 @@ import {
       const el = S.sel;
       if (!el || !el.isConnected || !visible(el)) selBox.style.display = "none";
       else {
-        const r = unionRect(S.selection);
+        const r = unionRect(S.selection), g = S.selection.length === 1 ? elementGeometry(el) : null;
+        const oriented = g?.supported;
+        const width = oriented ? g.w * g.scale : r.width, height = oriented ? g.h * g.scale : r.height;
         Object.assign(selBox.style, {
           display: "block",
-          left: r.left + "px",
-          top: r.top + "px",
-          width: r.width + "px",
-          height: r.height + "px",
+          left: (oriented ? g.cx - width / 2 : r.left) + "px",
+          top: (oriented ? g.cy - height / 2 : r.top) + "px",
+          width: width + "px",
+          height: height + "px",
+          transform: oriented ? `rotate(${g.angle}deg)` : 'none',
         });
+        selBox.classList.toggle('unsupported', S.selection.some(n => !elementGeometry(n).supported));
         selBox.classList.toggle("typing", !!S.text);
         selBox.classList.toggle("multiple", S.selection.length > 1);
       }
+      positionRotation();
       placeTbar();
     }
     addEventListener("scroll", drawSel, true);
@@ -594,9 +601,10 @@ import {
       const b = el.closest("[data-artboard]"),
         s = scaleOf(b),
         nodes = selectionRoots(S.selection),
-        positions = nodes.map((node) => ({ node, p: getPos(node) })),
+        positions = nodes.map((node) => ({ node, p: getPos(node), g: elementGeometry(node) })),
         before = snap(nodes);
-      const alignment = guides.begin(nodes, b);
+      if (positions.some(item => !item.g.supported)) return toast('这种变换暂不支持拖动、缩放或旋转');
+      let alignment = guides.begin(nodes, b);
       const x0 = e.clientX,
         y0 = e.clientY;
       let moved = false;
@@ -604,6 +612,13 @@ import {
         move(ev) {
           if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 3)
             return;
+          if (!moved) {
+            positions.forEach(item => {
+              prepareTransform(item.node, item.g, item.p);
+              item.p = getPos(item.node); item.g = elementGeometry(item.node);
+            });
+            alignment = guides.begin(nodes, b);
+          }
           moved = true;
           const delta = alignment.move(
             {
@@ -612,9 +627,10 @@ import {
             },
             ev.altKey,
           );
-          positions.forEach(({ node, p }) =>
-            setPos(node, p, p.x + delta.x, p.y + delta.y),
-          );
+          positions.forEach(({ node, p, g }) => {
+            const d = inverseDelta(g.parent, delta.x * s, delta.y * s);
+            setPos(node, p, p.x + d.x, p.y + d.y);
+          });
           drawSel();
           alignment.draw(delta.matches);
         },
@@ -629,75 +645,142 @@ import {
         },
       };
     }
+    function resizeAnchor(g, dir) {
+      const x = dir.includes('w') ? g.w / 2 : dir.includes('e') ? -g.w / 2 : 0;
+      const y = dir.includes('n') ? g.h / 2 : dir.includes('s') ? -g.h / 2 : 0;
+      const d = mappedDelta(g.matrix, x, y);
+      return { x: g.cx + d.x, y: g.cy + d.y };
+    }
+    function keepCenter(el, p, target) {
+      const g = elementGeometry(el), d = inverseDelta(g.parent, target.x - g.cx, target.y - g.cy);
+      setPos(el, p, p.x + d.x, p.y + d.y);
+    }
+    function prepareTransform(el, initial, p) {
+      if (!initial.inline) return;
+      el.style.display = 'inline-block';
+      const g = elementGeometry(el), change = normalizedAngle(initial.angle - g.angle);
+      if (Math.abs(change) > .0001) el.style.rotate = `${g.individual + change}deg`;
+      keepCenter(el, p, { x: initial.cx, y: initial.cy });
+    }
     function startResize(e, dir) {
       if (S.selection.length !== 1) return;
       endText();
-      const el = S.sel,
-        b = el.closest("[data-artboard]"),
-        s = scaleOf(b),
-        r = el.getBoundingClientRect();
-      const w0 = r.width / s,
-        h0 = r.height / s,
-        p = getPos(el),
-        media = el.matches(MEDIA);
-      const text =
-        !media &&
-        !el.querySelector("[data-el],img,svg,canvas,video,iframe") &&
-        !!el.textContent.trim();
+      const el = S.sel, b = el.closest('[data-artboard]'), initial = elementGeometry(el);
+      if (!initial.supported) return toast('这种变换暂不支持拖动、缩放或旋转');
+      const media = el.matches(MEDIA), text = !media && !el.querySelector('[data-el],img,svg,canvas,video,iframe') && !!el.textContent.trim();
       const metrics = text && dir.length === 2 ? textMetrics(el) : null;
-      const before = snap(metrics ? metrics.map((m) => m.node) : [el]);
-      const hp = media || el.style.height ? "height" : "minHeight";
-      if (getComputedStyle(el).display === "inline")
-        el.style.display = "inline-block";
-      const x0 = e.clientX,
-        y0 = e.clientY;
+      const before = snap(metrics ? metrics.map(m => m.node) : [el]);
+      const hp = media || el.style.height ? 'height' : 'minHeight';
+      const x0 = e.clientX, y0 = e.clientY;
+      let g = initial, p = getPos(el), anchor, moved = false;
       S.drag = {
         move(ev) {
-          const dx = (ev.clientX - x0) / s,
-            dy = (ev.clientY - y0) / s;
-          let w = w0,
-            h = h0;
-          if (dir.includes("e")) w = w0 + dx;
-          if (dir.includes("w")) w = w0 - dx;
-          if (dir.includes("s")) h = h0 + dy;
-          if (dir.includes("n")) h = h0 - dy;
+          if (!moved) {
+            if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 3) return;
+            prepareTransform(el, initial, p);
+            g = elementGeometry(el); p = getPos(el); anchor = resizeAnchor(g, dir); moved = true;
+          }
+          const { x: dx, y: dy } = inverseDelta(g.matrix, ev.clientX - x0, ev.clientY - y0);
+          const w0 = g.w, h0 = g.h;
+          let w = w0, h = h0;
+          if (dir.includes('e')) w += dx;
+          if (dir.includes('w')) w -= dx;
+          if (dir.includes('s')) h += dy;
+          if (dir.includes('n')) h -= dy;
           if (metrics) {
-            const sx = dir.includes("w") ? -1 : 1,
-              sy = dir.includes("n") ? -1 : 1;
-            const k = Math.max(
-              6 / Math.min(...metrics.map((m) => m.font)),
-              8 / w0,
-              8 / h0,
-              1 + (sx * dx * w0 + sy * dy * h0) / (w0 * w0 + h0 * h0),
-            );
-            w = w0 * k;
-            h = h0 * k;
-            scaleText(metrics, k);
+            const sx = dir.includes('w') ? -1 : 1, sy = dir.includes('n') ? -1 : 1;
+            const k = Math.max(6 / Math.min(...metrics.map(m => m.font)), 8 / w0, 8 / h0,
+              1 + (sx * dx * w0 + sy * dy * h0) / (w0 * w0 + h0 * h0));
+            w = w0 * k; h = h0 * k; scaleText(metrics, k);
           } else if (dir.length === 2 && media !== ev.shiftKey) {
             const k = Math.abs(dx) > Math.abs(dy) ? w / w0 : h / h0;
-            w = w0 * k;
-            h = h0 * k;
+            w = w0 * k; h = h0 * k;
           }
-          w = Math.max(8, w);
-          h = Math.max(8, h);
-          el.style.boxSizing = "border-box";
-          el.style.maxWidth = "none";
-          if (dir !== "n" && dir !== "s")
-            el.style.width = Math.round(w * 1000) / 1000 + "px";
-          if (dir !== "e" && dir !== "w")
-            el.style[hp] = Math.round(h * 1000) / 1000 + "px";
-          setPos(
-            el,
-            p,
-            p.x + (dir.includes("w") ? w0 - w : 0),
-            p.y + (dir.includes("n") ? h0 - h : 0),
-          );
+          el.style.boxSizing = 'border-box'; el.style.maxWidth = 'none';
+          if (dir !== 'n' && dir !== 's') el.style.width = Math.round(Math.max(8, w) * 1000) / 1000 + 'px';
+          if (dir !== 'e' && dir !== 'w') el.style[hp] = Math.round(Math.max(8, h) * 1000) / 1000 + 'px';
+          setPos(el, p, p.x, p.y);
+          const now = elementGeometry(el), current = resizeAnchor(now, dir);
+          const d = inverseDelta(now.parent, anchor.x - current.x, anchor.y - current.y);
+          setPos(el, p, p.x + d.x, p.y + d.y);
           drawSel();
         },
-        up() {
-          commit(before, b);
-        },
+        up() { if (moved) commit(before, b); },
+        cancel() { apply(before); drawSel(); },
       };
+    }
+
+    function rotationItems() {
+      return selectionRoots(S.selection).map(node => ({ node, g: elementGeometry(node), p: getPos(node) }));
+    }
+    function applyRotation(items, center, delta) {
+      const rad = delta * Math.PI / 180, cos = Math.cos(rad), sin = Math.sin(rad);
+      for (const item of items) {
+        const { node, g, p } = item;
+        if (!item.ready) {
+          prepareTransform(node, g, p);
+          item.base = elementGeometry(node); item.position = getPos(node); item.ready = true;
+        }
+        setPos(node, item.position, item.position.x, item.position.y);
+        node.style.rotate = `${Math.round((item.base.individual + delta) * 10000) / 10000}deg`;
+        const x = g.cx - center.x, y = g.cy - center.y;
+        keepCenter(node, item.position, { x: center.x + cos * x - sin * y, y: center.y + sin * x + cos * y });
+      }
+    }
+    function rotateTo(value) {
+      if (!S.sel || S.selection.length !== 1 || !S.editing || !persistence?.canEdit() || !Number.isFinite(value)) return;
+      endText();
+      const items = rotationItems(), g = items[0].g, delta = normalizedAngle(value - g.angle);
+      if (!g.supported) return toast('这种变换暂不支持拖动、缩放或旋转');
+      if (Math.abs(delta) < .0001) return;
+      const before = snap([S.sel]);
+      applyRotation(items, { x: g.cx, y: g.cy }, delta);
+      commit(before, activeBoard()); drawSel();
+    }
+    function startRotation(e) {
+      if (e.button !== 0 || !S.sel || !S.editing || !persistence?.canEdit()) return;
+      endText(); closeMenus();
+      const items = rotationItems();
+      if (items.some(item => !item.g.supported)) return toast('这种变换暂不支持拖动、缩放或旋转');
+      const r = unionRect(S.selection), center = { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
+      const before = snap(items.map(item => item.node)), b = activeBoard();
+      let last = Math.atan2(e.clientY - center.y, e.clientX - center.x) * 180 / Math.PI, total = 0, changed = false;
+      const operation = {
+        rotation: true, delta: 0,
+        move(ev) {
+          const current = Math.atan2(ev.clientY - center.y, ev.clientX - center.x) * 180 / Math.PI;
+          total += normalizedAngle(current - last); last = current;
+          const base = items.length === 1 ? items[0].g.angle : 0;
+          const delta = snappedAngle(base + total, ev) - base;
+          operation.delta = delta;
+          if (Math.abs(delta) < .0001 && !changed) return;
+          changed = true; applyRotation(items, center, delta); drawSel();
+        },
+        up() {
+          const delta = operation.delta; operation.rotation = false;
+          if (changed && Math.abs(normalizedAngle(delta)) > .01) commit(before, b);
+          else if (changed) apply(before);
+          drawSel();
+        },
+        cancel() { operation.rotation = false; apply(before); drawSel(); },
+      };
+      S.drag = operation;
+    }
+    function positionRotation() {
+      const button = $('.rotate-handle'), feedback = $('.rotation-feedback');
+      const show = S.editing && !S.playing && !S.text && S.sel && S.selection.every(n => elementGeometry(n).supported);
+      button.hidden = !show; feedback.hidden = !show || !S.drag?.rotation;
+      if (!show) return;
+      const r = unionRect(S.selection), g = S.selection.length === 1 ? elementGeometry(S.sel) : null;
+      const rad = (g?.angle || 0) * Math.PI / 180, height = g ? g.h * g.scale : r.height;
+      const x = (r.left + r.right) / 2 + Math.sin(rad) * (height / 2 + 26);
+      const y = (r.top + r.bottom) / 2 - Math.cos(rad) * (height / 2 + 26);
+      const v = viewport.bounds(), left = Math.max(v.x + 15, Math.min(v.x + v.w - 15, x)), top = Math.max(v.y + 15, Math.min(v.y + v.h - 15, y));
+      Object.assign(button.style, { left: `${left}px`, top: `${top}px` });
+      const degrees = Math.round((S.selection.length === 1 ? g.angle : S.drag?.delta || 0) * 10) / 10;
+      feedback.textContent = `${S.selection.length > 1 && degrees > 0 ? '+' : ''}${degrees}°`;
+      Object.assign(feedback.style, { left: `${Math.min(v.x + v.w - 62, left + 20)}px`, top: `${Math.max(v.y + 5, top - 13)}px` });
+      if (ui.activeElement !== $('.rotation-angle') && S.selection.length === 1) $('.rotation-angle').value = degrees;
     }
     function nudge(el, k, n) {
       const nodes = S.selection.includes(el)
@@ -705,12 +788,15 @@ import {
         : [el];
       const dx = k === "arrowleft" ? -n : k === "arrowright" ? n : 0,
         dy = k === "arrowup" ? -n : k === "arrowdown" ? n : 0;
+      if (nodes.some(node => !elementGeometry(node).supported)) return toast('这种变换暂不支持拖动、缩放或旋转');
       record(
         nodes,
         () =>
           nodes.forEach((node) => {
-            const p = getPos(node);
-            setPos(node, p, p.x + dx, p.y + dy);
+            const initial = elementGeometry(node); prepareTransform(node, initial, getPos(node));
+            const p = getPos(node), g = elementGeometry(node), s = scaleOf(node.closest('[data-artboard]'));
+            const d = inverseDelta(g.parent, dx * s, dy * s);
+            setPos(node, p, p.x + d.x, p.y + d.y);
           }),
         el.closest("[data-artboard]"),
       );
@@ -1037,10 +1123,17 @@ import {
       tbar.hidden = !show;
       if (!show) {
         $("[data-menu=text-layout]").hidden = true;
+        $('[data-menu=rotation]').hidden = true;
+        $('[data-act=rotation]').setAttribute('aria-expanded', 'false');
         ++layoutRequest;
         return;
       }
       const multi = S.selection.length > 1;
+      const supported = S.selection.every(n => elementGeometry(n).supported);
+      $('[data-act=rotation]').disabled = !supported;
+      $('.rotation-single').hidden = multi;
+      $('.rotation-multiple').hidden = !multi;
+      if (!supported) $('[data-menu=rotation]').hidden = true;
       $(".selection-count").hidden = !multi;
       $(".selection-count").textContent = multi
         ? `已选 ${S.selection.length} 个元素`
@@ -1090,12 +1183,24 @@ import {
         e.target.blur();
       }
     });
+    $('.rotation-angle').addEventListener('change', e => rotateTo(e.target.valueAsNumber));
+    $('.rotation-angle').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); e.target.value = Math.round(elementGeometry(S.sel).angle * 10) / 10; e.target.blur(); positionRotation(); closeMenus(); $('[data-act=rotation]').focus(); }
+    });
+    $('.rotate-handle').addEventListener('pointerdown', e => { e.preventDefault(); startRotation(e); });
+    $('.rotate-handle').addEventListener('keydown', e => {
+      if (['ArrowLeft', 'ArrowRight'].includes(e.key) && S.selection.length === 1) {
+        e.preventDefault(); rotateTo(elementGeometry(S.sel).angle + (e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 15 : 1));
+      } else if (['Enter', ' '].includes(e.key)) { e.preventDefault(); ACTS.rotation($('[data-act=rotation]')); }
+    });
 
     /* ---------- 事件 1：快捷键（最先注册） ---------- */
     addEventListener(
       "keydown",
       (e) => {
         if (reviewUI?.key(e)) return;
+        if (fromUI(e) && ui.activeElement?.matches('.rotate-handle') && ['ArrowLeft','ArrowRight','Enter',' '].includes(e.key)) return;
         if (S.playing) return;
         if (fromUI(e) && pages.key(e)) return;
         if (
@@ -1576,6 +1681,11 @@ import {
       more: (btn) => openMenu("more", btn),
       status: (btn) => openMenu("status", btn),
       "element-more": (btn) => openMenu("element", btn),
+      rotation: btn => {
+        openMenu('rotation', btn);
+        if (!$('[data-menu=rotation]').hidden && S.selection.length === 1) { $('.rotation-angle').focus(); $('.rotation-angle').select(); }
+      },
+      'rotation-reset': () => rotateTo(0),
       save: () => save(),
       download: () => download(serialize()),
       copy: () => copyText(serialize()),
@@ -1623,6 +1733,7 @@ import {
       "element-delete",
       "element-front",
       "element-back",
+      'rotation-reset',
     ]);
     ui.addEventListener("click", (e) => {
       const btn = e.target.closest("button");
@@ -1635,7 +1746,7 @@ import {
       const act = btn.dataset.act;
       if (!act) return;
       if (
-        !["preview", "export", "more", "status", "element-more", "text-layout"].includes(act)
+        !["preview", "export", "more", "status", "element-more", "text-layout", "rotation"].includes(act)
       )
         closeMenus();
       if (
@@ -1646,6 +1757,7 @@ import {
       ACTS[act]?.(btn);
     });
     ui.addEventListener("keydown", (e) => {
+      if (e.target.matches('.rotation-angle')) return;
       if (!modal.hidden && e.key === "Tab") {
         const controls = [
             ...modal.querySelectorAll("button:not(:disabled),textarea"),

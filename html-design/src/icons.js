@@ -45,6 +45,7 @@ import {
   GripVertical,
   TextCursorInput,
   CheckCheck,
+  RotateCw,
 } from "lucide";
 const icons = {
   Undo2,
@@ -93,6 +94,7 @@ const icons = {
   GripVertical,
   TextCursorInput,
   CheckCheck,
+  RotateCw,
 };
 const escape = (text) =>
   String(text).replace(

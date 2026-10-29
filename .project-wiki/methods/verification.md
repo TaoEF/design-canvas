@@ -22,6 +22,8 @@ sources:
     status: current
   - path: html-design/selection.test.mjs
     status: current
+  - path: html-design/rotation.test.mjs
+    status: current
   - path: html-design/text-measure.test.mjs
     status: current
   - path: html-design/qa.test.mjs
@@ -78,6 +80,8 @@ Flex 示例回归使用真实浏览器指针拉伸边点，验证兄弟框宽度
 AI 审阅增加 review.test.mjs（真树语义、部分接受/恢复、私有基线、租约/并发、事务6故障点、重启/历史轮转）与 review-browser.test.mjs（真实 before 隔离、输入flush、只读、历史边界、下载/离线和导出）。`npm test` 固定执行 `node --test --test-concurrency=1 html-design/*.test.mjs`，本地与 CI 共用并发数 1 的完整回归配置，将浏览器套件按文件串行执行，以减少低资源 Linux 上的资源竞争；保留原测试语义与等待上限，接受运行时间增加。
 
 布局 QA 回归使用真实 CLI 与 DOM Range，验证软折行孤字/标点、显式换行/豁免、混合基线不猜测、Flex/Grid/缩放、非文字越界、坏图/坏字体/外部根symlink、扫描上限及源hash不变。共享只读文件IO的变更同时复用导出CLI普通文件/FIFO/独占输出/信号清理回归。
+
+旋转回归覆盖真实手柄和角度输入、共同中心多选、50/100/200%与非中心origin/原矩阵/均匀scale、局部resize往返与对侧锚点、父逆坐标拖动/微移、富文本最小字号、单步历史/取消/no-op、flow占位/inline还原、复制保存离线重开、真实owner→AI交接。PPTX实际XML检查累积角度/真实尺寸和中心、缩放padding/字体、原生圆角shape、图片crop/链接及identity嵌套组；同快照PDF渲染与浏览器平色连通块对照允许既有CSS→PDF量化1px。一次集中桌面/窄屏视觉和新增UI detector，Office人工验收仍单列。
 
 ## Update Rules
 

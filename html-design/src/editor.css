@@ -483,6 +483,23 @@ button.primary:hover:not(:disabled) {
 .sel.multiple i {
   display: none;
 }
+.sel.unsupported i { display:none; }
+.rotate-handle {
+  position:fixed; width:24px; height:24px; padding:4px; margin:-12px;
+  border:1px solid var(--selection); border-radius:50%; background:var(--paper);
+  color:var(--selection); z-index:2147483645; cursor:grab;
+  box-shadow:0 0 0 1px #ffffff80;
+}
+.rotate-handle .icon { width:14px; height:14px; }
+.rotate-handle:active { cursor:grabbing; }
+.rotation-feedback {
+  position:fixed; padding:3px 6px; border-radius:5px; background:#202020;
+  color:#fff; font-size:11px; font-variant-numeric:tabular-nums;
+  pointer-events:none; z-index:2147483645;
+}
+.rotation-panel label { display:flex; align-items:center; gap:6px; margin:4px 6px 8px; }
+.rotation-angle { width:80px; height:28px; border:1px solid var(--line); border-radius:5px; padding:3px 6px; }
+.rotation-multiple { margin:4px 6px; font-size:12px; color:var(--muted); line-height:1.5; }
 .selection-member {
   position: fixed;
   border: 1px dashed var(--selection);

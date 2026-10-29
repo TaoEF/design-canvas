@@ -7,11 +7,13 @@ owners:
   - html-design/pptx.mjs
   - html-design/src/export.js
   - html-design/export-cli.mjs
-updated: 2026-10-29
+updated: 2026-10-30
 sources:
   - path: html-design/export.mjs
     status: current
   - path: html-design/pptx.mjs
+    status: current
+  - path: html-design/src/geometry.js
     status: current
   - path: html-design/src/export.js
     status: current
@@ -49,13 +51,15 @@ confidence: high
 PPTX 每个文字元素对应一个可编辑文本框，开启 `wrap="square"`，不自动缩小字号或按文字撑宽。只保留 HTML 的显式换行（br、块段落、white-space 保留的换行），不将浏览器因当前宽度产生的软折行固化。普通空白按 CSS 合并，跨 span 保留词间空格，pre/pre-wrap/break-spaces 保留空格。富文本样式继续按 run 映射，混合字号或基线差异不能凭字符几何位置推断换行。Flex/Grid 子项会被浏览器块化，横排子项不能因此各自变成硬段落；正 column-gap 简化为词间空格，Flex column 子项保留纵向分隔。
 
 
-四边宽度、颜色/透明度一致且为可见实线，配合可可靠表达的统一圆角和未旋转/缩放几何时，容器背景与边框使用同一个原生 shape；透明背景也保留边框，无边框或全透明边框不发出冗余边线。CSS 边框位于 border-box 内，原生 stroke 的中心线内缩半边宽；圆角使用 PptxGenJS 4 的 `rectRadius`（英寸），减去内缩后写入实际 DrawingML adjustment。胶囊形保留 roundRect，不误作 ellipse；全椭圆可映射为 ellipse。
+四边宽度、颜色/透明度一致且为可见实线，配合可可靠表达的统一圆角和可靠的2D旋转/正向均匀缩放几何时，容器背景与边框使用同一个原生 shape；透明背景也保留边框，无边框或全透明边框不发出冗余边线。CSS 边框位于 border-box 内，原生 stroke 的中心线内缩半边宽；圆角使用 PptxGenJS 4 的 `rectRadius`（英寸），减去内缩后写入实际 DrawingML adjustment。胶囊形保留 roundRect，不误作 ellipse；全椭圆可映射为 ellipse。
 
-不同边宽/颜色/样式、非统一或一般椭圆圆角、缩放/旋转等不合并成伪统一描边，保留按边回退并在 notes 提示简化；不支持的圆角背景退为矩形。容器子文字仍是独立可编辑文本框，不整体栅格化。
+不同边宽/颜色/样式、非统一或一般椭圆圆角、不支持的反射/skew/3D变换等不合并成伪统一描边，保留按边回退并在 notes 提示简化；不支持的圆角背景退为矩形。容器子文字仍是独立可编辑文本框，不整体栅格化。
 
 带 `data-el` 且有实际导出后代的语义容器导出为原生 `p:grpSp`，自身背景/描边与后代文字、图片可一起移动缩放；子对象仍可单独编辑或取消组合。分组只派生于来源 DOM 节点与祖先路径，不按可能重复的 class/objectName 匹配，不写回设计 HTML；不强制组合 stage、整页、无标记布局层，空组与单对象包装省略，支持嵌套组。
 
-PptxGenJS 4 没有公开 addGroup API；生成后以真实 XML 树移动原叶子节点，JSZip 只替换对应 slide XML，图片/超链接关系和原叶子顺序、格式、坐标不变。组边界来自原生对象变换框（包含溢出后代），`off/ext` 与 `chOff/chExt` 初始相同，避免初始偏移或缩放；新组 ID 高于已有对象 ID。对象数或归属顺序不能核对时明确失败，不输出损坏文件。文字超链接写到 PptxGenJS rich run options，确保生成实际 relationship ID，而不是悬空引用。此分组只作用于导出文件，不新增浏览器编辑器内分组功能。
+PptxGenJS 4 没有公开 addGroup API；生成后以真实 XML 树移动原叶子节点，JSZip 只替换对应 slide XML，图片/超链接关系和原叶子顺序、格式、坐标不变。组边界来自原生对象旋转后的可见外框（包含溢出后代），`off/ext` 与 `chOff/chExt` 初始相同，避免初始偏移或缩放；新组 ID 高于已有对象 ID。对象数或归属顺序不能核对时明确失败，不输出损坏文件。文字超链接写到 PptxGenJS rich run options，确保生成实际 relationship ID，而不是悬空引用。此分组只作用于导出文件，不新增浏览器编辑器内分组功能。
+
+原生旋转采用共用elementGeometry的未旋转border-box尺寸×累积uniform scale、实际BCR中心与累积角度；PPTX的rotate为页面方向，组本身仍identity，避免双重旋转。缩放后的字体/行高/字距、CSS padding+border映射文本margin、统一描边/圆角一并缩放，文本框不再额外加2px。图片保留cover/contain取景及实际hyperlink关系。SVG/canvas仍按既有可见截图路径，不把其已栅格化的旋转重复应用。XML回归和PDF/浏览器对照不能替代原生Office人工视觉验收。
 
 ## Workflows
 

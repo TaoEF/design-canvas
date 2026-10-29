@@ -12,19 +12,23 @@ export function collectEditableSlide(board) {
     };
   };
   const rect = el => {
-    const r = el.getBoundingClientRect();
-    return { x: r.left - origin.left, y: r.top - origin.top, w: r.width, h: r.height };
+    const r = el.getBoundingClientRect(), g = globalThis.__htmlDesignGeometry(el);
+    if (g.supported && !el.matches('svg,canvas')) {
+      const w = g.w * g.scale, h = g.h * g.scale;
+      return { x: g.cx - origin.left - w / 2, y: g.cy - origin.top - h / 2, w, h, rotation: (g.angle + 360) % 360, scale: g.scale, supported: true };
+    }
+    return { x: r.left - origin.left, y: r.top - origin.top, w: r.width, h: r.height, rotation: 0, scale: 1, supported: false };
   };
   const font = (cs, text) => {
     const names = cs.fontFamily.split(',').map(s => s.trim().replace(/^['"]|['"]$/g, ''));
     const cjk = /[\u3400-\u9fff]/.test(text) && names.find(s => /PingFang|YaHei|Noto Sans CJK|Heiti|SimSun/i.test(s));
     return cjk || names[0] || 'Arial';
   };
-  const styles = (cs, text) => ({
-    fontFace: font(cs, text), fontSize: parseFloat(cs.fontSize),
+  const styles = (cs, text, scale = 1) => ({
+    fontFace: font(cs, text), fontSize: parseFloat(cs.fontSize) * scale,
     bold: Number(cs.fontWeight) >= 600 || cs.fontWeight === 'bold', italic: cs.fontStyle === 'italic',
     underline: cs.textDecorationLine.includes('underline'), strike: cs.textDecorationLine.includes('line-through'),
-    color: cssColor(cs.color).color, charSpacing: parseFloat(cs.letterSpacing) || 0,
+    color: cssColor(cs.color).color, charSpacing: (parseFloat(cs.letterSpacing) || 0) * scale,
   });
   const graphics = [...board.querySelectorAll('svg,canvas')];
   for (const el of board.querySelectorAll('*')) {
@@ -34,21 +38,15 @@ export function collectEditableSlide(board) {
     const name = el.dataset.el || el.className?.baseVal || String(el.className || el.tagName);
     const fill = cssColor(cs.backgroundColor);
     const sides = ['Top', 'Right', 'Bottom', 'Left'].map(side => ({
-      side, width: parseFloat(cs[`border${side}Width`]) || 0,
+      side, width: (parseFloat(cs[`border${side}Width`]) || 0) * box.scale,
       style: cs[`border${side}Style`], color: cssColor(cs[`border${side}Color`]),
     }));
     const visibleBorder = side => side.width > 0 && !['none', 'hidden'].includes(side.style) && side.color.transparency < 100;
-    // Only merge geometry we can express faithfully. Translations are harmless;
-    // scaled/rotated/skewed boxes need the existing side-specific approximation.
-    let axisAligned = true;
-    for (let node = el; node && node !== board.parentElement; node = node.parentElement) {
-      const style = getComputedStyle(node), matrix = new DOMMatrix(style.transform);
-      if (!matrix.is2D || matrix.a !== 1 || matrix.d !== 1 || matrix.b || matrix.c ||
-          !['none', '0deg'].includes(style.rotate) || !['none', '1'].includes(style.scale) || Number(style.zoom) !== 1) axisAligned = false;
-    }
+    // Uniform positive 2D scale/rotation retain native local geometry. Skew,
+    // reflections and 3D keep the existing approximation with explicit notes.
     const corners = ['TopLeft', 'TopRight', 'BottomRight', 'BottomLeft'].map(corner => {
       const parts = cs[`border${corner}Radius`].split(/\s+/);
-      const length = (value, size) => value.endsWith('%') ? parseFloat(value) * size / 100 : parseFloat(value);
+      const length = (value, size) => value.endsWith('%') ? parseFloat(value) * size / 100 : parseFloat(value) * box.scale;
       return [length(parts[0], box.w), length(parts[1] || parts[0], box.h)];
     });
     // CSS reduces all radii by a common factor when adjacent corners overlap.
@@ -59,7 +57,7 @@ export function collectEditableSlide(board) {
     const [rx, ry] = corners[0].map(value => value * factor);
     const near = (a, b) => Math.abs(a - b) < .01;
     const uniformCorners = corners.every(([x, y]) => near(x * factor, rx) && near(y * factor, ry));
-    const geometry = axisAligned && uniformCorners && (near(rx, ry) || (near(rx, box.w / 2) && near(ry, box.h / 2)))
+    const geometry = box.supported && uniformCorners && (near(rx, ry) || (near(rx, box.w / 2) && near(ry, box.h / 2)))
       ? { type: near(rx, ry) ? (rx > 0 ? 'roundRect' : 'rect') : 'ellipse', radius: rx } : null;
     const first = sides[0];
     const uniformStroke = geometry && sides.every(side => visibleBorder(side) && side.style === 'solid' &&
@@ -71,28 +69,35 @@ export function collectEditableSlide(board) {
       const inset = uniformStroke ? uniformStroke.width / 2 : 0;
       emit(el, { kind: 'shape', x: box.x + inset, y: box.y + inset, w: box.w - inset * 2, h: box.h - inset * 2,
         name, fill, geometry: geometry?.type || 'rect', radius: Math.max(0, (geometry?.radius || 0) - inset),
-        stroke: uniformStroke, opacity: Number(cs.opacity) });
+        stroke: uniformStroke, opacity: Number(cs.opacity), rotation: box.rotation });
     }
     if (!container || !uniformStroke) for (const border of sides.filter(visibleBorder)) {
       const { side, width, color } = border;
       const points = side === 'Top' ? [box.x, box.y, box.w, 0]
         : side === 'Bottom' ? [box.x, box.y + box.h, box.w, 0]
           : side === 'Left' ? [box.x, box.y, 0, box.h] : [box.x + box.w, box.y, 0, box.h];
-      emit(el, { kind: 'line', points, width, color, name });
+      const rad = box.rotation * Math.PI / 180, cos = Math.cos(rad), sin = Math.sin(rad);
+      const point = (x, y) => {
+        const dx = x - box.x - box.w / 2, dy = y - box.y - box.h / 2;
+        return [box.x + box.w / 2 + cos * dx - sin * dy, box.y + box.h / 2 + sin * dx + cos * dy];
+      };
+      const a = point(points[0], points[1]), b = point(points[0] + points[2], points[1] + points[3]);
+      emit(el, { kind: 'line', points: [a[0], a[1], b[0] - a[0], b[1] - a[1]], width, color, name });
     }
     if ((fill.transparency < 100 || sides.some(visibleBorder)) && (!geometry || (sides.some(visibleBorder) && !uniformStroke))) {
       warnings.push(`${name}: 边框或圆角使用简化映射`);
     }
     if (cs.backgroundImage !== 'none' || cs.filter !== 'none') warnings.push(`${name}: 复杂背景或滤镜`);
+    if (!box.supported && !el.matches('svg,canvas')) warnings.push(`${name}: 不支持的变换使用外框近似`);
     if (el.matches('img')) {
-      emit(el, { kind: 'image', ...box, name, source: el.currentSrc || el.src, naturalWidth: el.naturalWidth, naturalHeight: el.naturalHeight, fit: cs.objectFit, opacity: Number(cs.opacity) });
+      emit(el, { kind: 'image', ...box, name, source: el.currentSrc || el.src, naturalWidth: el.naturalWidth, naturalHeight: el.naturalHeight, fit: cs.objectFit, opacity: Number(cs.opacity), href: el.closest('a')?.href });
     } else if (el.matches('svg,canvas')) {
       emit(el, { kind: 'graphic', ...box, name, index: graphics.indexOf(el) });
     } else if (el.hasAttribute('data-el') && !el.querySelector('[data-el]') && el.textContent.trim()) {
       // Keep authored breaks, not the browser's width-dependent soft wraps.
       const runs = [];
       let lastKey = null, pendingSpace = null, pendingBlockBreak = false;
-      const baseStyle = styles(cs, el.textContent);
+      const baseStyle = styles(cs, el.textContent, box.scale);
       const append = (text, options) => {
         if (!text) return;
         const key = JSON.stringify(options);
@@ -114,7 +119,7 @@ export function collectEditableSlide(board) {
       const visit = node => {
         if (node.nodeType === Node.TEXT_NODE) {
           const parentStyle = getComputedStyle(node.parentElement);
-          const options = styles(parentStyle, el.textContent);
+          const options = styles(parentStyle, el.textContent, box.scale);
           let text = node.textContent;
           if (parentStyle.textTransform === 'uppercase') text = text.toUpperCase();
           if (parentStyle.textTransform === 'lowercase') text = text.toLowerCase();
@@ -133,7 +138,7 @@ export function collectEditableSlide(board) {
         if (node.nodeType !== Node.ELEMENT_NODE) return;
         const nodeStyle = getComputedStyle(node);
         if (nodeStyle.display === 'none' || nodeStyle.visibility === 'hidden' || nodeStyle.opacity === '0') return;
-        const options = styles(nodeStyle, el.textContent);
+        const options = styles(nodeStyle, el.textContent, box.scale);
         if (node.tagName === 'BR') {
           if (pendingBlockBreak) lineBreak(options);
           lineBreak(options, true);
@@ -153,8 +158,8 @@ export function collectEditableSlide(board) {
       if (runs.length) emit(el, {
         kind: 'text', ...box, name, runs, ...baseStyle,
         align: ['left', 'center', 'right', 'justify'].includes(cs.textAlign) ? cs.textAlign : 'left',
-        lineHeight: parseFloat(cs.lineHeight) || baseStyle.fontSize * 1.2,
-        padding: [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].map(v => parseFloat(v) || 0),
+        lineHeight: (parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.2) * box.scale,
+        padding: ['Top', 'Right', 'Bottom', 'Left'].map(side => ((parseFloat(cs[`padding${side}`]) || 0) + (parseFloat(cs[`border${side}Width`]) || 0)) * box.scale),
         href: el.closest('a')?.href,
       });
     }
@@ -184,7 +189,7 @@ export async function addEditableSlide({ pptx, slide, data, page, board, context
   });
   slide.background = { color: data.background.transparency === 100 ? 'FFFFFF' : data.background.color };
   for (const item of data.items) {
-    const position = { x: px(item.x), y: px(item.y), w: px(item.w), h: px(item.h), objectName: item.name };
+    const position = { x: px(item.x), y: px(item.y), w: px(item.w), h: px(item.h), rotate: item.rotation || 0, objectName: item.name };
     if (item.kind === 'shape') {
       slide.addShape(pptx.ShapeType[item.geometry], {
         ...position, fill: { color: item.fill.color, transparency: 100 - (100 - item.fill.transparency) * item.opacity },
@@ -208,7 +213,7 @@ export async function addEditableSlide({ pptx, slide, data, page, board, context
       })));
       slide.addText(runs, {
         ...position, ...textOptions(item),
-        x: position.x, y: position.y, w: position.w + px(2), h: position.h + px(2),
+        x: position.x, y: position.y, w: position.w, h: position.h,
         margin: item.padding.map(pt), valign: 'top', fit: 'none', wrap: true,
         lineSpacing: pt(item.lineHeight), paraSpaceBefore: 0, paraSpaceAfter: 0,
         lang: 'zh-CN',
@@ -247,7 +252,7 @@ export async function addEditableSlide({ pptx, slide, data, page, board, context
       const sizing = ['cover', 'contain'].includes(item.fit) ? { type: item.fit, w: position.w, h: position.h } : undefined;
       // PptxGenJS calculates crop from the supplied intrinsic aspect, then uses sizing as the viewport.
       const intrinsic = sizing && item.naturalWidth ? { w: position.w, h: position.w * item.naturalHeight / item.naturalWidth } : {};
-      slide.addImage({ ...position, ...intrinsic, sizing, data: source, transparency: (1 - (item.opacity ?? 1)) * 100, altText: item.name });
+      slide.addImage({ ...position, ...intrinsic, sizing, data: source, transparency: (1 - (item.opacity ?? 1)) * 100, altText: item.name, hyperlink: item.href ? { url: item.href } : undefined });
     }
   }
   slide.addNotes(data.warnings.length ? `文字和图片均为可编辑元素。以下效果可能简化：\n${data.warnings.join('\n')}` : '文字和图片均为可编辑元素。');
@@ -297,16 +302,18 @@ export function groupEditableSlideXml({ xml, owners, groups }) {
     if (!off || !ext) throw new Error('PPTX 对象缺少可组合坐标');
     const values = [off.getAttribute('x'), off.getAttribute('y'), ext.getAttribute('cx'), ext.getAttribute('cy')].map(Number);
     if (!values.every(Number.isFinite) || values[2] < 0 || values[3] < 0) throw new Error('PPTX 组合坐标无效');
-    return values;
+    const [x, y, w, h] = values, rad = Number(xfrm.getAttribute('rot') || 0) / 60000 * Math.PI / 180;
+    const width = Math.abs(Math.cos(rad) * w) + Math.abs(Math.sin(rad) * h), height = Math.abs(Math.sin(rad) * w) + Math.abs(Math.cos(rad) * h);
+    return [x + (w - width) / 2, y + (h - height) / 2, width, height];
   };
   const render = entry => {
     if (entry.node) return entry.node;
     const children = entry.children.map(render);
     if (children.length === 1) return children[0]; // Omit a wrapper that adds no useful grouping.
     const boxes = children.map(bounds);
-    const x = Math.min(...boxes.map(box => box[0])), y = Math.min(...boxes.map(box => box[1]));
-    const w = Math.max(1, Math.max(...boxes.map(box => box[0] + box[2])) - x);
-    const h = Math.max(1, Math.max(...boxes.map(box => box[1] + box[3])) - y);
+    const x = Math.floor(Math.min(...boxes.map(box => box[0]))), y = Math.floor(Math.min(...boxes.map(box => box[1])));
+    const w = Math.max(1, Math.ceil(Math.max(...boxes.map(box => box[0] + box[2]))) - x);
+    const h = Math.max(1, Math.ceil(Math.max(...boxes.map(box => box[1] + box[3]))) - y);
     const group = element(p, 'p:grpSp'), nv = element(p, 'p:nvGrpSpPr');
     nv.append(element(p, 'p:cNvPr', { id: nextId++, name: entry.name }), element(p, 'p:cNvGrpSpPr'), element(p, 'p:nvPr'));
     const properties = element(p, 'p:grpSpPr'), xfrm = element(a, 'a:xfrm');
