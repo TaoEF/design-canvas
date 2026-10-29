@@ -961,13 +961,13 @@ property of their respective owners.
         toast("连接或交接暂不可用，请稍后再试");
         return;
       }
-      const item = state.review.items.find((i) => i.id === id), initialPage = pageId();
+      const item = state.review.items.find((i) => i.id === id), initialPage = pageId(), initialEpoch = view().intentEpoch;
       endBefore();
       busy = true;
       update(state);
       if (command === "undo" && item?.kind === "deleted") restoreTarget(id);
       try {
-        await persistence().reviewAction(command === "accept-all" ? "accept" : command, command === "accept-all" ? "all" : id, state.review.generation, () => initialPage === pageId() && !view().playing);
+        await persistence().reviewAction(command === "accept-all" ? "accept" : command, command === "accept-all" ? "all" : id, state.review.generation, () => initialEpoch === view().intentEpoch && initialPage === pageId() && !view().playing);
       } catch (error) {
         toast(error.message, 6e3);
       } finally {
@@ -1676,6 +1676,7 @@ property of their respective owners.
         flush().catch(() => {
         });
         S.playing = true;
+        S.reviewContext++;
         S.playMode = fullscreen ? "fullscreen" : "scroll";
         root.setAttribute("data-editor-playing", "");
         root.toggleAttribute("data-editor-scrolling", !fullscreen);
@@ -1704,6 +1705,7 @@ property of their respective owners.
     function stop() {
       if (!S.playing) return;
       S.playing = false;
+      S.reviewContext++;
       S.playMode = null;
       root.removeAttribute("data-editor-playing");
       root.removeAttribute("data-editor-scrolling");
@@ -6730,6 +6732,7 @@ property of their respective owners.
         editing: false,
         playing: false,
         current: null,
+        reviewContext: 0,
         sel: null,
         selection: [],
         drag: null,
@@ -8231,6 +8234,7 @@ property of their respective owners.
         printStyle.textContent = sz ? `@page{size:${sz.w}px ${sz.h}px;margin:0}` : "";
       });
       function setCurrent(b) {
+        if (S.current !== (b || null)) S.reviewContext++;
         S.current = b || null;
         boards().forEach(
           (x) => x.toggleAttribute("data-editor-current", x === b)
@@ -8532,7 +8536,7 @@ property of their respective owners.
         },
         view() {
           const b = S.current;
-          return { board: b, rect: b?.getBoundingClientRect(), bounds: viewport.bounds(), zoom: S.zoom, playing: S.playing, layoutWidth: b?.offsetWidth || 1280, layoutHeight: b?.offsetHeight || 720 };
+          return { board: b, rect: b?.getBoundingClientRect(), bounds: viewport.bounds(), zoom: S.zoom, playing: S.playing, intentEpoch: S.reviewContext, layoutWidth: b?.offsetWidth || 1280, layoutHeight: b?.offsetHeight || 720 };
         }
       });
       setCurrent(boards()[0]);

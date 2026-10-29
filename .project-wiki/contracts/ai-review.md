@@ -56,7 +56,7 @@ review-html.mjs 使用服务端 parse5@8.0.0 真树和 source locations 分析�
 
 ## Workflows
 
-正常 AI begin/commit 后，当前pending页底自动出现「放弃｜接受」；hover/focus放弃显示原位before，click才Undo。多页右下默认收起的汇总可逐项定位/处理与全部接受，删除singleton/非当前singleton/整份文档与异常均保留入口。owner/viewer 都可直接激活处理，后台使用既有 takeover→原owner flush/yield→grant，不进入普通编辑；hover不接管。共享有界 withLease 同样服务预览态页面管理，AI pending/lease 锁写，脏内容/源码/重命名草稿保护不变。正在输入时处理会先结束编辑并 flush；如果基线因人工编辑或其他窗口发生变化，刷新列表后重新选择，不自动重试旧写入。
+正常 AI begin/commit 后，当前pending页底自动出现「放弃｜接受」；hover/focus放弃显示原位before，click才Undo。多页右下默认收起的汇总可逐项定位/处理与全部接受，删除singleton/非当前singleton/整份文档与异常均保留入口。owner/viewer 都可直接激活处理，后台使用既有 takeover→原owner flush/yield→grant，不进入普通编辑；hover不接管。切页与进入/退出播放同步递增临时意图代数，旧动作一经离开上下文就失效，快速往返也不能复活；该代数仅运行态，不进入设计 HTML。共享有界 withLease 同样服务预览态页面管理，AI pending/lease 锁写，脏内容/源码/重命名草稿保护不变。正在输入时处理会先结束编辑并 flush；如果基线因人工编辑或其他窗口发生变化，刷新列表后重新选择，不自动重试旧写入。
 
 `node html-design/review-demo.mjs` 只创建独立新稿并通过相同服务存储实现种入两页 pending；默认随机文件名，已有文件以 wx 拒绝覆盖。它不是升级已有稿的工具。
 

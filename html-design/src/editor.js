@@ -33,6 +33,7 @@ import {
       editing: false,
       playing: false,
       current: null,
+      reviewContext: 0,
       sel: null,
       selection: [],
       drag: null,
@@ -1789,6 +1790,7 @@ import {
 
     /* ---------- 单页 / 翻页 ---------- */
     function setCurrent(b) {
+      if (S.current !== (b || null)) S.reviewContext++;
       S.current = b || null;
       boards().forEach((x) =>
         x.toggleAttribute("data-editor-current", x === b),
@@ -2102,7 +2104,7 @@ import {
       ui, persistence: () => persistence, toast,
       navigate(id) { const b = boards().find(b => b.dataset.artboard === id); if (b) goTo(b); },
       restoreTarget(id) { reviewRestorePage = id; },
-      view() { const b = S.current; return { board: b, rect: b?.getBoundingClientRect(), bounds: viewport.bounds(), zoom: S.zoom, playing: S.playing, layoutWidth: b?.offsetWidth || 1280, layoutHeight: b?.offsetHeight || 720 }; },
+      view() { const b = S.current; return { board: b, rect: b?.getBoundingClientRect(), bounds: viewport.bounds(), zoom: S.zoom, playing: S.playing, intentEpoch: S.reviewContext, layoutWidth: b?.offsetWidth || 1280, layoutHeight: b?.offsetHeight || 720 }; },
     });
 
     /* ---------- 初始化 ---------- */

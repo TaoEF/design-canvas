@@ -149,6 +149,7 @@ export function createViewport({
       finishEditing();
       flush().catch(() => {});
       S.playing = true;
+      S.reviewContext++;
       S.playMode = fullscreen ? "fullscreen" : "scroll";
       root.setAttribute("data-editor-playing", "");
       root.toggleAttribute("data-editor-scrolling", !fullscreen);
@@ -177,6 +178,7 @@ export function createViewport({
   function stop() {
     if (!S.playing) return;
     S.playing = false;
+    S.reviewContext++;
     S.playMode = null;
     root.removeAttribute("data-editor-playing");
     root.removeAttribute("data-editor-scrolling");

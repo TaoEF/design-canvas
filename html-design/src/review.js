@@ -168,10 +168,10 @@ export function createReview({ ui, persistence, navigate, view, restoreTarget, t
     if (command === 'locate') { endBefore(); navigate(id); position(); bar.querySelector('[data-review-command=accept]')?.focus(); return; }
     if (!['undo', 'accept', 'accept-all'].includes(command)) return;
     if (!enabled()) { toast('连接或交接暂不可用，请稍后再试'); return; }
-    const item = state.review.items.find(i => i.id === id), initialPage = pageId();
+    const item = state.review.items.find(i => i.id === id), initialPage = pageId(), initialEpoch = view().intentEpoch;
     endBefore(); busy = true; update(state);
     if (command === 'undo' && item?.kind === 'deleted') restoreTarget(id);
-    try { await persistence().reviewAction(command === 'accept-all' ? 'accept' : command, command === 'accept-all' ? 'all' : id, state.review.generation, () => initialPage === pageId() && !view().playing); }
+    try { await persistence().reviewAction(command === 'accept-all' ? 'accept' : command, command === 'accept-all' ? 'all' : id, state.review.generation, () => initialEpoch === view().intentEpoch && initialPage === pageId() && !view().playing); }
     catch (error) { toast(error.message, 6000); }
     finally {
       restoreTarget(null); busy = false; update(state);

@@ -520,6 +520,27 @@ test('K06/K08: changing page during a handoff cancels the intention; a failed ne
   }finally{release();}
 });
 
+for(const transition of ['pages','playback'])test(`K06 review repair: ${transition} round trip permanently cancels the waiting intention`,async t=>{
+  const name='direct-roundtrip-'+transition,f=await fixture(t,name);await f.load();await f.ai(h=>h.replace('Original one','AI pending roundtrip'));
+  await f.page.locator('[data-el=p1-title]').filter({hasText:'AI pending roundtrip'}).waitFor();const b=await viewerFor(f,name),bytes=await readFile(f.file,'utf8');
+  let release,seen,writes=0;const gate=new Promise(r=>release=r),waiting=new Promise(r=>seen=r);
+  await f.page.route('**/__html-design/document/yield',async route=>{seen();await gate;await route.continue();});
+  b.on('request',r=>{if(/\/review\/(undo|accept)$/.test(r.url()))writes++;});
+  try{
+    await b.locator('.review-actions [data-review-command=undo]').click();await within(waiting);
+    if(transition==='pages'){
+      const visited=await b.evaluate(()=>{const ui=document.querySelector('html-design-editor').shadowRoot,seen=[];for(const act of ['next','prev']){ui.querySelector(`[data-act=${act}]`).click();seen.push(document.querySelector('[data-editor-current]')?.dataset.artboard);}return seen;});
+      assert.deepEqual(visited,['p2','p1']);
+    }else{
+      await b.locator('[data-act=preview]').click();
+      const modes=await b.evaluate(()=>{const ui=document.querySelector('html-design-editor').shadowRoot;ui.querySelector('[data-act=scroll-play]').click();const entered=document.documentElement.hasAttribute('data-editor-playing');ui.querySelector('.play-controls [data-act=stop]').click();return [entered,document.documentElement.hasAttribute('data-editor-playing')];});
+      assert.deepEqual(modes,[true,false]);
+    }
+    release();await b.locator('.toast').filter({hasText:/当前页面重新选择/}).waitFor();assert.equal(writes,0);assert.equal(await readFile(f.file,'utf8'),bytes);
+    await b.locator('.review-actions [data-review-command=accept]').click();await b.locator('.review-actions').waitFor({state:'hidden'});assert.equal(writes,1);assert.equal(await readFile(f.file,'utf8'),bytes);assert.equal(await b.locator('html[data-editing]').count(),0);
+  }finally{release();}
+});
+
 test('L01/L02/L03/L04: page information and status labels remain separate from actions at desktop and 390px',async t=>{
   const f=await fixture(t,'numbered-labels');
   await writeFile(f.file,(await readFile(f.file,'utf8')).replace('data-artboard="p1"','data-artboard="p8"').replace('data-title="p1"','data-title="Long page name that should truncate while its ordinal stays visible"').replace('data-el="p1-title"','data-el="p8-title"').replace('data-artboard="p2"','data-artboard="p12"'));
