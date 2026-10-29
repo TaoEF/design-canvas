@@ -109,6 +109,8 @@ CLI 读取已保存 HTML 快照，输出一份含 `revision`、页数、字节�
 
 AI 可按需运行 `node html-design/text.mjs measure request.json` 比较多个候选宽度，或 `node html-design/text.mjs check design.html` 检查生成文件的文字溢出。只读命令复用本机浏览器，返回 JSON，不运行内容脚本、不写回 HTML，也不需要新的外部接口或密钥。读取的是保存快照，已有人工稿仍需先协作交接取得最新工作副本。字体/相对资源和完整参数见 [文字测量说明](html-design/references/text-measurement.md)。
 
+`node html-design/qa.mjs check design.html` 提供保存快照的只读布局 QA：复用文字溢出/祖先裁切，补充可见元素越界、坏图，以及可靠实际软折行的中文避首尾/末行孤字诊断。返回规则码、稳定 ID 和覆盖边界；显式换行与特定规则豁免保留作者意图，不可靠布局和截断不会报干净通过。参数、退出码与限制见 [QA 说明](html-design/references/qa.md)，不含自动修复或 AI commit 门禁。
+
 ## 开发与测试
 
 编辑器源码按职责拆分在 `html-design/src/`：`editor.js` 负责编辑交互，`ui.js` / `editor.css` 提供界面，`pages.js` 管理缩略图和页面操作，`viewport.js` 管理居中/缩放/播放，`typography.js` 处理文字缩放，`guides.js` 处理对齐吸附和辅助线，`layers.js` 处理跨容器的叠放层级，`selection.js` 处理多选、框选和方向扩选，`icons.js` 封装图标，`identifiers.js` 管理复制时的引用，`persistence.js` / `drafts.js` 处理保存和草稿，`export.js` 处理导出。服务端的保存协议、导出和 PPTX 映射也分别独立。

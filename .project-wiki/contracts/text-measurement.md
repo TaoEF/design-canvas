@@ -6,7 +6,7 @@ owners:
   - html-design/text.mjs
   - html-design/text-measure.mjs
   - html-design/src/text-measure.js
-updated: 2026-10-28
+updated: 2026-10-30
 sources:
   - path: html-design/text.mjs
     status: current
@@ -17,6 +17,16 @@ sources:
   - path: html-design/references/text-measurement.md
     status: current
   - path: html-design/text-measure.test.mjs
+    status: current
+  - path: html-design/qa.mjs
+    status: current
+  - path: html-design/src/qa.js
+    status: current
+  - path: html-design/saved-file.mjs
+    status: current
+  - path: html-design/qa.test.mjs
+    status: current
+  - path: html-design/references/qa.md
     status: current
 related:
   - module.editor
@@ -44,6 +54,12 @@ measure 输入纯文本、字体、行高与候选内容宽度；check 扫描保
 命令不写文件、不运行内容脚本、不申请编辑权。已有人工稿仍须通过协作流程获取最新工作副本，检查该副本时使用原稿资源基址；命令不声称读到了浏览器尚未保存的 DOM。字体/CSS失败、未知布局、隐藏文字、无效ID和截断不能返回干净通过。
 
 按实际文本节点收集候选：无 `data-el` 的文字报告 unmarked，嵌套编辑元素周围的直接文字报告 NESTED_TEXT_CONTAINER；祖先隐藏和裁切分别报告 hidden / clipped。裁切由文本盒与祖先边界比较，可能是有意设计，不能据此自动扩大容器。浏览器上下文禁用内容 JavaScript，并拒绝文档跳转，避免检查其他页面却关联输入文件版本。
+
+## 保存快照的布局 QA
+
+`qa.mjs check` 在同一次浏览器准备和文字 check 上增补实际 Range/字素行诊断、可见对象越界和图片解码检查。与 export-cli 共用 saved-file.mjs 的普通文件/32MiB/单快照读取及临时只读资源边界；不读未保存 DOM，不申请编辑权或写回。schemaVersion1、英文规则码/有界事实、SHA-256 来源、CSS px、覆盖/截断/豁免计数与0/2/1退出码见 references/qa.md。旧 text.mjs measure/check 字段和退出码保持。
+
+实际软折行才参与末行孤汉字（含结束标点）、单标点孤行与禁则行首/行尾检测，显式br/保留换行独立分段。复杂变换、竖排/多栏、混合字号/基线或不可靠Range明确不支持，不用预测替代事实。data-qa-ignore仅豁免具体观察规则；ID、资源失败、隐藏/不支持覆盖与扫描超限不可豁免为通过。没有整体审美评分、自动修复、commit门禁或定位UI；#19/#6后续需衔接旋转/裁切边界。
 
 ## Workflows
 

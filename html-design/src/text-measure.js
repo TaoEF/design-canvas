@@ -1,5 +1,6 @@
 import { prepare, measureNaturalWidth, measureLineStats, clearCache } from "@chenglou/pretext";
 import { createTextLayout } from "./text-layout.js";
+import { checkVisualDocument } from "./qa.js";
 
 const px = v => parseFloat(v) || 0;
 const round = v => Math.round(v * 1000) / 1000;
@@ -55,7 +56,7 @@ async function measureText(input) {
   } finally { node.remove(); }
 }
 
-async function checkDocument() {
+async function checkDocument({ qa = false } = {}) {
   document.querySelectorAll("[data-editor-ui],style[data-editor-style],[data-editor-connection]").forEach(n => {
     if (n !== host) n.remove();
   });
@@ -73,6 +74,7 @@ async function checkDocument() {
     if (getComputedStyle(board).display === "none") board.style.setProperty("display", "block", "important");
   });
   const candidates = [];
+  let scanTruncated = false;
   for (const board of boards) {
     const found = new Map(), walker = document.createTreeWalker(board, NodeFilter.SHOW_TEXT);
     let text;
@@ -81,8 +83,10 @@ async function checkDocument() {
       const marked = text.parentElement.closest("[data-el]");
       const el = marked && board.contains(marked) ? marked : text.parentElement;
       if (!found.has(el)) found.set(el, { board, el, marked: !!marked && board.contains(marked), preview: text.textContent.trim().slice(0, 80) });
+      if (qa && candidates.length + found.size > 500) { scanTruncated = true; break; }
     }
     candidates.push(...found.values());
+    if (scanTruncated) break;
   }
   const issues = [];
   const pageIds = boards.map(b => b.dataset.artboard), elementIds = [...document.querySelectorAll("[data-artboard] [data-el]")].map(n => n.dataset.el);
@@ -111,6 +115,11 @@ async function checkDocument() {
       continue;
     }
     if (!el.getClientRects().length) { issues.push({ ...target, status: "unsupported", overflow: null }); continue; }
+    if (qa && el.textContent.length > 20000) {
+      scanTruncated = true;
+      issues.push({ ...target, status: "unsupported", code: "QA_TEXT_LIMIT", overflow: null });
+      continue;
+    }
     try {
       const result = await measurement.inspect(el), cs = getComputedStyle(el);
       if (!result.adaptable) {
@@ -144,9 +153,10 @@ async function checkDocument() {
       issues.push({ ...target, status: "error", code: "MEASUREMENT_FAILED", overflow: null });
     }
   }
-  return { status: issues.length || candidates.length > 500 ? "issues" : "ok", units: "css-px", box: "border-box",
+  const result = { status: issues.length || candidates.length > 500 ? "issues" : "ok", units: "css-px", box: "border-box",
     pageCount: boards.length, textCount: candidates.length, checkedCount: checked,
-    truncated: candidates.length > 500, issues };
+    truncated: scanTruncated || candidates.length > 500, issues };
+  return qa ? checkVisualDocument({ boards, candidates, textResult: result }) : result;
 }
 
 globalThis.__htmlDesignText = { measureText, checkDocument };

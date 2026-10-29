@@ -18,15 +18,19 @@ export function validateTextRequest(input) {
 }
 
 // Trusted browser code is evaluated separately; document scripts never run.
-export async function measureDocumentText({ mode, input, html = '<!doctype html><html lang="zh-CN"><head></head><body></body></html>', baseUrl = 'http://127.0.0.1:8876/' }) {
-  if (!['measure', 'check'].includes(mode)) throw new Error('mode must be measure or check.');
+export async function measureDocumentText({ mode, input, html = '<!doctype html><html lang="zh-CN"><head></head><body></body></html>', baseUrl = 'http://127.0.0.1:8876/' }, { signal } = {}) {
+  if (!['measure', 'check', 'qa'].includes(mode)) throw new Error('mode must be measure, check or qa.');
+  signal?.throwIfAborted();
   if (mode === 'measure') validateTextRequest(input);
   if (typeof html !== 'string' || Buffer.byteLength(html) > 32 * 1024 * 1024) throw new Error('HTML must be at most 32 MiB.');
   const base = new URL(baseUrl);
   if (!['http:', 'https:'].includes(base.protocol) || !['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname)) throw new Error('baseUrl must use a local HTTP preview address.');
   const browser = await chromium.launch(browserOptions());
+  const abort = () => { void browser.close().catch(() => {}); };
+  signal?.addEventListener('abort', abort, { once: true });
   let blockedNavigation = false;
   try {
+    signal?.throwIfAborted();
     const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1, acceptDownloads: false, javaScriptEnabled: false });
     const page = await context.newPage(), resourceErrors = [];
     page.setDefaultTimeout(10000);
@@ -54,15 +58,24 @@ export async function measureDocumentText({ mode, input, html = '<!doctype html>
     try {
       result = await Promise.race([
         page.evaluate(async ({ mode, input }) => mode === 'measure'
-          ? globalThis.__htmlDesignText.measureText(input) : globalThis.__htmlDesignText.checkDocument(), { mode, input }),
+          ? globalThis.__htmlDesignText.measureText(input) : globalThis.__htmlDesignText.checkDocument({ qa: mode === 'qa' }), { mode, input }),
         new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Text measurement exceeded 30 seconds.')), 30000); }),
       ]);
     } finally { clearTimeout(timer); }
     if (blockedNavigation || page.url() !== url) throw new Error('Document navigation is not supported during text measurement.');
     if (resourceErrors.length) result.status = 'issues';
+    if (mode === 'qa') {
+      for (const resource of resourceErrors.slice(0, 100)) {
+        if (result.issues.length >= 500) { result.truncated = true; result.coverage.issuesOmitted++; continue; }
+        result.issues.push({ code: 'RESOURCE_FAILED', severity: 'error', pageId: null, elementId: null,
+          evidence: { ...resource, url: resource.url.slice(0, 200) } });
+      }
+      if (resourceErrors.length > 100) { result.truncated = true; result.coverage.issuesOmitted += resourceErrors.length - 100; }
+      return result;
+    }
     return { ...result, resourceErrors, ...(mode === 'check' ? { revision: createHash('sha256').update(html).digest('hex') } : {}) };
   } catch (error) {
     if (blockedNavigation) throw new Error('Document navigation is not supported during text measurement.');
     throw error;
-  } finally { await browser.close(); }
+  } finally { signal?.removeEventListener('abort', abort); await browser.close(); }
 }

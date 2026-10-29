@@ -4331,9 +4331,247 @@ property of their respective owners.
     };
   }
 
+  // html-design/src/qa.js
+  var LIMITS = { elements: 2e3, texts: 500, graphemes: 1e5, perText: 2e4, issues: 500 };
+  var round2 = (v) => Math.round(v * 1e3) / 1e3;
+  var START = /^[、。，．！？：；）〕］｝〉》」』】〗〙〛’”％‰…]/u;
+  var END = /[（〔［｛〈《「『【〖〘〚‘“]$/u;
+  var CJK_ORPHAN = /^\p{Script=Han}[、。，．！？：；）〕］｝〉》」』】’”…]*$/u;
+  var SUPPRESSIBLE = /* @__PURE__ */ new Set(["TEXT_OVERFLOW", "ANCESTOR_CLIP", "ELEMENT_OUT_OF_BOUNDS", "LINE_ORPHAN_CJK", "LINE_ORPHAN_PUNCTUATION", "LINE_START_PROHIBITED", "LINE_END_PROHIBITED"]);
+  var box = (r, b) => ({ x: round2(r.left - b.left), y: round2(r.top - b.top), width: round2(r.width), height: round2(r.height) });
+  var visible = (el, board) => {
+    if (getComputedStyle(el).visibility !== "visible" || !el.getClientRects().length) return false;
+    for (let n = el; n && board.contains(n); n = n.parentElement) {
+      const s = getComputedStyle(n);
+      if (s.display === "none" || s.opacity === "0" || s.contentVisibility === "hidden") return false;
+    }
+    return true;
+  };
+  var simpleGeometry = (el, board) => {
+    for (let n = el; n && board.contains(n); n = n.parentElement) {
+      const s = getComputedStyle(n), m = new DOMMatrix(s.transform);
+      if (!m.is2D || Math.abs(m.a - 1) > 1e-4 || Math.abs(m.d - 1) > 1e-4 || Math.abs(m.b) > 1e-4 || Math.abs(m.c) > 1e-4 || !["none", "0deg"].includes(s.rotate) || !["none", "1", "1 1"].includes(s.scale) || Number(s.zoom) !== 1) return false;
+    }
+    return true;
+  };
+  function renderedLines(el, board, budget) {
+    const cs = getComputedStyle(el), nodes = [el, ...el.querySelectorAll("*")];
+    if (!simpleGeometry(el, board) || cs.writingMode !== "horizontal-tb" || cs.direction !== "ltr" || cs.columnCount !== "auto" || /[\u0590-\u08ff]/u.test(el.textContent) || nodes.some((n) => {
+      const s = getComputedStyle(n);
+      return s.fontSize !== cs.fontSize || s.lineHeight !== cs.lineHeight || s.fontFamily !== cs.fontFamily || !["baseline", "normal"].includes(s.verticalAlign) || n !== el && !["inline", "contents"].includes(s.display) || s.writingMode !== "horizontal-tb" || s.direction !== "ltr" || ["::before", "::after"].some((p) => !["none", "normal", '""'].includes(getComputedStyle(n, p).content));
+    })) return { unsupported: "Complex text geometry or mixed baselines." };
+    const segments = [[]];
+    const segmenter = new Intl.Segmenter("zh", { granularity: "grapheme" });
+    let count = 0, unsupported = false, truncated = false;
+    const walk = (node) => {
+      if (unsupported || truncated) return;
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        if (node.tagName === "BR") {
+          segments.push([]);
+          return;
+        }
+        if (!visible(node, board)) {
+          unsupported = true;
+          return;
+        }
+        for (const child of node.childNodes) walk(child);
+        return;
+      }
+      if (node.nodeType !== Node.TEXT_NODE) return;
+      const preserveNewlines = ["pre", "pre-wrap", "pre-line", "break-spaces"].includes(getComputedStyle(node.parentElement).whiteSpace);
+      for (const { segment, index } of segmenter.segment(node.data)) {
+        if (++count > LIMITS.perText || budget.checked >= LIMITS.graphemes) {
+          truncated = true;
+          break;
+        }
+        budget.checked++;
+        if (preserveNewlines && /[\r\n]/.test(segment)) {
+          segments.push([]);
+          continue;
+        }
+        const range = document.createRange();
+        range.setStart(node, index);
+        range.setEnd(node, index + segment.length);
+        const rects = [...range.getClientRects()].filter((r) => r.width > 0.01 && r.height > 0.01);
+        if (rects.length > 1) {
+          unsupported = true;
+          break;
+        }
+        if (rects.length) segments.at(-1).push({ text: segment, r: rects[0] });
+      }
+    };
+    for (const child of el.childNodes) walk(child);
+    if (truncated) return { truncated: true };
+    if (unsupported) return { unsupported: "Text ranges do not form reliable horizontal lines." };
+    const groups = [];
+    for (const chars of segments) {
+      const lines = [];
+      for (const char of chars) {
+        let line = lines.at(-1);
+        if (!line || Math.abs(line.top - char.r.top) > 1) {
+          if (line && char.r.top <= line.top + 1) return { unsupported: "Text ranges are not in visual line order." };
+          line = { top: char.r.top, chars: [] };
+          lines.push(line);
+        }
+        line.chars.push(char);
+      }
+      groups.push(lines.map((line) => ({
+        text: line.chars.map((c) => c.text).join("").trim(),
+        rect: {
+          left: Math.min(...line.chars.map((c) => c.r.left)),
+          top: line.top,
+          width: Math.max(...line.chars.map((c) => c.r.right)) - Math.min(...line.chars.map((c) => c.r.left)),
+          height: Math.max(...line.chars.map((c) => c.r.height))
+        }
+      })).filter((l) => l.text));
+    }
+    return { groups };
+  }
+  async function checkVisualDocument({ boards, candidates, textResult }) {
+    const issues = [], elements = [], pageIds = boards.map((b) => b.dataset.artboard);
+    const idCounts = /* @__PURE__ */ new Map(), nodeById = /* @__PURE__ */ new Map();
+    const coverage = {
+      elements: { seen: 0, checked: 0, hidden: 0, unsupported: 0, limit: LIMITS.elements },
+      text: { seen: candidates.length, checked: textResult.checkedCount, linesChecked: 0, unsupported: 0, hidden: 0, unmarked: 0, limit: LIMITS.texts, perTextCodeUnitLimit: 2e4 },
+      graphemes: { checked: 0, limit: LIMITS.graphemes, perTextLimit: LIMITS.perText },
+      suppressed: 0,
+      issuesOmitted: 0
+    };
+    let truncated = textResult.truncated, incomplete = textResult.truncated;
+    const target = (board, el) => ({
+      pageId: board?.dataset.artboard && pageIds.filter((v) => v === board.dataset.artboard).length === 1 ? board.dataset.artboard : null,
+      elementId: el?.dataset.el && idCounts.get(el.dataset.el) === 1 ? el.dataset.el : null
+    });
+    const emit = (code, board, el, evidence = {}, severity = "warning") => {
+      const ignored = new Set((el?.getAttribute("data-qa-ignore") || "").split(/\s+/));
+      if (SUPPRESSIBLE.has(code) && ignored.has(code)) {
+        coverage.suppressed++;
+        return;
+      }
+      if (issues.length >= LIMITS.issues) {
+        truncated = incomplete = true;
+        coverage.issuesOmitted++;
+        return;
+      }
+      issues.push({ code, severity, ...target(board, el), evidence });
+    };
+    for (const board of boards) {
+      for (const el of board.querySelectorAll("[data-el]")) {
+        const id = el.dataset.el;
+        idCounts.set(id, (idCounts.get(id) || 0) + 1);
+        nodeById.set(id, el);
+      }
+    }
+    for (const board of boards) {
+      if (!board.dataset.artboard || pageIds.filter((v) => v === board.dataset.artboard).length !== 1) {
+        incomplete = true;
+        emit("ID_INVALID", board, null, { kind: "page" }, "error");
+      }
+      for (const el of board.querySelectorAll("[data-el],img")) {
+        if (++coverage.elements.seen > LIMITS.elements) {
+          truncated = incomplete = true;
+          break;
+        }
+        elements.push({ board, el });
+      }
+      if (truncated && coverage.elements.seen > LIMITS.elements) break;
+    }
+    for (const { board, el } of elements) {
+      if (el.hasAttribute("data-el") && (!el.dataset.el || idCounts.get(el.dataset.el) !== 1)) {
+        incomplete = true;
+        emit("ID_INVALID", board, el, { kind: "element" }, "error");
+      }
+      if (!visible(el, board)) {
+        incomplete = true;
+        coverage.elements.hidden++;
+        emit("HIDDEN_CONTENT", board, el);
+        continue;
+      }
+      if (!simpleGeometry(el, board)) {
+        incomplete = true;
+        coverage.elements.unsupported++;
+        emit("GEOMETRY_UNSUPPORTED", board, el);
+        continue;
+      }
+      const r = el.getBoundingClientRect(), b = board.getBoundingClientRect();
+      coverage.elements.checked++;
+      if (r.left < b.left - 1 || r.top < b.top - 1 || r.right > b.right + 1 || r.bottom > b.bottom + 1)
+        emit("ELEMENT_OUT_OF_BOUNDS", board, el, { box: box(r, b), page: { width: round2(b.width), height: round2(b.height) } });
+      if (el.tagName === "IMG") {
+        el.loading = "eager";
+        let timer;
+        try {
+          await Promise.race([el.decode(), new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error("Image decode timed out.")), 5e3);
+          })]);
+          if (!el.naturalWidth) throw new Error("Image has no decoded pixels.");
+        } catch {
+          emit("IMAGE_LOAD_FAILED", board, el.closest("[data-el]"), { source: /^(data|blob):/.test(el.currentSrc || el.src) ? "[embedded]" : (el.currentSrc || el.src).slice(0, 200) }, "error");
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+    }
+    const legacyCodes = { unmarked: "TEXT_UNMARKED", "invalid-id": "ID_INVALID", hidden: "HIDDEN_CONTENT", unsupported: "TEXT_UNSUPPORTED", error: "TEXT_MEASUREMENT_FAILED" };
+    const uncheckable = /* @__PURE__ */ new Set();
+    for (const item of textResult.issues) {
+      const board = boards.find((b) => b.dataset.artboard === item.pageId), el = nodeById.get(item.elementId);
+      if (legacyCodes[item.status]) {
+        incomplete = true;
+        uncheckable.add(el);
+        if (item.status === "unsupported") coverage.text.unsupported++;
+        if (item.status === "hidden") coverage.text.hidden++;
+        if (item.status === "unmarked") coverage.text.unmarked++;
+        emit(legacyCodes[item.status], board, el, { reason: item.code || item.status }, ["error", "invalid-id"].includes(item.status) ? "error" : "warning");
+      } else {
+        if (item.overflow) emit("TEXT_OVERFLOW", board, el, { requiredHeight: item.requiredHeight, availableHeight: item.availableHeight, box: item.box });
+        if (item.clippedBy?.length) emit("ANCESTOR_CLIP", board, el, { clippedBy: item.clippedBy, box: item.box });
+      }
+    }
+    for (const { board, el, marked } of candidates.slice(0, LIMITS.texts)) {
+      if (!marked || uncheckable.has(el) || !el.dataset.el || idCounts.get(el.dataset.el) !== 1 || !visible(el, board)) continue;
+      const result = renderedLines(el, board, coverage.graphemes);
+      if (result.truncated) {
+        truncated = incomplete = true;
+        coverage.text.unsupported++;
+        emit("SCAN_LIMIT", board, el, { kind: "graphemes" });
+        continue;
+      }
+      if (result.unsupported) {
+        incomplete = true;
+        coverage.text.unsupported++;
+        emit("LINE_UNSUPPORTED", board, el, { reason: result.unsupported });
+        continue;
+      }
+      coverage.text.linesChecked++;
+      let lineNumber = 0;
+      for (const lines of result.groups) {
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i], evidence = { line: ++lineNumber, text: line.text.slice(0, 80), box: box(line.rect, board.getBoundingClientRect()) };
+          if (i > 0 && START.test(line.text)) emit("LINE_START_PROHIBITED", board, el, evidence);
+          if (i < lines.length - 1 && END.test(line.text)) emit("LINE_END_PROHIBITED", board, el, evidence);
+          if (lines.length > 1 && i === lines.length - 1 && CJK_ORPHAN.test(line.text)) emit("LINE_ORPHAN_CJK", board, el, evidence);
+          if (lines.length > 1 && /^\p{P}$/u.test(line.text)) emit("LINE_ORPHAN_PUNCTUATION", board, el, evidence);
+        }
+      }
+    }
+    if (truncated) emit("SCAN_LIMIT", null, null, { limits: LIMITS });
+    return {
+      schemaVersion: 1,
+      status: issues.length || incomplete || truncated ? "issues" : "ok",
+      units: "css-px",
+      pageCount: boards.length,
+      textCount: textResult.textCount,
+      checkedCount: textResult.checkedCount,
+      truncated,
+      coverage,
+      issues
+    };
+  }
+
   // html-design/src/text-measure.js
   var px = (v) => parseFloat(v) || 0;
-  var round2 = (v) => Math.round(v * 1e3) / 1e3;
+  var round3 = (v) => Math.round(v * 1e3) / 1e3;
   var host = document.createElement("div");
   host.setAttribute("data-editor-ui", "");
   document.documentElement.append(host);
@@ -4395,7 +4633,7 @@ property of their respective owners.
           width,
           engine: matches ? "pretext" : "browser",
           lineCount: actual.lineCount,
-          maxLineWidth: round2(matches ? predicted.maxLineWidth : actualLineWidth),
+          maxLineWidth: round3(matches ? predicted.maxLineWidth : actualLineWidth),
           requiredHeight: actual.requiredHeight,
           maxHeight: input.maxHeight ?? null,
           verticalOverflow: input.maxHeight === void 0 ? null : actual.requiredHeight > input.maxHeight + 1,
@@ -4408,7 +4646,7 @@ property of their respective owners.
         box: "content-box",
         font: input.font,
         lineHeight: input.lineHeight,
-        naturalWidth: round2(naturalMatches ? predictedNaturalWidth : actualNaturalWidth),
+        naturalWidth: round3(naturalMatches ? predictedNaturalWidth : actualNaturalWidth),
         naturalWidthEngine: naturalMatches ? "pretext" : "browser",
         layouts
       };
@@ -4416,7 +4654,7 @@ property of their respective owners.
       node.remove();
     }
   }
-  async function checkDocument() {
+  async function checkDocument({ qa = false } = {}) {
     document.querySelectorAll("[data-editor-ui],style[data-editor-style],[data-editor-connection]").forEach((n) => {
       if (n !== host) n.remove();
     });
@@ -4434,6 +4672,7 @@ property of their respective owners.
       if (getComputedStyle(board).display === "none") board.style.setProperty("display", "block", "important");
     });
     const candidates = [];
+    let scanTruncated = false;
     for (const board of boards) {
       const found = /* @__PURE__ */ new Map(), walker = document.createTreeWalker(board, NodeFilter.SHOW_TEXT);
       let text;
@@ -4442,8 +4681,13 @@ property of their respective owners.
         const marked = text.parentElement.closest("[data-el]");
         const el = marked && board.contains(marked) ? marked : text.parentElement;
         if (!found.has(el)) found.set(el, { board, el, marked: !!marked && board.contains(marked), preview: text.textContent.trim().slice(0, 80) });
+        if (qa && candidates.length + found.size > 500) {
+          scanTruncated = true;
+          break;
+        }
       }
       candidates.push(...found.values());
+      if (scanTruncated) break;
     }
     const issues = [];
     const pageIds = boards.map((b) => b.dataset.artboard), elementIds = [...document.querySelectorAll("[data-artboard] [data-el]")].map((n) => n.dataset.el);
@@ -4475,9 +4719,14 @@ property of their respective owners.
         issues.push({ ...target, status: "unsupported", overflow: null });
         continue;
       }
+      if (qa && el.textContent.length > 2e4) {
+        scanTruncated = true;
+        issues.push({ ...target, status: "unsupported", code: "QA_TEXT_LIMIT", overflow: null });
+        continue;
+      }
       try {
-        const result = await measurement.inspect(el), cs = getComputedStyle(el);
-        if (!result.adaptable) {
+        const result2 = await measurement.inspect(el), cs = getComputedStyle(el);
+        if (!result2.adaptable) {
           issues.push({ ...target, status: "unsupported", overflow: null });
           continue;
         }
@@ -4494,33 +4743,34 @@ property of their respective owners.
           const clipY = ["hidden", "clip", "auto", "scroll"].includes(cs2.overflowY) && (r.top < top - 1 || r.bottom > top + parent.clientHeight * sy + 1);
           if (clipX || clipY) clippedBy.push({ elementId: parent.dataset.el ?? null, id: parent.id || null, tag: parent.tagName.toLowerCase(), x: clipX, y: clipY });
         }
-        if (result.overflow || outOfBounds || clippedBy.length) issues.push({
+        if (result2.overflow || outOfBounds || clippedBy.length) issues.push({
           ...target,
           status: clippedBy.length ? "clipped" : "overflow",
-          engine: result.engine,
-          overflow: result.overflow,
+          engine: result2.engine,
+          overflow: result2.overflow,
           outOfBounds,
-          lineCount: result.lineCount,
+          lineCount: result2.lineCount,
           ...clippedBy.length ? { clippedBy } : {},
-          requiredHeight: result.requiredHeight,
-          availableHeight: result.availableHeight,
-          box: { x: round2(r.left - b.left), y: round2(r.top - b.top), width: round2(r.width), height: round2(r.height) },
-          contentWidth: round2(px(cs.width) - (cs.boxSizing === "border-box" ? px(cs.paddingLeft) + px(cs.paddingRight) + px(cs.borderLeftWidth) + px(cs.borderRightWidth) : 0))
+          requiredHeight: result2.requiredHeight,
+          availableHeight: result2.availableHeight,
+          box: { x: round3(r.left - b.left), y: round3(r.top - b.top), width: round3(r.width), height: round3(r.height) },
+          contentWidth: round3(px(cs.width) - (cs.boxSizing === "border-box" ? px(cs.paddingLeft) + px(cs.paddingRight) + px(cs.borderLeftWidth) + px(cs.borderRightWidth) : 0))
         });
       } catch {
         issues.push({ ...target, status: "error", code: "MEASUREMENT_FAILED", overflow: null });
       }
     }
-    return {
+    const result = {
       status: issues.length || candidates.length > 500 ? "issues" : "ok",
       units: "css-px",
       box: "border-box",
       pageCount: boards.length,
       textCount: candidates.length,
       checkedCount: checked,
-      truncated: candidates.length > 500,
+      truncated: scanTruncated || candidates.length > 500,
       issues
     };
+    return qa ? checkVisualDocument({ boards, candidates, textResult: result }) : result;
   }
   globalThis.__htmlDesignText = { measureText, checkDocument };
 })();

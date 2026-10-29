@@ -105,3 +105,7 @@ Both commands print one JSON result. Exit codes: **0** = no reported issues,
 **2** = layout/resource issues with usable measurements, **1** = invalid request
 or execution failure. Measurements describe constraints; they do not prescribe
 whether to resize, change type, or rewrite content.
+
+For saved-file element/image and reliable Chinese line-break diagnostics, use the
+separate [layout QA command](qa.md). It reuses the same text-check preparation;
+this v1 text interface and its exit codes remain unchanged.

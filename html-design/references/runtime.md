@@ -58,3 +58,5 @@ node html-design/collaborate.mjs begin designs/proposal.html
 内嵌编辑器无需在线脚本 CDN，可离线普通编辑、撤销、下载 HTML 和浏览器打印。外链图片、字体、CSS 仍依赖网络或原资源位置；需要离线交付时应将所需资源内联或一并提供，不能仅凭内嵌编辑器宣称所有资源自包含。
 
 自动回写、跨窗口写权限协调、AI begin/commit 和私有 Undo/Accept，以及编辑器内直接下载 PDF/PPTX 依赖运行中的常驻本地服务；文件 CLI 只需安装好的源码依赖和浏览器，按需启动临时只读资源服务。私有审阅基线留在源码根目录的 `.html-design/reviews/`，不会随下载 HTML 携带；离线下载不能撤回服务端 AI 提交。
+
+保存快照的第一阶段布局诊断可用 `node html-design/qa.mjs check input.html`；它会临时服务输入目录内的资源，不必启动完整编辑服务。AI 工作副本可用原稿 loopback `--base-url`。见 [QA 契约与覆盖边界](qa.md)。
