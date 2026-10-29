@@ -206,3 +206,7 @@ Developer在本计划提交后修复，执行I11及相关I01-I08和完整回归�
 - 页面管理busy与审阅busy互斥，自己的合法flush/yield/poll不被堵塞；页面管理的人工保存仍按既有规则隐式接受相应AI范围。保留原AI begin等待人工操作完成、下载/导出只取canonical设计的边界。
 
 Developer在本计划提交后实现pages/editor/persistence/UI的最小接缝，复用一套后台写权限获取，不能复制第二套交接状态机或另造远程写入口。K/L/M主验证合并冻结后，原Reviewer同一次df708112之后新增增量检查覆盖页面管理/共享租约/拖动重命名边界；不另开全量审查。Planner以真实双窗口和preview页面管理验收，提供新独立入口，原8881/8882不覆盖，用户确认前无远端交付或下一功能。
+
+### 执行者接替记录（2026-10-29）
+
+原Developer `/root/undo_accept_developer` 因服务容量错误连续两次无法恢复，已停止并interrupt。Dev-Manager/root准入 `/root/direct_review_developer` 接替同一branch/worktree及未提交实现，仅一个Developer可写，WIP仍1。既有K/L/M通过证据保留；接替者先只读核验进度再完成文档、定向/全量验证和冻结，不重做已完成实现。需求/计划/验收仍由root负责，原Reviewer安排不变；这不是范围或远端交付授权变更。
