@@ -522,6 +522,15 @@ button.primary:hover:not(:disabled) {
   stroke: var(--guide);
   stroke-width: 1px;
 }
+.guide-distance {
+  fill: #047857;
+  stroke: #fff;
+  stroke-width: 3px;
+  paint-order: stroke;
+  stroke-linejoin: round;
+  font: 11px system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
 :host([data-nav-hidden]) .guides {
   left: 0;
   width: 100vw;

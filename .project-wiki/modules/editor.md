@@ -5,7 +5,7 @@ status: active
 owners:
   - html-design/src/
   - html-design/editor.js
-updated: 2026-10-29
+updated: 2026-10-30
 sources:
   - path: html-design/src/editor.js
     status: current
@@ -18,6 +18,10 @@ sources:
   - path: html-design/src/selection.js
     status: current
   - path: html-design/selection.test.mjs
+    status: current
+  - path: html-design/src/guides.js
+    status: current
+  - path: html-design/guides.test.mjs
     status: current
   - path: html-design/src/text-layout.js
     status: current
@@ -68,6 +72,12 @@ confidence: high
 侧栏170px，缩略图宽按列表内宽计算并保留顶部安全边距。页头模式显示「自动排版 / 手动」，内部 flow/artboard 语义不变。元素工具条为黑底浅色，文字对齐单击按左/中/右/两端循环并反映状态；文字适配位于元素更多菜单，面板锚定可见的元素更多按钮，避免隐藏菜单项造成坐标或焦点丢失。颜色入口改为圆点但原生选色器不变；图片为适应/填充、RefreshCw 替换。更多类菜单190px。预览/只读时当前项及悬停项保留缩略图更多入口；页面菜单和新增入口在预览态可用，通过共享 withLease 后台取得写权限，AI pending/lease 和真实冲突时禁用。拖动仅drop后提交，未确认rename阻止刷新/yield，确认后校验稳定目标和版本。
 
 独立审查补充：从菜单项打开异步适配面板，键盘激活需将焦点先转给可见触发器，再在检测完成后进入可用操作；Esc 返回可见触发器。菜单方向键跳过祖先隐藏的文字项。窄窗口始终保留保存状态图标，错误、重试和草稿恢复入口不能因压缩页头消失。
+
+## 等距智能参考线
+
+`guides.js` 在现有边缘/中心对齐上增加水平、垂直等距居中与相邻间距延续。候选使用实际 BCR 的画布坐标，相关对象须有共同正交投影和非负间隙，只取局部相邻对象；画板不作为重复间隔对象。排除选中对象、自身祖先/后代、其他页及隐藏/透明祖先内的对象，多选使用整体外框。每轴取最小修正量，平局保持原边缘/中心吸附，其他轴修正后失去投影相交时回退原对齐。
+
+吸附范围仍为6屏幕px、Alt/Option绕过；每轴最多一组间距标记，数值为设计像素、显示取到一位小数但不反向量化几何。标记使用现有翠绿SVG叠加层、固定屏幕字体/端点，随缩放刷新，位于Shadow DOM而非正式stage。结束、Escape、pointercancel、切页/失权沿原拖动生命周期清理，单次拖动仍单步Undo。此能力不修改Flex/Grid gap、模式或容器结构，不提供一键分布；旋转对象暂按浏览器轴对齐BCR，旋转几何在后续Issue处理。
 
 ## AI 修改审阅
 
