@@ -91,3 +91,5 @@ PptxGenJS 4 没有公开 addGroup API；生成后以真实 XML 树移动原叶�
 不承诺复杂 CSS 与 PowerPoint 完全等价；尚无正式分发或兼容性支持矩阵。
 
 裁切标记本身不证明几何可靠。共用cropGeometry读取真实clip、content-box、内图尺寸/方向/均匀scale/object-position/translate与实际中心；QA只在契约成立时豁免内部预期越界，否则报GEOMETRY_UNSUPPORTED并保持不完整覆盖；PPTX拒绝该不可靠裁切而不凭标记伪造srcRect。PDF仍按实际DOM显示。
+
+Issue #6 审查补充：原生图片几何按容器geometry.type选择，非方50%圆角的框和pic均为ellipse，不得把geometry对象与字符串比较后误发capsule。普通roundRect保留原adjustment。可接受的contain仅居中100%重置；非标准contain缩放/偏心和内部隐藏图片会明确拒绝PPTX映射，避免忽略CSS取景或导出不可见源图；PDF仍按真实DOM。

@@ -59,6 +59,8 @@ function createCrop({ S, ui, select, draw, sync, push, toast, getPos, setPos, ca
   }
   function write(m) {
     const img = session.img;
+    // Effective crop edits always use cover; Fit is retained by untouched snapshots.
+    img.style.setProperty("object-fit", "cover", "important");
     img.style.setProperty("--crop-zoom", String(m.zoom));
     img.style.setProperty("--crop-x", `${m.x * 100}%`);
     img.style.setProperty("--crop-y", `${m.y * 100}%`);
@@ -214,14 +216,14 @@ function createCrop({ S, ui, select, draw, sync, push, toast, getPos, setPos, ca
     } };
     S.drag = operation;
   }
-  let zoomBefore = null;
+  let zoomBefore = null, zoomInitial = null;
   function zoom(value, commit = true) {
     if (!session || !canEdit()) return;
-    if (!zoomBefore) zoomBefore = snapshot();
+    if (!zoomBefore) { zoomBefore = snapshot(); zoomInitial = measure().m.zoom; }
     const { m } = measure(), z = clamp(Number(value) / 100, 1, 20);
     if (!Number.isFinite(z)) return;
     try {
-      if (z === 1 && !zoomBefore.frame) {
+      if (z === zoomInitial) {
         restore(zoomBefore);
       } else if (Math.abs(z - m.zoom) > 1e-5) {
         migrate();

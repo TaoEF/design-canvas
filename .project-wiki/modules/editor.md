@@ -124,3 +124,5 @@ crop.js 负责有限 cover/pan/resize 数学和裁切会话。有效操作才将
 多选和编辑入口工作已由原开发任务报告完成；首次导入在独立干净副本中复核。未来行为以当前源码和回归为准。
 
 裁切标记本身不证明几何可靠。共用cropGeometry读取真实clip、content-box、内图尺寸/方向/均匀scale/object-position/translate与实际中心；QA只在契约成立时豁免内部预期越界，否则报GEOMETRY_UNSUPPORTED并保持不完整覆盖；PPTX拒绝该不可靠裁切而不凭标记伪造srcRect。PDF仍按实际DOM显示。
+
+Issue #6 唯一审查修复：已裁切框从Fit重入时，只有有效手势才将内部object-fit切回cover；数值/连续缩放回起点、夹住及未操作完成保留原Fit快照，局部和主Undo/Redo都恢复模式与几何。共享裁切契约只接受居中100%的contain重置；手写contain+zoom/偏心以及内图hidden/collapse明确不可靠，不能被标记豁免成QA clean或在PPTX重新暴露隐藏内容。

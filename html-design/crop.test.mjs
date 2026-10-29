@@ -8,6 +8,7 @@ import { chromium } from "playwright";
 import JSZip from "jszip";
 import { browserOptions, exportDocument } from "./export.mjs";
 import { measureDocumentText } from "./text-measure.mjs";
+import { cropGeometry } from './src/crop-geometry.js';
 import { cropModel, cropPan, cropResize } from "./src/crop.js";
 import { elementGeometry, mappedDelta } from "./src/geometry.js";
 let browser, editor;
@@ -432,4 +433,50 @@ test('actual CSS controls crop trust: visible overflow, changed inner transforms
       } finally { await q.close(); }
     }
   } finally { await p.close(); }
+});
+
+
+test('review: effective edits after Fit cover the frame; no-op, cancel and local/main history preserve exact Fit state',async()=>{
+  const p=await open();try{
+    await start(p);await zoom(p,150);await p.locator('[data-act=crop-done]').click();await p.locator('[data-act=image-fit]').click();
+    const fit=await imgState(p);assert.equal(fit.fit,'contain');
+    await start(p);await zoom(p,100);await p.locator('[data-act=crop-done]').click();assert.equal((await imgState(p)).outer,fit.outer);
+    await start(p);await p.locator('.crop-zoom').evaluate(n=>{n.value='120';n.dispatchEvent(new Event('input',{bubbles:true}));n.value='100';n.dispatchEvent(new Event('input',{bubbles:true}));n.dispatchEvent(new Event('change',{bubbles:true}));});await p.locator('[data-act=crop-done]').click();assert.equal((await imgState(p)).outer,fit.outer);
+    await start(p);await pointer(p,0,20);await p.locator('[data-act=crop-done]').click();assert.equal((await imgState(p)).outer,fit.outer);
+    for(const action of ['zoom','pan','resize']){
+      await start(p);
+      if(action==='zoom')await zoom(p,120);else await pointer(p,20,0,action==='resize'?'e':null);
+      const changed=await imgState(p);assert.equal(changed.fit,'cover',action);
+      const paint=await p.locator('img[data-crop-image]').evaluate(n=>{const cs=getComputedStyle(n),w=parseFloat(cs.width),h=parseFloat(cs.height),k=Math.max(w/n.naturalWidth,h/n.naturalHeight)*Number(cs.scale);return{w,h,pw:n.naturalWidth*k,ph:n.naturalHeight*k};});
+      assert.ok(paint.pw>=paint.w-.01&&paint.ph>=paint.h-.01);
+      await p.locator('[data-act=undo]').click();assert.equal((await imgState(p)).outer,fit.outer);
+      await p.locator('[data-act=redo]').click();assert.equal((await imgState(p)).outer,changed.outer);
+      await p.locator('[data-act=crop-done]').click();await p.keyboard.press('Control+z');assert.equal((await imgState(p)).outer,fit.outer);
+      await p.keyboard.press('Control+Shift+z');assert.equal((await imgState(p)).outer,changed.outer);
+      await p.keyboard.press('Control+z');
+    }
+    await start(p);await zoom(p,120);await p.locator('[data-act=crop-cancel]').click();assert.equal((await imgState(p)).outer,fit.outer);
+    await start(p);await zoom(p,120);await p.locator('[data-act=crop-done]').click();
+    const out=await exportDocument({html:await snapshot(p),baseUrl:'http://127.0.0.1:1/crop.html',format:'pptx'}),zip=await JSZip.loadAsync(out.bytes),xml=await zip.file('ppt/slides/slide1.xml').async('string');
+    const rect=xml.match(/<a:srcRect ([^>]+)\/>/)[1];for(const[k,v]of Object.entries({l:18750,r:18750,t:8333,b:8333}))near(Number(rect.match(new RegExp(`${k}="(\\d+)"`))[1]),v,2);
+    assert.deepEqual(p.errors,[]);
+  }finally{await p.close();}
+});
+
+test('review: non-square 50-percent crop uses the same native ellipse for border and picture mask',async()=>{
+  const p=await open();try{await start(p);await zoom(p,150);await p.locator('[data-act=crop-done]').click();await p.locator('[data-crop-frame]').evaluate(n=>n.style.setProperty('border-radius','50%','important'));
+    const out=await exportDocument({html:await snapshot(p),baseUrl:'http://127.0.0.1:1/crop.html',format:'pptx'}),zip=await JSZip.loadAsync(out.bytes),xml=await zip.file('ppt/slides/slide1.xml').async('string');
+    const geometries=await p.evaluate(xml=>{const d=new DOMParser().parseFromString(xml,'application/xml'),ns='http://schemas.openxmlformats.org/presentationml/2006/main',a='http://schemas.openxmlformats.org/drawingml/2006/main';return ['sp','pic'].map(kind=>{const n=d.getElementsByTagNameNS(ns,kind)[0],g=n.getElementsByTagNameNS(a,'prstGeom')[0],e=n.getElementsByTagNameNS(a,'ext')[0];return{shape:g.getAttribute('prst'),w:Number(e.getAttribute('cx')),h:Number(e.getAttribute('cy')),adjustments:g.getElementsByTagNameNS(a,'gd').length};});},xml);
+    assert.equal(geometries[0].shape,'ellipse');assert.equal(geometries[1].shape,'ellipse');assert.notEqual(geometries[1].w,geometries[1].h);assert.equal(geometries[1].adjustments,0);near(geometries[1].w,300*9525,1);near(geometries[1].h,200*9525,1);
+  }finally{await p.close();}
+});
+
+test('review: raw contain zoom and hidden/collapsed internal images are explicitly unreliable and never revealed in native export',async()=>{
+  const p=await open();try{await start(p);await zoom(p,150);await p.locator('[data-act=crop-done]').click();const original=await snapshot(p);
+    for(const kind of['contain','hidden','collapse']){const q=await browser.newPage();try{await q.setContent(original);await q.locator('img').evaluate(n=>n.decode());await q.locator('img').evaluate((n,kind)=>n.style.setProperty(kind==='contain'?'object-fit':'visibility',kind,'important'),kind);
+      const actual=await q.evaluate(`(${cropGeometry.toString()})(document.querySelector('[data-crop-frame]'),${elementGeometry.toString()})`);assert.equal(actual.supported,false,kind);
+      const html=await snapshot(q),qa=await measureDocumentText({mode:'qa',html});assert.equal(qa.status,'issues');assert.ok(qa.coverage.elements.unsupported>0||qa.coverage.elements.hidden>0,JSON.stringify(qa));
+      await assert.rejects(exportDocument({html,baseUrl:'http://127.0.0.1:1/crop.html',format:'pptx'}),/裁切 CSS 无法可靠导出/);
+    }finally{await q.close();}}
+  }finally{await p.close();}
 });

@@ -288,6 +288,8 @@ property of their respective owners.
     const w = g.w - insets[0] - insets[2], h = g.h - insets[1] - insets[3], z = Number(s.scale), position = s.objectPosition.split(/\s+/);
     if (!["cover", "contain"].includes(s.objectFit) || position.length !== 2 || position.some((v) => !/^[-\d.]+%$/.test(v))) return fail("unsupported image fit or position");
     const [x, y] = position.map((v) => parseFloat(v) / 100);
+    if (s.objectFit === "contain" && (z !== 1 || x !== 0.5 || y !== 0.5)) return fail("unsupported transformed contain image");
+    if (s.visibility !== "visible") return fail("internal crop image is not visible");
     if (![w, h, z, x, y].every(Number.isFinite) || Math.min(w, h, img.naturalWidth, img.naturalHeight) <= 0 || z < 1 || z > 20 || Math.min(x, y) < 0 || Math.max(x, y) > 1) return fail("invalid crop dimensions");
     if (Number(s.opacity) !== 1 || ["Top", "Right", "Bottom", "Left"].some((side) => parseFloat(s[`padding${side}`]) > 0 || parseFloat(s[`border${side}Width`]) > 0)) return fail("unsupported internal padding, stroke or opacity");
     if (s.transform !== "none" || !["none", "0deg"].includes(s.rotate) || s.transformOrigin !== "0px 0px" || s.position !== "static" || Number(s.zoom) !== 1 || s.filter !== "none" || s.clipPath !== "none" || s.maskImage !== "none") return fail("unsupported internal image CSS");
@@ -428,6 +430,7 @@ property of their respective owners.
     }
     function write(m) {
       const img = session.img;
+      img.style.setProperty("object-fit", "cover", "important");
       img.style.setProperty("--crop-zoom", String(m.zoom));
       img.style.setProperty("--crop-x", `${m.x * 100}%`);
       img.style.setProperty("--crop-y", `${m.y * 100}%`);
@@ -587,14 +590,17 @@ property of their respective owners.
       } };
       S.drag = operation;
     }
-    let zoomBefore = null;
+    let zoomBefore = null, zoomInitial = null;
     function zoom(value, commit = true) {
       if (!session || !canEdit()) return;
-      if (!zoomBefore) zoomBefore = snapshot();
+      if (!zoomBefore) {
+        zoomBefore = snapshot();
+        zoomInitial = measure().m.zoom;
+      }
       const { m } = measure(), z = clamp(Number(value) / 100, 1, 20);
       if (!Number.isFinite(z)) return;
       try {
-        if (z === 1 && !zoomBefore.frame) {
+        if (z === zoomInitial) {
           restore(zoomBefore);
         } else if (Math.abs(z - m.zoom) > 1e-5) {
           migrate();

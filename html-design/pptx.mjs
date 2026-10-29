@@ -105,7 +105,7 @@ export function collectEditableSlide(board) {
       const crop = fit === 'contain' ? null : { l:position[0]*(pw-w)/pw, t:position[1]*(ph-h)/ph, r:(1-position[0])*(pw-w)/pw, b:(1-position[1])*(ph-h)/ph };
       const radius = Math.max(0, rx/box.scale-Math.max(...inset));
       if (!geometry && corners.some(([x,y])=>x>0||y>0)) warnings.push(`${name}: 不统一的图片圆角使用矩形近似`);
-      emit(img, { kind:'image', x:cx-w*box.scale/2, y:cy-h*box.scale/2, w:w*box.scale, h:h*box.scale, rotation:box.rotation, name, source:img.currentSrc||img.src, naturalWidth:img.naturalWidth,naturalHeight:img.naturalHeight, fit:crop?'crop':fit, crop, mask:geometry && radius>0 ? Math.min(.5,radius/Math.min(w,h)) : 0, maskGeometry:geometry === 'ellipse' ? 'ellipse' : 'roundRect', opacity:Number(cs.opacity), href:img.closest('a')?.href });
+      emit(img, { kind:'image', x:cx-w*box.scale/2, y:cy-h*box.scale/2, w:w*box.scale, h:h*box.scale, rotation:box.rotation, name, source:img.currentSrc||img.src, naturalWidth:img.naturalWidth,naturalHeight:img.naturalHeight, fit:crop?'crop':fit, crop, mask:geometry && radius>0 ? Math.min(.5,radius/Math.min(w,h)) : 0, maskGeometry:geometry?.type === 'ellipse' ? 'ellipse' : 'roundRect', opacity:Number(cs.opacity), href:img.closest('a')?.href });
     } else if (el.matches('img')) {
       emit(el, { kind: 'image', ...box, name, source: el.currentSrc || el.src, naturalWidth: el.naturalWidth, naturalHeight: el.naturalHeight, fit: cs.objectFit, opacity: Number(cs.opacity), href: el.closest('a')?.href });
     } else if (el.matches('svg,canvas')) {
