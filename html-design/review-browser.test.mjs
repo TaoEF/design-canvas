@@ -615,35 +615,54 @@ for(const command of ['page-copy','page-delete','rename','page-down'])test(`M02:
 });
 
 const order = page => page.locator('[data-stage]>[data-artboard]').evaluateAll(ns=>ns.map(n=>n.dataset.artboard));
-async function dragThumb(page,id,to,{drop=true}={}){const a=await page.locator(`.thumb[data-page-id=${id}] .frame`).boundingBox(),b=await page.locator(`.thumb[data-page-id=${to}]`).boundingBox();await page.mouse.move(a.x+30,a.y+25);await page.mouse.down();await page.mouse.move(b.x+30,b.y+b.height-4,{steps:8});if(drop)await page.mouse.up();}
+// Drive the editor's pointer-event contract at actual thumbnail coordinates.
+async function dispatchThumbEnd(page,point,type='pointerup'){
+  await page.evaluate(({point,type})=>dispatchEvent(new PointerEvent(type,{bubbles:true,composed:true,cancelable:true,pointerType:'mouse',pointerId:1,isPrimary:true,detail:1,button:0,buttons:0,clientX:point.x,clientY:point.y})),{point,type});
+}
+async function dispatchThumbDrag(page,id,to,{drop=true}={}){
+  const state=await page.evaluate(({id,to})=>{
+    const ui=document.querySelector('html-design-editor').shadowRoot,source=ui.querySelector(`.thumb[data-page-id="${id}"] .thumb-main`),target=ui.querySelector(`.thumb[data-page-id="${to}"]`);
+    source.scrollIntoView({block:'nearest'});
+    const a=source.querySelector('.frame').getBoundingClientRect(),b=target.getBoundingClientRect(),point={x:b.x+b.width/2,y:b.y+b.height/2+Math.min(8,b.height/4)};
+    const pointer={bubbles:true,composed:true,cancelable:true,pointerType:'mouse',pointerId:1,isPrimary:true,detail:1,button:0,buttons:1};
+    source.dispatchEvent(new PointerEvent('pointerdown',{...pointer,clientX:a.x+a.width/2,clientY:a.y+a.height/2}));
+    dispatchEvent(new PointerEvent('pointermove',{...pointer,button:-1,clientX:point.x,clientY:point.y}));
+    const ids=selector=>[...ui.querySelectorAll(selector)].map(n=>n.dataset.pageId);
+    return {point,dragging:ids('.thumb.dragging'),after:ids('.thumb.drop-after'),before:ids('.thumb.drop-before'),status:ui.querySelector('.state-text').textContent};
+  },{id,to});
+  const diagnostic=`thumbnail pointer drag ${id} -> ${to}: ${JSON.stringify(state)}`;
+  assert.deepEqual(state.dragging,[id],diagnostic);assert.deepEqual(state.after,[to],diagnostic);
+  if(drop)await dispatchThumbEnd(page,state.point);
+  return state.point;
+}
 test('M05: viewer drag is visual until drop; cancellation does not acquire or write, and commit waits for lease',async t=>{
   const f=await fixture(t,'page-drag');await f.load();const b=await viewerFor(f,'page-drag');let takes=0,saves=0,takeoverSeen;
   const takeoverRequest=new Promise(resolve=>takeoverSeen=resolve);
   b.on('request',r=>{if(r.url().endsWith('/takeover')){takes++;takeoverSeen(r);}if(r.url().endsWith('/save'))saves++;});
-  await dragThumb(b,'p1','p2',{drop:false});await b.keyboard.press('Escape');await b.mouse.up();assert.deepEqual(await order(b),['p1','p2']);assert.equal(takes,0);assert.equal(saves,0);
-  await dragThumb(b,'p1','p2',{drop:false});await b.evaluate(()=>dispatchEvent(new PointerEvent('pointercancel',{bubbles:true})));await b.mouse.up();assert.deepEqual(await order(b),['p1','p2']);assert.equal(takes,0);
+  const escapeDrop=await dispatchThumbDrag(b,'p1','p2',{drop:false});await b.keyboard.press('Escape');await dispatchThumbEnd(b,escapeDrop);assert.deepEqual(await order(b),['p1','p2']);assert.equal(takes,0);assert.equal(saves,0);
+  const cancelDrop=await dispatchThumbDrag(b,'p1','p2',{drop:false});await dispatchThumbEnd(b,cancelDrop,'pointercancel');await dispatchThumbEnd(b,cancelDrop);assert.deepEqual(await order(b),['p1','p2']);assert.equal(takes,0);
   // Keep the clean owner's lease until explicit close; no hidden heartbeat or held route is needed.
   await f.page.route('**/__html-design/document/yield',route=>route.abort('aborted').catch(()=>{}));
-  await dragThumb(b,'p1','p2');
+  await dispatchThumbDrag(b,'p1','p2');
   const takeover=await within(takeoverRequest).catch(error=>{throw new Error('M05: drop did not request takeover',{cause:error});});
   const response=await within(takeover.response()).catch(error=>{throw new Error('M05: takeover response did not arrive',{cause:error});});
   assert.equal(response?.status(),200);const pending=await response.json();assert.equal(pending.role,'viewer');assert.equal(pending.pending?.mine,true);
   assert.deepEqual(await order(b),['p1','p2']);assert.equal(saves,0);assert.equal(takes,1);
   await f.page.close();
   await b.waitForFunction(()=>document.querySelector('[data-stage]').firstElementChild?.dataset.artboard==='p2');await saved(b);assert.equal(saves,1);assert.equal(await b.locator('.dragging,.drop-before,.drop-after').count(),0);assert.equal(await b.locator('html[data-editing]').count(),0);
-  await dragThumb(b,'p2','p1',{drop:false});
+  const conflictDrop=await dispatchThumbDrag(b,'p2','p1',{drop:false});
   const current=await readFile(f.file,'utf8');
   await writeFile(f.file,current.replace(/(<section data-artboard="p2"[^]*?<\/section>)(<section data-artboard="p1"[^]*?<\/section>)/,'$2$1'));
-  await b.mouse.up();await b.locator('.toast').filter({hasText:/已有更新/}).waitFor();
+  await dispatchThumbEnd(b,conflictDrop);await b.locator('.toast').filter({hasText:/已有更新/}).waitFor();
   await b.waitForFunction(()=>document.querySelector('[data-stage]').firstElementChild?.dataset.artboard==='p1');
   assert.equal(saves,1,'external reordering invalidates the old drop without a second save');
 });
 test('M03/M05: AI pending/lease cancels a preview drag and disables every page write entry',async t=>{
-  const f=await fixture(t,'page-ai');await f.load();await dragThumb(f.page,'p1','p2',{drop:false});
+  const f=await fixture(t,'page-ai');await f.load();const aiDrop=await dispatchThumbDrag(f.page,'p1','p2',{drop:false});
   const ai=await f.call('ai/begin');let ready;
   for(let i=0;i<50;i++){ready=await f.call('ai/status',{token:ai.token});if(ready.ready)break;await f.page.waitForTimeout(100);}
   assert.ok(ready.ready);await f.page.waitForFunction(()=>document.querySelector('html-design-editor').shadowRoot.querySelector('[data-act=page-add]').disabled);
-  await f.page.mouse.up();assert.deepEqual(await order(f.page),['p1','p2']);assert.equal(await f.page.locator('.dragging,.drop-before,.drop-after').count(),0);
+  await dispatchThumbEnd(f.page,aiDrop);assert.deepEqual(await order(f.page),['p1','p2']);assert.equal(await f.page.locator('.dragging,.drop-before,.drop-after').count(),0);
   await pageMenu(f.page,'p1');for(const command of ['page-add','page-copy','page-delete','page-up','page-down'])assert.ok(await f.page.locator(`[data-menu=page] [data-act=${command}]`).isDisabled());
   await f.page.locator('.thumb[data-page-id=p1] .thumb-main').focus();await f.page.keyboard.press('ControlOrMeta+d');assert.equal(await f.page.locator('[data-artboard]').count(),2);
   await f.call('ai/cancel',{token:ai.token});await f.page.waitForFunction(()=>!document.querySelector('html-design-editor').shadowRoot.querySelector('[data-act=page-add]').disabled);
