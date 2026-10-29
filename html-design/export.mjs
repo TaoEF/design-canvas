@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { collectEditableSlide, addEditableSlide, groupEditableSlideXml } from './pptx.mjs';
 import { elementGeometry } from './src/geometry.js';
+import { cropGeometry } from './src/crop-geometry.js';
 
 export function browserOptions() {
   const executablePath = process.env.HTML_DESIGN_CHROME;
@@ -56,7 +57,7 @@ export async function exportDocument({ html, baseUrl, title = 'design', format }
     await page.goto(renderUrl, { waitUntil: 'load', timeout: 45_000 });
     await page.emulateMedia({ media: 'screen', reducedMotion: 'reduce' });
     await page.addStyleTag({ content: RESET });
-    await page.evaluate(`globalThis.__htmlDesignGeometry = ${elementGeometry.toString()}`);
+    await page.evaluate(`globalThis.__htmlDesignGeometry = ${elementGeometry.toString()}; globalThis.__htmlDesignCropGeometry = ${cropGeometry.toString()}`);
     const sizes = await page.evaluate(async () => {
       document.querySelectorAll('[data-artboard] img').forEach(image => { image.loading = 'eager'; });
       await document.fonts.ready;
@@ -126,15 +127,15 @@ export async function exportDocument({ html, baseUrl, title = 'design', format }
       await select(i);
       const slide = pptx.addSlide();
       const data = await slides.nth(i).evaluate(collectEditableSlide);
-      grouping.push({ owners: data.items.map(item => item.groupPath), groups: data.groups });
+      grouping.push({ owners: data.items.map(item => item.groupPath), groups: data.groups, pictures: data.items.map(item => item.crop || item.mask ? {crop:item.crop,mask:item.mask,maskGeometry:item.maskGeometry} : null) });
       await addEditableSlide({ pptx, slide, data, page, board: slides.nth(i), context, scale: first.width / sizes[i].width });
       if (options.onSlideImage) await options.onSlideImage(i, await slides.nth(i).screenshot({ type: 'png', scale: 'device', animations: 'disabled' }));
     }
     let bytes = await pptx.write({ outputType: 'nodebuffer', compression: true });
-    if (grouping.some(plan => plan.groups.length)) {
+    if (grouping.some(plan => plan.groups.length || plan.pictures.some(Boolean))) {
       const zip = await JSZip.loadAsync(bytes);
       for (const [i, plan] of grouping.entries()) {
-        if (!plan.groups.length) continue;
+        if (!plan.groups.length && !plan.pictures.some(Boolean)) continue;
         const file = `ppt/slides/slide${i + 1}.xml`;
         const xml = await zip.file(file).async('string');
         zip.file(file, await page.evaluate(groupEditableSlideXml, { xml, ...plan }));

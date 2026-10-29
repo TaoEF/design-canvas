@@ -87,7 +87,7 @@ body{margin:0;background:#e9e9ec;font-family:var(--font);color:var(--text)}
 - 不要写 `html-design-editor`、`html > *`、`html > :last-child` 这类会选中 `<html>` 直接子元素的选择器。
 - 不要让页面自己隐藏非当前页（比如 `.slide{display:none} .slide.active{display:block}`）。编辑器默认只显示当前页，它会给当前页加上 `data-editor-current` 属性。如果确实需要自己的翻页逻辑，就监听 `editor:goto` 事件。
 - 文字放在 `data-el` 元素里，不要再嵌套 `data-el`。嵌套了 `data-el` 的元素不能直接改字。
-- 图片用 `<img data-el>`，这样才能双击替换、拖动改大小。
+- 图片用 `<img data-el>`，这样才能双击裁切、通过工具条替换、拖动改大小。
 
 ## 5. 脚本规则
 
@@ -126,6 +126,7 @@ AI 经协作 `commit` 后，待审阅页底显示「放弃｜接受」：悬停�
 | 内联 `left/top/width/min-height/height` | 可编辑元素 | 人调整的位置和尺寸，必须保留 |
 | 内联 `font-size/line-height/letter-spacing/word-spacing` | 文字及内部子元素 | 角点缩放或格式工具产生的排版，必须保留 |
 | 内联 `object-fit` | 图片 | `contain` 为 Fit，`cover` 为 Cover，必须保留 |
+| `data-crop-frame="1"` / `data-crop-image` | 外框 / 内部真实图片 | 外框保留原 `data-el`，内部图片保留 id/class/src/alt；不可拆散或给内部图重复加 `data-el` |
 | `data-page-seq / data-element-seq` | 舞台 | 编辑器生成标识的递增计数；删除页面/元素后不回退 |
 
 `data-bbox` 只在保存时更新，是可能过期的粗略线索，不能凭它确认当前重叠、溢出或真实文字排版。当前页面以浏览器 DOM、实际边界和渲染为准。已有实际 DOM 测量时复用结果，不再为同一问题重复调用测量；尚未渲染的纯文本候选可用 Pretext 比较宽度与高度，再由浏览器校验。复杂富文本、Flex/Grid 和不支持的样式回退实测，详见 [文字测量](references/text-measurement.md)。
@@ -170,7 +171,7 @@ AI 经协作 `commit` 后，待审阅页底显示「放弃｜接受」：悬停�
 
 ## 已知限制
 
-当前已提供文字适配、只读文字检查与第一阶段布局 QA（含可靠实际软折行的避首尾检测）；整体 DesignQA、编辑器反馈 UI 和 AI commit 自动 QA 反馈仍在 [Issue #7 规划](https://github.com/TaoEF/dom-slides/issues/7)。Canva 级高级图片裁切、Recharts 图表引擎、调色板与图片色彩语义分析也尚未交付，不能将图片现有的适应/填充描述为高级裁切。
+当前已提供文字适配、只读文字检查与第一阶段布局 QA（含可靠实际软折行的避首尾检测）；整体 DesignQA、编辑器反馈 UI 和 AI commit 自动 QA 反馈仍在 [Issue #7 规划](https://github.com/TaoEF/dom-slides/issues/7)。图片已支持按需迁移的框/图裁切、拖图取景、缩放、框边角调整与可撤销会话；布局、变换及导出限制见[操作参考](references/editor-controls.md)。Recharts 图表引擎、调色板与图片色彩语义分析尚未交付。
 
 - 插入的图片会以 base64 写进 HTML，图片多的话文件会变大。
 - 在“源码”里应用修改时，新加的 `<script>` 不会马上运行，要保存后重新打开。

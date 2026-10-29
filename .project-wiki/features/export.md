@@ -13,6 +13,8 @@ sources:
     status: current
   - path: html-design/pptx.mjs
     status: current
+  - path: html-design/src/crop-geometry.js
+    status: current
   - path: html-design/src/geometry.js
     status: current
   - path: html-design/src/export.js
@@ -63,6 +65,8 @@ PptxGenJS 4 没有公开 addGroup API；生成后以真实 XML 树移动原叶�
 
 原生旋转采用共用elementGeometry的未旋转border-box尺寸×累积uniform scale、实际BCR中心与累积角度；PPTX的rotate为页面方向，组本身仍identity，避免双重旋转。缩放后的字体/行高/字距、CSS padding+border映射文本margin、统一描边/圆角一并缩放，文本框不再额外加2px。图片保留cover/contain取景及实际hyperlink关系。SVG/canvas仍按既有可见截图路径，不把其已栅格化的旋转重复应用。XML回归和PDF/浏览器对照不能替代原生Office人工视觉验收。
 
+裁切 frame 只导出一个原生 pic，内部完整 img 不重复发出；实际 CSS cover/zoom/focus 派生原图 srcRect，使用同一个全源图 relationship。窗口使用局部真实尺寸/中心、累积角度，外框背景描边与 pic 保留语义组合。统一圆角用 XML picture prstGeom=roundRect 和真实 adjustment，不使用 PptxGenJS 的 ellipse rounding 冒充；后处理按叶子顺序对应，不按重复名称匹配。PDF 直接渲染同一两层 DOM。QA 内部裁切 img 仍检查解码，但预期隐藏部分不作为页面越界；外框仍正常检查。
+
 ## Workflows
 
 `node html-design/export-cli.mjs <pptx|pdf> input.html --output result.xxx` 复用同一 exportDocument，无需打开编辑器或常驻服务。输入限定普通文件、最多32MiB，打开前先校验类型，非阻塞/拒绝跟随替换后符号链接的打开配合打开后再校验，避免 FIFO 在检查前阻塞和中断失效；摘要返回实际字节 SHA-256 revision 和绝对输入/输出路径；不写源文件，不自动交接活跃稿。默认随机 loopback 临时只读服务按 realpath 限定输入目录/显式 root，拒绝根外 symlink、隐藏路径与非GET/HEAD；--base-url 只接收 loopback HTTP(S) IP 原稿 URL，使用已有服务且不关闭它。输出独占创建，不覆盖源/已有输出，失败只清理本次拥有的部分文件；finally 关闭临时服务，SIGINT/SIGTERM 通过可选 signal 关闭现有浏览器。具体调用见 references/export-cli.md。
@@ -85,3 +89,5 @@ PptxGenJS 4 没有公开 addGroup API；生成后以真实 XML 树移动原叶�
 ## Open Questions
 
 不承诺复杂 CSS 与 PowerPoint 完全等价；尚无正式分发或兼容性支持矩阵。
+
+裁切标记本身不证明几何可靠。共用cropGeometry读取真实clip、content-box、内图尺寸/方向/均匀scale/object-position/translate与实际中心；QA只在契约成立时豁免内部预期越界，否则报GEOMETRY_UNSUPPORTED并保持不完整覆盖；PPTX拒绝该不可靠裁切而不凭标记伪造srcRect。PDF仍按实际DOM显示。

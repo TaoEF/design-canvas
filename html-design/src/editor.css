@@ -1028,3 +1028,9 @@ button[aria-disabled=true] { opacity:.45; cursor:default; }
 .review-projection { position:absolute; overflow:hidden; pointer-events:none; }
 .review-projection iframe { position:absolute; left:0; top:0; border:0; transform-origin:top left; background:white; pointer-events:none; }
 .review-hint { position:fixed; right:16px; bottom:112px; pointer-events:none; z-index:2147483646; font-size:12px; color:var(--muted); background:var(--paper); padding:6px 10px; border-radius:6px; }
+
+/* Crop controls share the existing compact, neutral editor surface. */
+.crop-source{position:fixed;border:1px dashed #16a878;pointer-events:none;z-index:34;box-sizing:border-box;opacity:.75}
+.crop-panel{position:fixed;z-index:70;width:286px;max-width:calc(100vw - 16px);padding:14px;background:#fff;color:#222;border:1px solid #ddd;border-radius:12px;box-shadow:0 6px 24px #0002;font:13px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;box-sizing:border-box}
+.crop-heading,.crop-controls,.crop-actions{display:flex;align-items:center;gap:8px}.crop-heading{justify-content:space-between;margin-bottom:12px}.crop-heading span{font-size:12px;color:#777}.crop-controls input[type=range]{width:100%;min-width:40px;accent-color:#222}.crop-controls input[type=number]{width:52px;padding:5px;border:1px solid #ddd;border-radius:5px;font:inherit}.crop-actions{justify-content:flex-end;margin-top:12px}.crop-actions button{padding:6px 14px;border:0;border-radius:6px;background:#eee;color:#222;font:inherit;cursor:pointer}.crop-actions .primary{background:#222;color:#fff}
+.crop-controls label,.crop-controls>span{white-space:nowrap;flex:0 0 auto}.crop-controls input[type=range]{width:0;flex:1 1 auto}.crop-actions button:hover{filter:brightness(.95)}.crop-actions button:focus-visible,.crop-controls input:focus-visible{outline:2px solid #1683ff;outline-offset:2px}

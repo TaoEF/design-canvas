@@ -1,3 +1,4 @@
+import { cropGeometry } from './crop-geometry.js';
 // Read-only facts from the prepared document; no prediction or repair is applied.
 import { QA_OUTPUT, usableQaId, appendQaIssue } from './qa-result.js';
 import { elementGeometry } from './geometry.js';
@@ -117,7 +118,10 @@ export async function checkVisualDocument({ boards, candidates, textResult }) {
     if (el.hasAttribute('data-el') && (!usableQaId(el.dataset.el) || idCounts.get(el.dataset.el) !== 1)) { incomplete = true; emit('ID_INVALID', board, el, { kind: 'element', length: el.dataset.el.length }, 'error'); }
     if (!visible(el, board)) { incomplete = true; coverage.elements.hidden++; emit('HIDDEN_CONTENT', board, el); continue; }
     const r = el.getBoundingClientRect(), b = board.getBoundingClientRect();
-    if (r.left < b.left - 1 || r.top < b.top - 1 || r.right > b.right + 1 || r.bottom > b.bottom + 1)
+    const cropMarked = el.matches('img[data-crop-image]') && el.parentElement?.matches('[data-crop-frame="1"]');
+    const cropFact = cropMarked && cropGeometry(el.parentElement, elementGeometry), cropInternal = cropFact?.supported;
+    if (cropMarked && !cropInternal) { incomplete = true; coverage.elements.unsupported++; emit('GEOMETRY_UNSUPPORTED', board, el.parentElement, { reason: cropFact.reason }); }
+    if (!cropInternal && (r.left < b.left - 1 || r.top < b.top - 1 || r.right > b.right + 1 || r.bottom > b.bottom + 1))
       emit('ELEMENT_OUT_OF_BOUNDS', board, el, { box: box(r, b), page: { width: round(b.width), height: round(b.height) } });
     if (!simpleGeometry(el, board) && !elementGeometry(el).supported) { incomplete = true; coverage.elements.unsupported++; emit('GEOMETRY_UNSUPPORTED', board, el); }
     else coverage.elements.checked++;

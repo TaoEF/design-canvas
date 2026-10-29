@@ -1,3 +1,4 @@
+import { createCrop, cropImage } from './crop.js';
 import { toolbarHTML } from "./ui.js";
 import { createExporter } from "./export.js";
 import { createPersistence } from "./persistence.js";
@@ -22,7 +23,7 @@ import {
   if (window.__htmlDesignEditor) return;
   window.__htmlDesignEditor = true;
 
-  const MEDIA = "img,video,canvas,svg,iframe,picture";
+  const MEDIA = 'img,video,canvas,svg,iframe,picture,[data-crop-frame]';
   const HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
   const SKIP_ATTR = /^(contenteditable|data-editor-current)$/; // 编辑器临时属性：不进撤销、不触发缩略图刷新
 
@@ -111,6 +112,7 @@ import {
     const selectionOverlay = createSelectionOverlay(ui);
     const textLayout = createTextLayout({ ui });
     let layoutRequest = 0, layoutTimer;
+    const crop = createCrop({ S, ui, select, draw: drawSel, sync: syncBar, push, toast, getPos, setPos, canEdit: () => S.editing && !S.playing && !!persistence?.canEdit() });
 
     /* ---------- 工具函数 ---------- */
     let focusedBeforeModal = null;
@@ -203,6 +205,7 @@ import {
       commit(b, board);
     }
     function history(dir) {
+      if (crop.active) return crop.history(dir);
       endText();
       const from = dir < 0 ? S.undo : S.redo,
         to = dir < 0 ? S.redo : S.undo,
@@ -229,6 +232,7 @@ import {
       });
     }
     function removeEl(el) {
+      crop.finish();
       const nodes = S.selection.includes(el)
         ? selectionRoots(S.selection)
         : [el];
@@ -335,8 +339,8 @@ import {
       ta.readOnly = !writable;
       $("[data-act=flow]").setAttribute("aria-pressed", !isArtboard(b));
       $("[data-act=artboard]").setAttribute("aria-pressed", isArtboard(b));
-      $("[data-act=undo]").disabled = !writable || !S.undo.length;
-      $("[data-act=redo]").disabled = !writable || !S.redo.length;
+      $("[data-act=undo]").disabled = !writable || !(crop.active ? crop.canUndo : S.undo.length);
+      $("[data-act=redo]").disabled = !writable || !(crop.active ? crop.canRedo : S.redo.length);
       [
         "flow",
         "artboard",
@@ -498,6 +502,7 @@ import {
 
     /* ---------- 选中 / 拖动 / 改大小 ---------- */
     function select(el, keepDrag = false) {
+      if (crop.active && !crop.owns(el)) crop.finish();
       const nodes = selectionRoots(Array.isArray(el) ? el : el ? [el] : []);
       if (
         nodes.length !== S.selection.length ||
@@ -515,6 +520,7 @@ import {
       syncBar();
     }
     function drawSel() {
+      crop.refresh();
       guides.refresh();
       S.selection = selectionRoots(S.selection).filter((n) => visible(n));
       S.sel = S.selection.at(-1) || null;
@@ -669,7 +675,7 @@ import {
       if (!initial.supported) return toast('这种变换暂不支持拖动、缩放或旋转');
       const media = el.matches(MEDIA), text = !media && !el.querySelector('[data-el],img,svg,canvas,video,iframe') && !!el.textContent.trim();
       const metrics = text && dir.length === 2 ? textMetrics(el) : null;
-      const before = snap(metrics ? metrics.map(m => m.node) : [el]);
+      const before = snap(metrics ? metrics.map(m => m.node) : cropImage(el) && el !== cropImage(el) ? [el, cropImage(el)] : [el]);
       const hp = media || el.style.height ? 'height' : 'minHeight';
       const x0 = e.clientX, y0 = e.clientY;
       let g = initial, p = getPos(el), anchor, moved = false;
@@ -698,7 +704,7 @@ import {
           }
           el.style.boxSizing = 'border-box'; el.style.maxWidth = 'none';
           if (dir !== 'n' && dir !== 's') el.style.width = Math.round(Math.max(8, w) * 1000) / 1000 + 'px';
-          if (dir !== 'e' && dir !== 'w') el.style[hp] = Math.round(Math.max(8, h) * 1000) / 1000 + 'px';
+          if (dir !== 'e' && dir !== 'w') { el.style[hp] = Math.round(Math.max(8, h) * 1000) / 1000 + 'px'; if (el.matches('[data-crop-frame]')) cropImage(el).style.setProperty('height','100%','important'); }
           setPos(el, p, p.x, p.y);
           const now = elementGeometry(el), current = resizeAnchor(now, dir);
           const d = inverseDelta(now.parent, anchor.x - current.x, anchor.y - current.y);
@@ -767,6 +773,7 @@ import {
       S.drag = operation;
     }
     function positionRotation() {
+      if (crop.active) { $('.rotate-handle').hidden = true; $('.rotation-feedback').hidden = true; return; }
       const button = $('.rotate-handle'), feedback = $('.rotation-feedback');
       const show = S.editing && !S.playing && !S.text && S.sel && S.selection.every(n => elementGeometry(n).supported);
       button.hidden = !show; feedback.hidden = !show || !S.drag?.rotation;
@@ -783,6 +790,7 @@ import {
       if (ui.activeElement !== $('.rotation-angle') && S.selection.length === 1) $('.rotation-angle').value = degrees;
     }
     function nudge(el, k, n) {
+      crop.finish();
       const nodes = S.selection.includes(el)
         ? selectionRoots(S.selection)
         : [el];
@@ -803,6 +811,7 @@ import {
       drawSel();
     }
     function duplicate(el) {
+      crop.finish();
       const b = el.closest("[data-artboard]");
       const nodes = S.selection.includes(el)
         ? selectionRoots(S.selection)
@@ -926,7 +935,8 @@ import {
       probe.src = src;
     }
     function pickReplace(img) {
-      S.replace = img;
+      crop.finish();
+      S.replace = cropImage(img);
       fileIn.click();
     }
     fileIn.addEventListener("change", () => {
@@ -936,21 +946,16 @@ import {
         target = S.replace;
       fileIn.value = "";
       S.replace = null;
-      if (target)
-        files[0] &&
-          readFile(
-            files[0],
-            (src) =>
-              persistence?.canEdit() &&
-              record(
-                [target],
-                () => {
-                  target.src = src;
-                  target.removeAttribute("srcset");
-                },
-                target.closest("[data-artboard]"),
-              ),
-          );
+      if (target) files[0] && readFile(files[0], src => {
+        const probe = new Image();
+        probe.onload = () => {
+          if (!persistence?.canEdit() || !S.editing || !target.isConnected) return;
+          record([target], () => { target.src = src; target.removeAttribute('srcset');
+            if (target.hasAttribute('data-crop-image')) { target.style.setProperty('--crop-zoom','1'); target.style.setProperty('--crop-x','50%'); target.style.setProperty('--crop-y','50%'); target.style.setProperty('object-fit','cover','important'); }
+          }, target.closest('[data-artboard]')); drawSel();
+        };
+        probe.onerror = () => toast('图片无法读取，已保留原图'); probe.src = src;
+      });
       else files.forEach((f) => readFile(f, addImage));
     });
 
@@ -1119,7 +1124,7 @@ import {
     }
     function placeTbar() {
       const el = S.sel,
-        show = S.editing && !S.playing && el?.isConnected && visible(el);
+        show = S.editing && !S.playing && !crop.active && el?.isConnected && visible(el);
       tbar.hidden = !show;
       if (!show) {
         $("[data-menu=text-layout]").hidden = true;
@@ -1138,7 +1143,7 @@ import {
       $(".selection-count").textContent = multi
         ? `已选 ${S.selection.length} 个元素`
         : "";
-      const image = !multi && el.matches("img"),
+      const image = !multi && !!cropImage(el),
         text =
           !multi &&
           !el.matches(MEDIA) &&
@@ -1148,7 +1153,7 @@ import {
       $(".more-text-section").hidden = !text;
       $(".image-tools").hidden = !image;
       if (image) {
-        const fit = getComputedStyle(el).objectFit;
+        const fit = getComputedStyle(cropImage(el)).objectFit;
         $("[data-act=image-fit]").setAttribute(
           "aria-pressed",
           fit === "contain" || fit === "scale-down",
@@ -1202,6 +1207,8 @@ import {
         if (reviewUI?.key(e)) return;
         if (fromUI(e) && ui.activeElement?.matches('.rotate-handle') && ['ArrowLeft','ArrowRight','Enter',' '].includes(e.key)) return;
         if (S.playing) return;
+        if (crop.active && (e.ctrlKey || e.metaKey) && ['z','y'].includes(e.key.toLowerCase())) { e.preventDefault(); e.stopImmediatePropagation(); ui.activeElement?.blur(); crop.history(e.key.toLowerCase() === 'y' || e.shiftKey ? 1 : -1); return; }
+        if (crop.active && e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); ui.activeElement?.blur(); crop.finish(); return; }
         if (fromUI(e) && pages.key(e)) return;
         if (
           fromUI(e) &&
@@ -1217,6 +1224,7 @@ import {
             ui.activeElement?.matches("[aria-expanded=true]"))
         )
           return;
+        if (crop.active && e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); crop.finish(true); return; }
         if (e.key === "Escape" && S.drag?.cancel) {
           S.drag.cancel();
           S.drag = null;
@@ -1294,7 +1302,7 @@ import {
         } else if (mod && k === "d" && can) duplicate(el);
         else if ((k === "delete" || k === "backspace") && can) removeEl(el);
         else if (k === "enter" && can && S.selection.length === 1)
-          el.matches("img") ? pickReplace(el) : startText(el);
+          cropImage(el) ? crop.start(el) : startText(el);
         else if (k.startsWith("arrow") && can && !mod)
           nudge(el, k, e.shiftKey ? 10 : 1);
         else if (
@@ -1390,7 +1398,7 @@ import {
           return;
         }
         if (!S.selection.includes(el)) select(el);
-        if (e.button === 0) startDrag(e, el);
+        if (e.button === 0) { if (crop.active && crop.owns(el)) crop.gesture(e); else startDrag(e, el); }
       },
       true,
     );
@@ -1433,8 +1441,8 @@ import {
             if (e.shiftKey || e.ctrlKey || e.metaKey) return;
             const el = e.target.closest("[data-el]");
             if (el) select(el);
-            el?.matches("img")
-              ? pickReplace(el)
+            cropImage(el)
+              ? crop.start(el)
               : startText(el, e.clientX, e.clientY);
           }
         },
@@ -1495,7 +1503,7 @@ import {
       const h = e.target.closest?.("[data-h]");
       if (h && S.sel && S.editing) {
         e.preventDefault();
-        startResize(e, h.dataset.h);
+        if (crop.active) crop.gesture(e, h.dataset.h); else startResize(e, h.dataset.h);
       }
     });
     function closeMenus() {
@@ -1527,21 +1535,7 @@ import {
       panel.style.top =
         Math.max(8, Math.min(innerHeight - panel.offsetHeight - 8, y)) + "px";
     }
-    function imageFit(value) {
-      const el = S.sel;
-      if (!el?.matches("img")) return;
-      record(
-        [el],
-        () => {
-          const cs = getComputedStyle(el);
-          el.style.width = cs.width;
-          el.style.height = cs.height;
-          el.style.objectFit = value;
-        },
-        el.closest("[data-artboard]"),
-      );
-      drawSel();
-    }
+    function imageFit(value) { crop.finish(); crop.reset(S.sel, value); }
     function layer(front) {
       const el = S.sel;
       if (!el) return;
@@ -1655,6 +1649,9 @@ import {
       "page-up": () => pages.moveStep(-1),
       "page-down": () => pages.moveStep(1),
       "image-replace": () => pickReplace(S.sel),
+      "image-crop": () => { endText(); crop.start(S.sel); },
+      "crop-done": () => crop.finish(),
+      "crop-cancel": () => crop.finish(true),
       "image-fit": () => imageFit("contain"),
       "image-cover": () => imageFit("cover"),
       "text-align": () => {
@@ -1726,6 +1723,7 @@ import {
       "image-replace",
       "image-fit",
       "image-cover",
+      "image-crop", "crop-done", "crop-cancel",
       "text-height",
       "text-fit",
       "text-align",
@@ -1754,6 +1752,7 @@ import {
         (!persistence?.canEdit() || !S.editing || S.playing)
       )
         return;
+      if (crop.active && !["crop-done", "crop-cancel", "undo", "redo", "image-crop", "zoom-in", "zoom-out", "zoom-reset", "zoom-fit"].includes(act)) crop.finish();
       ACTS[act]?.(btn);
     });
     ui.addEventListener("keydown", (e) => {
@@ -1911,7 +1910,7 @@ import {
     function goTo(b) {
       const list = boards(),
         i = list.indexOf(b);
-      endText();
+      crop.finish(); endText();
       if (S.sel && (!b || !b.contains(S.sel))) select(null);
       setCurrent(i >= 0 ? b : list[0] || null);
       if (S.current)
@@ -2068,9 +2067,10 @@ import {
       );
     }
     function serialize(finish = true) {
-      if (finish) endText();
+      if (finish) { crop.finish(); endText(); }
       measure();
       const doc = root.cloneNode(true);
+      if (!finish) crop.cleanClone(doc);
       doc
         .querySelectorAll(
           "[data-editor-ui], [data-editor-connection], style[data-editor-style], #codex-browser-sidebar-comments-root",
@@ -2099,7 +2099,7 @@ import {
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     }
     function save() {
-      endText();
+      crop.finish(); endText();
       persistence.save();
     }
     const exportFile = createExporter({
@@ -2110,7 +2110,7 @@ import {
       fileName,
     });
     addEventListener("beforeunload", (e) => {
-      if (S.changed || sourcePending() || pages.hasPendingRename()) {
+      if (S.changed || crop.active || sourcePending() || pages.hasPendingRename()) {
         e.preventDefault();
         e.returnValue = "";
       }
@@ -2146,7 +2146,7 @@ import {
       changed: (value) => {
         S.changed = value;
       },
-      isBusy: () => !!S.drag || sourcePending(),
+      isBusy: () => !!S.drag || crop.active || sourcePending(),
       hasPendingSource: () => sourcePending() || pages.hasPendingRename(),
       pause() {
         if (sourcePending() || pages.hasPendingRename()) return false;

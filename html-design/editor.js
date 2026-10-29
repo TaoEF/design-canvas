@@ -274,8 +274,406 @@ All trademarks and registered trademarks mentioned herein are the
 property of their respective owners.
  */
 (() => {
+  // html-design/src/crop-geometry.js
+  function cropGeometry(frame, geometry) {
+    const img = frame?.querySelector(":scope > img[data-crop-image]");
+    const fail = (reason) => ({ supported: false, reason });
+    if (!frame?.matches('[data-crop-frame="1"]') || !img) return fail("invalid crop structure");
+    const cs = getComputedStyle(frame), s = getComputedStyle(img), g = geometry(frame), inner = geometry(img);
+    if (cs.filter !== "none" || cs.clipPath !== "none" || cs.maskImage !== "none") return fail("unsupported frame clip or effect");
+    if (!g.supported || !inner.supported) return fail("unsupported crop transform");
+    if (!["clip", "hidden"].includes(cs.overflowX) || !["clip", "hidden"].includes(cs.overflowY)) return fail("crop frame does not clip");
+    const insets = ["Left", "Top", "Right", "Bottom"].map((side) => (parseFloat(cs[`border${side}Width`]) || 0) + (parseFloat(cs[`padding${side}`]) || 0));
+    if (["Top", "Right", "Bottom", "Left"].some((side) => parseFloat(cs[`padding${side}`]) > 0) && (cs.overflowClipMargin !== "content-box" || cs.overflowX !== "clip" || cs.overflowY !== "clip")) return fail("unsupported padded crop clip");
+    const w = g.w - insets[0] - insets[2], h = g.h - insets[1] - insets[3], z = Number(s.scale), position = s.objectPosition.split(/\s+/);
+    if (!["cover", "contain"].includes(s.objectFit) || position.length !== 2 || position.some((v) => !/^[-\d.]+%$/.test(v))) return fail("unsupported image fit or position");
+    const [x, y] = position.map((v) => parseFloat(v) / 100);
+    if (![w, h, z, x, y].every(Number.isFinite) || Math.min(w, h, img.naturalWidth, img.naturalHeight) <= 0 || z < 1 || z > 20 || Math.min(x, y) < 0 || Math.max(x, y) > 1) return fail("invalid crop dimensions");
+    if (Number(s.opacity) !== 1 || ["Top", "Right", "Bottom", "Left"].some((side) => parseFloat(s[`padding${side}`]) > 0 || parseFloat(s[`border${side}Width`]) > 0)) return fail("unsupported internal padding, stroke or opacity");
+    if (s.transform !== "none" || !["none", "0deg"].includes(s.rotate) || s.transformOrigin !== "0px 0px" || s.position !== "static" || Number(s.zoom) !== 1 || s.filter !== "none" || s.clipPath !== "none" || s.maskImage !== "none") return fail("unsupported internal image CSS");
+    if (Math.abs(inner.w - w) > 0.1 || Math.abs(inner.h - h) > 0.1 || Math.abs(inner.scale / g.scale - z) > 1e-3 || Math.abs(inner.angle - g.angle) > 1e-3) return fail("image viewport differs from crop content box");
+    const translate = s.translate === "none" ? ["0px", "0px"] : s.translate.split(/\s+/);
+    const value = (v, size) => v?.endsWith("%") ? parseFloat(v) * size / 100 : v?.endsWith("px") ? parseFloat(v) : NaN;
+    const tx = value(translate[0], w), ty = value(translate[1] || "0px", h);
+    if (!Number.isFinite(tx + ty) || Math.abs(tx + x * (z - 1) * w) > 0.1 || Math.abs(ty + y * (z - 1) * h) > 0.1) return fail("image translation differs from crop focus");
+    const ox = insets[0] - g.w / 2, oy = insets[1] - g.h / 2;
+    const expectedX = g.cx + g.matrix.a * ox + g.matrix.c * oy + g.matrix.a * (tx + z * w / 2) + g.matrix.c * (ty + z * h / 2);
+    const expectedY = g.cy + g.matrix.b * ox + g.matrix.d * oy + g.matrix.b * (tx + z * w / 2) + g.matrix.d * (ty + z * h / 2);
+    if (Math.abs(inner.cx - expectedX) > 0.2 || Math.abs(inner.cy - expectedY) > 0.2) return fail("image offset differs from crop content box");
+    return { supported: true, w, h, z, x, y, insets };
+  }
+
+  // html-design/src/geometry.js
+  function elementGeometry(el) {
+    const number2 = (value) => parseFloat(value) || 0;
+    const angleValue = (value) => {
+      if (value === "none") return 0;
+      const parts = value.trim().split(/\s+/), angle = parts.pop();
+      if (parts.length && parts.join(" ") !== "z" && parts.join(" ") !== "0 0 1") return NaN;
+      const n = parseFloat(angle);
+      return angle.endsWith("rad") && !angle.endsWith("grad") ? n * 180 / Math.PI : angle.endsWith("grad") ? n * 0.9 : angle.endsWith("turn") ? n * 360 : n;
+    };
+    const cs = getComputedStyle(el), r = el.getBoundingClientRect();
+    const chain = [];
+    for (let n = el; n; n = n.parentElement) chain.unshift(n);
+    let matrix = new DOMMatrix(), parent = matrix, supported = true;
+    for (const n of chain) {
+      const s = getComputedStyle(n), t = new DOMMatrix(s.transform), angle = angleValue(s.rotate);
+      const scales = s.scale === "none" ? [1, 1] : s.scale.split(/\s+/).map(Number);
+      if (scales.length === 1) scales.push(scales[0]);
+      const x = Math.hypot(t.a, t.b), y = Math.hypot(t.c, t.d), tolerance = 1e-4 * Math.max(1, x * y);
+      if (!t.is2D || t.a * t.d - t.b * t.c <= 0 || x < 1e-6 || Math.abs(x - y) > 1e-4 * Math.max(x, y) || Math.abs(t.a * t.c + t.b * t.d) > tolerance || !Number.isFinite(angle) || scales.length !== 2 || scales[0] <= 0 || Math.abs(scales[0] - scales[1]) > 1e-4 || s.perspective !== "none" || s.offsetPath !== "none") supported = false;
+      const zoom = Number(s.zoom) || 1;
+      if (n === el) parent = matrix.scale(zoom);
+      if (s.display !== "inline" || n.matches("img,svg,canvas,video,iframe")) {
+        matrix = matrix.rotate(Number.isFinite(angle) ? angle : 0).scale(scales[0] || 1).multiply(new DOMMatrix([t.a, t.b, t.c, t.d, 0, 0]));
+      }
+      matrix = matrix.scale(zoom);
+    }
+    const scale = Math.hypot(matrix.a, matrix.b);
+    const border = (axis) => {
+      const sides = axis === "width" ? ["Left", "Right"] : ["Top", "Bottom"];
+      const value = parseFloat(cs[axis]);
+      return Number.isFinite(value) ? value + (cs.boxSizing === "border-box" ? 0 : sides.reduce((sum, side) => sum + number2(cs[`padding${side}`]) + number2(cs[`border${side}Width`]), 0)) : NaN;
+    };
+    const inline = cs.display === "inline" && !el.matches("img,svg,canvas,video,iframe");
+    const w = inline ? r.width / scale : border("width"), h = inline ? r.height / scale : border("height");
+    if (!scale || !Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0 || inline && el.getClientRects().length > 1) supported = false;
+    const plain = (m) => ({ a: m.a, b: m.b, c: m.c, d: m.d });
+    return {
+      supported,
+      inline,
+      w,
+      h,
+      cx: (r.left + r.right) / 2,
+      cy: (r.top + r.bottom) / 2,
+      scale,
+      angle: Math.atan2(matrix.b, matrix.a) * 180 / Math.PI,
+      individual: angleValue(cs.rotate),
+      matrix: plain(matrix),
+      parent: plain(parent)
+    };
+  }
+  function inverseDelta(matrix, x, y) {
+    const d = matrix.a * matrix.d - matrix.b * matrix.c;
+    return { x: (matrix.d * x - matrix.c * y) / d, y: (matrix.a * y - matrix.b * x) / d };
+  }
+  function mappedDelta(matrix, x, y) {
+    return { x: matrix.a * x + matrix.c * y, y: matrix.b * x + matrix.d * y };
+  }
+  var normalizedAngle = (angle) => ((angle + 180) % 360 + 360) % 360 - 180;
+  function snappedAngle(angle, event) {
+    if (event.altKey) return angle;
+    if (event.shiftKey) return Math.round(angle / 15) * 15;
+    const nearest = Math.round(angle / 90) * 90;
+    return Math.abs(nearest - angle) <= 3 ? nearest : angle;
+  }
+
+  // html-design/src/crop.js
+  var cropImage = (el) => el?.matches('[data-crop-frame="1"]') ? el.querySelector(":scope > img[data-crop-image]") : el?.matches("img") ? el : null;
+  var clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+  function cropModel(w, h, nw, nh, zoom = 1, x = 0.5, y = 0.5) {
+    if (![w, h, nw, nh, zoom, x, y].every(Number.isFinite) || Math.min(w, h, nw, nh) <= 0) throw new Error("图片或裁切尺寸无效");
+    zoom = clamp(zoom, 1, 20);
+    x = clamp(x, 0, 1);
+    y = clamp(y, 0, 1);
+    const k = Math.max(w / nw, h / nh) * zoom, pw = nw * k, ph = nh * k;
+    return { w, h, nw, nh, zoom, x, y, pw, ph, left: -x * (pw - w), top: -y * (ph - h) };
+  }
+  function cropPan(m, dx, dy) {
+    return cropModel(m.w, m.h, m.nw, m.nh, m.zoom, m.pw > m.w + 1e-3 ? -(m.left + dx) / (m.pw - m.w) : 0.5, m.ph > m.h + 1e-3 ? -(m.top + dy) / (m.ph - m.h) : 0.5);
+  }
+  function cropResize(m, w, h, dx, dy) {
+    const k = Math.max(m.pw / m.nw, w / m.nw, h / m.nh), pw = k * m.nw, ph = k * m.nh;
+    return cropModel(w, h, m.nw, m.nh, k / Math.max(w / m.nw, h / m.nh), pw > w + 1e-3 ? -(m.left - dx) / (pw - w) : 0.5, ph > h + 1e-3 ? -(m.top - dy) / (ph - h) : 0.5);
+  }
+  var attrs = (n) => [...n.attributes].filter((a) => !/^(data-editor-current|contenteditable)$/.test(a.name)).map((a) => [a.name, a.value]);
+  var restoreAttrs = (n, list) => {
+    for (const a of [...n.attributes]) n.removeAttribute(a.name);
+    for (const [k, v] of list) n.setAttribute(k, v);
+  };
+  var props = `display position inset top right bottom left width height min-width min-height max-width max-height box-sizing margin-top margin-right margin-bottom margin-left padding-top padding-right padding-bottom padding-left border-top border-right border-bottom border-left border-top-left-radius border-top-right-radius border-bottom-left-radius border-bottom-right-radius background-color box-shadow opacity transform transform-origin translate rotate scale zoom z-index order flex-grow flex-shrink flex-basis align-self justify-self grid-column-start grid-column-end grid-row-start grid-row-end vertical-align float clear aspect-ratio`.split(" ");
+  function createCrop({ S, ui, select, draw, sync, push, toast, getPos, setPos, canEdit }) {
+    const $ = (s) => ui.querySelector(s), panel = $(".crop-panel"), outline = $(".crop-source");
+    let session = null;
+    const target = () => session?.frame || session?.img;
+    function snapshot() {
+      return { frame: session.frame, ia: attrs(session.img), fa: session.frame && attrs(session.frame) };
+    }
+    function restore(s) {
+      const img = session.img, current = session.frame;
+      if (!s.frame) {
+        if (current) {
+          current.before(img);
+          current.remove();
+        }
+        restoreAttrs(img, s.ia);
+      } else {
+        if (!s.frame.isConnected) img.before(s.frame);
+        s.frame.replaceChildren(img);
+        restoreAttrs(img, s.ia);
+        restoreAttrs(s.frame, s.fa);
+      }
+      session.frame = s.frame;
+      select(target(), true);
+      refresh();
+    }
+    const same = (a, b) => JSON.stringify([a.ia, a.fa]) === JSON.stringify([b.ia, b.fa]);
+    function measure() {
+      const n = target(), img = session.img, c = getComputedStyle(n), g = elementGeometry(n);
+      const inset = ["Left", "Top", "Right", "Bottom"].map((s) => (parseFloat(c[`border${s}Width`]) || 0) + (parseFloat(c[`padding${s}`]) || 0));
+      const w = g.w - inset[0] - inset[2], h = g.h - inset[1] - inset[3], cs = getComputedStyle(img);
+      const p = cs.objectPosition.split(/\s+/).map((v) => parseFloat(v) / 100);
+      return { g, inset, m: cropModel(w, h, img.naturalWidth, img.naturalHeight, session.frame ? parseFloat(cs.scale) || 1 : 1, session.frame ? p[0] : 0.5, session.frame ? p[1] : 0.5) };
+    }
+    function write(m) {
+      const img = session.img;
+      img.style.setProperty("--crop-zoom", String(m.zoom));
+      img.style.setProperty("--crop-x", `${m.x * 100}%`);
+      img.style.setProperty("--crop-y", `${m.y * 100}%`);
+    }
+    function migrate() {
+      if (session.frame) return;
+      const img = session.img, g = elementGeometry(img), c = getComputedStyle(img), map = img.computedStyleMap?.();
+      if (!map || !g.supported || map.get("width")?.toString() === "auto" && c.position === "absolute" && c.left !== "auto" && c.right !== "auto" || !CSS.supports("overflow-clip-margin", "content-box") || img.closest("picture") || c.filter !== "none" || c.clipPath !== "none" || c.maskImage !== "none" || c.content !== "normal") throw new Error("此图片的 CSS 暂不支持安全裁切，已保留原样");
+      const peers = [...img.closest("[data-artboard]").querySelectorAll("[data-el]")], boxes = peers.map((n) => n.getBoundingClientRect());
+      const before = attrs(img), frame = document.createElement("span");
+      for (const k of props) frame.style.setProperty(k, map.get(k)?.toString() || c.getPropertyValue(k), "important");
+      if (c.display === "inline") frame.style.setProperty("display", "inline-block", "important");
+      if (map.get("width")?.toString() === "auto") frame.style.setProperty("width", `${g.w - (c.boxSizing === "border-box" ? 0 : parseFloat(c.paddingLeft) + parseFloat(c.paddingRight) + parseFloat(c.borderLeftWidth) + parseFloat(c.borderRightWidth))}px`, "important");
+      frame.dataset.cropFrame = "1";
+      frame.dataset.el = img.dataset.el;
+      frame.style.setProperty("overflow", "clip", "important");
+      frame.style.setProperty("overflow-clip-margin", "content-box", "important");
+      const autoHeight = map.get("height")?.toString() === "auto";
+      img.before(frame);
+      frame.append(img);
+      session.frame = frame;
+      img.removeAttribute("data-el");
+      img.setAttribute("data-crop-image", "");
+      const resets = { display: "block", position: "static", width: "100%", height: autoHeight ? "auto" : "100%", minWidth: "0", minHeight: "0", maxWidth: "none", maxHeight: "none", margin: "0", padding: "0", border: "0", borderRadius: "0", boxShadow: "none", background: "none", opacity: "1", transform: "none", transformOrigin: "0 0", rotate: "none", zoom: "1", aspectRatio: "auto", objectFit: "cover", objectPosition: "var(--crop-x) var(--crop-y)", scale: "var(--crop-zoom)", translate: "calc(var(--crop-x) * (1 - var(--crop-zoom))) calc(var(--crop-y) * (1 - var(--crop-zoom)))" };
+      for (const [key, value] of Object.entries(resets)) img.style.setProperty(key.replace(/[A-Z]/g, (x) => "-" + x.toLowerCase()), value, "important");
+      img.style.setProperty("--crop-zoom", "1");
+      img.style.setProperty("--crop-x", "50%");
+      img.style.setProperty("--crop-y", "50%");
+      const after = peers.map((n) => n === img ? frame.getBoundingClientRect() : n.getBoundingClientRect());
+      const valid = after.every((r, i) => ["x", "y", "width", "height"].every((k) => Math.abs(r[k] - boxes[i][k]) < 0.6)) && cropGeometry(frame, elementGeometry).supported;
+      if (!valid) {
+        frame.before(img);
+        frame.remove();
+        restoreAttrs(img, before);
+        session.frame = null;
+        throw new Error("此图片布局无法无损转换，已保留原样");
+      }
+      session.frame = frame;
+      select(frame, true);
+    }
+    function add(before) {
+      const after = snapshot();
+      if (same(before, after)) return;
+      session.undo.push({ before, after });
+      session.redo = [];
+      sync();
+    }
+    function start(el) {
+      if (!canEdit() || session) return;
+      const img = cropImage(el);
+      if (!img || !img.complete || !img.naturalWidth) return toast("图片尚未加载，暂不能裁切");
+      const g = elementGeometry(el);
+      if (el !== img && !cropGeometry(el, elementGeometry).supported) return toast("现有裁切 CSS 不可靠，请先检查图片框样式");
+      if (!g.supported) return toast("此图片变换暂不支持安全裁切");
+      session = { img, frame: el === img ? null : el, undo: [], redo: [], board: el.closest("[data-artboard]") };
+      S.crop = true;
+      session.entry = snapshot();
+      try {
+        measure();
+      } catch {
+        session = null;
+        S.crop = false;
+        return toast("图片的裁切尺寸无效，已保留原样");
+      }
+      select(el, true);
+      refresh();
+      sync();
+    }
+    function finish(cancel = false) {
+      if (!session) return;
+      if (!cancel && ui.activeElement === $(".crop-zoom-value")) ui.activeElement.blur();
+      if (zoomBefore) {
+        add(zoomBefore);
+        zoomBefore = null;
+      }
+      if (S.drag?.kind === "crop") {
+        const d = S.drag;
+        S.drag = null;
+        cancel ? d.cancel() : d.up();
+      }
+      if (cancel) restore(session.entry);
+      const old = session;
+      session = null;
+      S.crop = false;
+      panel.hidden = outline.hidden = true;
+      if (!cancel) for (const cmd of old.undo) {
+        const replay = (value) => {
+          session = { ...old, frame: old.img.closest('[data-crop-frame="1"]') };
+          restore(value);
+          session = null;
+          panel.hidden = outline.hidden = true;
+        };
+        push({ undo: () => replay(cmd.before), redo: () => replay(cmd.after), board: old.board });
+      }
+      draw();
+      sync();
+    }
+    function refresh() {
+      if (!session) return;
+      panel.hidden = false;
+      const { m, g, inset } = measure();
+      $(".crop-zoom").value = String(Math.round(m.zoom * 100));
+      $(".crop-zoom-value").value = String(Math.round(m.zoom * 100));
+      const at = target().getBoundingClientRect();
+      panel.style.left = `${clamp(at.left, 8, Math.max(8, innerWidth - panel.offsetWidth - 8))}px`;
+      panel.style.top = `${clamp(at.bottom + 12, 8, innerHeight - panel.offsetHeight - 12)}px`;
+      const d = mappedDelta(g.matrix, inset[0] - g.w / 2 + m.left + m.pw / 2, inset[1] - g.h / 2 + m.top + m.ph / 2);
+      Object.assign(outline.style, { left: `${g.cx + d.x - m.pw * g.scale / 2}px`, top: `${g.cy + d.y - m.ph * g.scale / 2}px`, width: `${m.pw * g.scale}px`, height: `${m.ph * g.scale}px`, transform: `rotate(${g.angle}deg)` });
+      outline.hidden = false;
+    }
+    function gesture(e, dir) {
+      if (!session || !canEdit()) return;
+      const before = snapshot(), { m, g, inset } = measure(), pos = getPos(target()), start2 = { x: e.clientX, y: e.clientY };
+      let changed = false;
+      const operation = { kind: "crop", move(ev) {
+        const delta = inverseDelta(g.matrix, ev.clientX - start2.x, ev.clientY - start2.y);
+        let m2, dx = 0, dy = 0;
+        if (!dir) m2 = cropPan(m, delta.x, delta.y);
+        else {
+          const w = Math.max(16, m.w + (dir.includes("e") ? delta.x : dir.includes("w") ? -delta.x : 0)), h = Math.max(16, m.h + (dir.includes("s") ? delta.y : dir.includes("n") ? -delta.y : 0));
+          dx = dir.includes("w") ? m.w - w : 0;
+          dy = dir.includes("n") ? m.h - h : 0;
+          m2 = cropResize(m, w, h, dx, dy);
+        }
+        const effective = Math.max(Math.abs(m2.left - m.left), Math.abs(m2.top - m.top), Math.abs(m2.pw - m.pw), Math.abs(m2.ph - m.ph), Math.abs(m2.w - m.w), Math.abs(m2.h - m.h)) > 0.01;
+        if (!effective) {
+          if (changed) restore(before);
+          changed = false;
+          return;
+        }
+        try {
+          migrate();
+          if (dir) {
+            const frame = target(), cs = getComputedStyle(frame);
+            frame.style.setProperty("width", `${m2.w + (cs.boxSizing === "border-box" ? inset[0] + inset[2] : 0)}px`, "important");
+            frame.style.setProperty("height", `${m2.h + (cs.boxSizing === "border-box" ? inset[1] + inset[3] : 0)}px`, "important");
+            session.img.style.setProperty("height", "100%", "important");
+            const world = mappedDelta(g.matrix, dx + (m2.w - m.w) / 2, dy + (m2.h - m.h) / 2);
+            setPos(frame, pos, pos.x, pos.y);
+            const now = elementGeometry(frame), offset = inverseDelta(g.parent, g.cx + world.x - now.cx, g.cy + world.y - now.cy);
+            setPos(frame, pos, pos.x + offset.x, pos.y + offset.y);
+          }
+          write(m2);
+          changed = true;
+          draw();
+          refresh();
+        } catch (error) {
+          restore(before);
+          toast(error.message, 4e3);
+          S.drag = null;
+        }
+      }, up() {
+        if (changed) add(before);
+        refresh();
+      }, cancel() {
+        restore(before);
+      } };
+      S.drag = operation;
+    }
+    let zoomBefore = null;
+    function zoom(value, commit = true) {
+      if (!session || !canEdit()) return;
+      if (!zoomBefore) zoomBefore = snapshot();
+      const { m } = measure(), z = clamp(Number(value) / 100, 1, 20);
+      if (!Number.isFinite(z)) return;
+      try {
+        if (z === 1 && !zoomBefore.frame) {
+          restore(zoomBefore);
+        } else if (Math.abs(z - m.zoom) > 1e-5) {
+          migrate();
+          write(cropModel(m.w, m.h, m.nw, m.nh, z, m.x, m.y));
+          draw();
+          refresh();
+        }
+        if (commit) {
+          add(zoomBefore);
+          zoomBefore = null;
+        }
+      } catch (error) {
+        restore(zoomBefore);
+        zoomBefore = null;
+        toast(error.message, 4e3);
+      }
+    }
+    $(".crop-zoom").addEventListener("input", (e) => zoom(e.target.value, false));
+    $(".crop-zoom").addEventListener("change", (e) => zoom(e.target.value));
+    $(".crop-zoom-value").addEventListener("change", (e) => zoom(e.target.value));
+    function cleanClone(doc) {
+      if (!session) return;
+      const n = target(), path = [];
+      for (let p = n; p !== document.documentElement; p = p.parentNode) path.unshift([...p.parentNode.childNodes].indexOf(p));
+      let dest = doc;
+      for (const i of path) dest = dest.childNodes[i];
+      const img = session.img.cloneNode(false);
+      restoreAttrs(img, session.entry.ia);
+      if (session.entry.frame) {
+        const frame = session.entry.frame.cloneNode(false);
+        restoreAttrs(frame, session.entry.fa);
+        frame.append(img);
+        dest.replaceWith(frame);
+      } else dest.replaceWith(img);
+    }
+    return { start, finish, refresh, gesture, cleanClone, owns: (el) => !!session && (el === session.img || el === session.frame), get active() {
+      return !!session;
+    }, get canUndo() {
+      return !!session?.undo?.length;
+    }, get canRedo() {
+      return !!session?.redo?.length;
+    }, history(dir) {
+      if (!session) return;
+      const from = dir < 0 ? session.undo : session.redo, to = dir < 0 ? session.redo : session.undo, c = from.pop();
+      if (c) {
+        restore(dir < 0 ? c.before : c.after);
+        to.push(c);
+        sync();
+      }
+    }, reset(el, fit) {
+      const img = cropImage(el);
+      if (!img) return;
+      const frame = el === img ? null : el;
+      const before = { frame, ia: attrs(img), fa: frame && attrs(frame) };
+      const temp = { img, frame };
+      session = temp;
+      if (frame) {
+        write(cropModel(1, 1, 1, 1));
+        img.style.setProperty("object-fit", fit, "important");
+      } else {
+        img.style.width = getComputedStyle(img).width;
+        img.style.height = getComputedStyle(img).height;
+        img.style.objectFit = fit;
+      }
+      const after = snapshot();
+      session = null;
+      const replay = (s) => {
+        session = { img, frame: img.closest('[data-crop-frame="1"]') };
+        restore(s);
+        session = null;
+        panel.hidden = outline.hidden = true;
+      };
+      if (!same(before, after)) push({ undo: () => replay(before), redo: () => replay(after), board: el.closest("[data-artboard]") });
+      draw();
+    } };
+  }
+
   // html-design/src/editor.css
-  var editor_default = ':host {\n  all: initial;\n  --paper: #fff;\n  --workspace: #f2f2f2;\n  --hover: #ededed;\n  --active: #e4e4e4;\n  --ink: #202020;\n  --muted: #646464;\n  --line: #e7e7e7;\n  --selection: #258bff;\n  --guide: #10b981;\n  --radius: 8px;\n  --nav: 170px;\n  --head: 52px;\n  --foot: 40px;\n  font:\n    13px/1.35 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    "PingFang SC",\n    sans-serif;\n  color: var(--ink);\n  color-scheme: light;\n}\n* {\n  box-sizing: border-box;\n}\n[hidden] {\n  display: none !important;\n}\n::selection {\n  background: #d5d5d5;\n  color: #171717;\n}\nbutton,\ninput,\nselect,\ntextarea {\n  font: inherit;\n  color: inherit;\n}\nbutton {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 7px;\n  min-width: 32px;\n  height: 32px;\n  padding: 0 9px;\n  border: 0;\n  border-radius: var(--radius);\n  background: transparent;\n  cursor: pointer;\n  white-space: nowrap;\n  line-height: 1.2;\n}\nbutton:hover:not(:disabled) {\n  background: var(--hover);\n}\nbutton[aria-pressed="true"] {\n  background: var(--active);\n}\nbutton:disabled {\n  opacity: 0.35;\n  cursor: default;\n}\nbutton:focus-visible,\ninput:focus-visible,\nselect:focus-visible,\n[role="button"]:focus-visible {\n  outline: 2px solid var(--selection);\n  outline-offset: 2px;\n}\nbutton.primary {\n  background: #202020;\n  color: #fff;\n}\nbutton.primary:hover:not(:disabled) {\n  background: #3c3c3c;\n}\n.icon {\n  display: block;\n  flex-shrink: 0;\n  pointer-events: none;\n}\n.icon-only {\n  width: 32px;\n  padding: 0;\n}\n.head {\n  position: fixed;\n  inset: 0 0 auto;\n  height: var(--head);\n  z-index: 2147483647;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 20px;\n  padding: 0 16px;\n  background: var(--paper);\n}\n.grp {\n  display: flex;\n  align-items: center;\n  gap: 3px;\n  min-width: 0;\n}\n.document {\n  flex: 1;\n  gap: 9px;\n}\n.document-title {\n  min-width: 0;\n  max-width: 260px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-weight: 550;\n}\n.save-state {\n  min-width: 0;\n  max-width: 155px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  justify-content: flex-start;\n  white-space: nowrap;\n  color: var(--muted);\n  font-size: 11px;\n  padding: 0 5px;\n}\n.save-state .state-text {\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.save-state .icon {\n  width: 14px;\n  height: 14px;\n}\n.tools {\n  flex-shrink: 0;\n}\n.layout-toggle {\n  margin: 0 7px;\n}\n.layout-toggle button {\n  gap: 5px;\n}\n.done-button {\n  background: var(--hover);\n}\n.actions {\n  flex: 1;\n  justify-content: flex-end;\n}\n.group-gap {\n  margin-left: 13px;\n}\n.view-seg {\n  display: flex;\n  align-items: center;\n  gap: 0;\n}\n.view-seg button {\n  border-radius: 7px;\n}\n.view-seg .fullscreen {\n  padding-inline: 6px;\n  min-width: 26px;\n}\n.view-seg .fullscreen .icon {\n  width: 16px;\n  height: 16px;\n}\n.nav {\n  position: fixed;\n  left: 0;\n  top: var(--head);\n  bottom: 0;\n  width: var(--nav);\n  z-index: 2147483645;\n  display: flex;\n  flex-direction: column;\n  background: #f8f8f8;\n}\n.nav-head {\n  height: 47px;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 13px 0 20px;\n  flex-shrink: 0;\n}\n.nav-head strong {\n  font-size: 12px;\n  font-weight: 550;\n  color: var(--muted);\n}\n.thumb-list {\n  flex: 1;\n  min-height: 0;\n  overflow: auto;\n  padding: 6px 12px 24px;\n  scrollbar-width: thin;\n  scrollbar-color: #cecece transparent;\n  overscroll-behavior: contain;\n}\n.thumb {\n  position: relative;\n  margin-bottom: 18px;\n  border-radius: 7px;\n}\n.thumb-main {\n  outline: 0;\n  cursor: pointer;\n  position: relative;\n}\n.frame {\n  position: relative;\n  width: 146px;\n  overflow: hidden;\n  background: white;\n  border-radius: 3px;\n  box-shadow: 0 0 0 1px #dedede;\n}\n.frame iframe {\n  position: absolute;\n  left: 0;\n  top: 0;\n  border: 0;\n  transform-origin: 0 0;\n  pointer-events: none;\n  background: #fff;\n}\n.thumb.active .frame {\n  box-shadow: 0 0 0 1.5px var(--selection);\n}\n.thumb.active .label {\n  color: #171717;\n}\n.thumb-main:hover .frame {\n  box-shadow: 0 0 0 1.5px #8a8a8a;\n}\n.thumb-main:focus-visible .frame {\n  outline: 2px solid var(--selection);\n  outline-offset: 3px;\n}\n.label {\n  padding: 8px 28px 0 2px;\n  color: #666;\n  font-size: 11px;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  line-height: 16px;\n}\n.thumb-more {\n  position: absolute;\n  right: 0;\n  bottom: -4px;\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  opacity: 0;\n  background: #f8f8f8;\n}\n.thumb:hover .thumb-more,\n.thumb:focus-within .thumb-more,\n.thumb.active .thumb-more {\n  opacity: 1;\n}\n.thumb-more .icon {\n  width: 15px;\n  height: 15px;\n}\n.thumb.dragging {\n  opacity: 0.35;\n}\n.thumb.drop-before::before,\n.thumb.drop-after::after {\n  content: "";\n  position: absolute;\n  left: 0;\n  right: 0;\n  height: 2px;\n  background: #333;\n  pointer-events: none;\n}\n.thumb.drop-before::before {\n  top: -10px;\n}\n.thumb.drop-after::after {\n  bottom: -10px;\n}\n.rename-input {\n  width: 100%;\n  height: 25px;\n  padding: 2px 4px;\n  border: 1px solid #999;\n  border-radius: 4px;\n  background: #fff;\n  font-size: 12px;\n}\n.empty-list {\n  font-size: 12px;\n  color: var(--muted);\n  padding: 10px 5px;\n  line-height: 1.7;\n}\n.footer {\n  position: fixed;\n  bottom: 0;\n  left: var(--nav);\n  right: 0;\n  height: var(--foot);\n  z-index: 2147483645;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 12px;\n  background: #fff;\n  gap: 14px;\n}\n.footer button {\n  height: 28px;\n  min-width: 28px;\n  padding: 0 5px;\n}\n.page-controls {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  min-width: 0;\n}\n.pageno {\n  font-size: 12px;\n  color: #555;\n  font-variant-numeric: tabular-nums;\n  white-space: nowrap;\n  text-align: center;\n  min-width: 46px;\n}\n.page-title {\n  max-width: 260px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-size: 12px;\n  color: #666;\n  margin-left: 9px;\n  justify-content: flex-start;\n}\n.page-title:disabled {\n  opacity: 1;\n}\n.zoom {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n}\n.zoom .zv {\n  min-width: 49px;\n  font-size: 12px;\n  font-variant-numeric: tabular-nums;\n}\n.zoom .fit {\n  margin-left: 7px;\n}\n.footer .icon {\n  width: 16px;\n  height: 16px;\n}\n.tbar {\n  --hover: #353535;\n  --active: #4a4a4a;\n  --muted: #d0d0d0;\n  position: fixed;\n  left: calc(var(--nav) + (100vw - var(--nav)) / 2);\n  top: calc(var(--head) + 10px);\n  transform: translateX(-50%);\n  z-index: 2147483646;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 5px 6px;\n  background: #202020;\n  color: #f8f8f8;\n  border-radius: 10px;\n  box-shadow: 0 3px 16px #00000014;\n  max-width: calc(100vw - var(--nav) - 24px);\n}\n.text-tools,\n.image-tools,\n.object-tools {\n  display: flex;\n  align-items: center;\n  gap: 3px;\n}\n.tbar .seg { background: #353535; }\n.tbar .seg button[aria-pressed="true"] { background: #555; color: #fff; box-shadow: none; }\n.image-tools > [data-act="image-replace"] { font-size: 12px; font-weight: 400; gap: 5px; }\n.tbar .color-control .color-swatch { box-shadow: 0 0 0 1px #ffffff90; }\n.tbar .fs {\n  width: 52px;\n  height: 29px;\n  background: #383838;\n  border: 0;\n  border-radius: 5px;\n  padding: 0 4px;\n  text-align: center;\n  font-variant-numeric: tabular-nums;\n  appearance: textfield;\n}\n.fs::-webkit-inner-spin-button {\n  appearance: none;\n}\n.color-control { position: relative; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:7px; cursor:pointer; }\n.color-control:hover { background:var(--hover); }\n.color-control input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }\n.color-control .color-swatch {\n  display: block;\n  width: 19px;\n  height: 19px;\n  border-radius: 50%;\n  background: currentColor;\n  box-shadow: inset 0 0 0 1px #0002;\n}\n.add-text { gap: 0; width: 36px; }\n.add-text .icon:first-child { width: 12px; height: 12px; }\n.add-text .icon:last-child { width: 17px; height: 17px; }\n.menu-panel[data-menu="more"], .menu-panel[data-menu="element"], .menu-panel[data-menu="page"] { width: 190px; min-width: 190px; }\n.seg {\n  display: flex;\n  padding: 2px;\n  border-radius: 7px;\n  background: #f3f3f3;\n}\n.seg button {\n  height: 27px;\n  font-size: 12px;\n  padding: 0 10px;\n}\n.seg button[aria-pressed="true"] {\n  background: #fff;\n  box-shadow: 0 1px 3px #0001;\n}\n.compact-select {\n  border: 0;\n  background: #f4f4f4;\n  height: 29px;\n  padding: 0 7px;\n  border-radius: 5px;\n  font-size: 12px;\n}\n.tbar .icon {\n  width: 17px;\n  height: 17px;\n}\n.sel {\n  position: fixed;\n  display: none;\n  border: 1px solid var(--selection);\n  box-shadow: 0 0 0 1px #ffffffb3;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.sel.typing {\n  border-style: dashed;\n}\n.sel i {\n  position: absolute;\n  width: 8px;\n  height: 8px;\n  margin: -4px 0 0 -4px;\n  background: #fff;\n  border: 1px solid var(--selection);\n  border-radius: 1px;\n  pointer-events: auto;\n  box-shadow: 0 0 0 1px #ffffff80;\n}\n.sel.typing i {\n  display: none;\n}\n.sel.multiple i {\n  display: none;\n}\n.sel.unsupported i { display:none; }\n.rotate-handle {\n  position:fixed; width:24px; height:24px; padding:4px; margin:-12px;\n  border:1px solid var(--selection); border-radius:50%; background:var(--paper);\n  color:var(--selection); z-index:2147483645; cursor:grab;\n  box-shadow:0 0 0 1px #ffffff80;\n}\n.rotate-handle .icon { width:14px; height:14px; }\n.rotate-handle:active { cursor:grabbing; }\n.rotation-feedback {\n  position:fixed; padding:3px 6px; border-radius:5px; background:#202020;\n  color:#fff; font-size:11px; font-variant-numeric:tabular-nums;\n  pointer-events:none; z-index:2147483645;\n}\n.rotation-panel label { display:flex; align-items:center; gap:6px; margin:4px 6px 8px; }\n.rotation-angle { width:80px; height:28px; border:1px solid var(--line); border-radius:5px; padding:3px 6px; }\n.rotation-multiple { margin:4px 6px; font-size:12px; color:var(--muted); line-height:1.5; }\n.selection-member {\n  position: fixed;\n  border: 1px dashed var(--selection);\n  box-shadow: 0 0 0 1px #ffffffb3;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.marquee {\n  position: fixed;\n  border: 1px solid var(--selection);\n  background: #258bff18;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.selection-count {\n  padding: 0 7px;\n  color: var(--muted);\n  font-size: 12px;\n  white-space: nowrap;\n}\n.guides {\n  position: fixed;\n  left: var(--nav);\n  top: var(--head);\n  width: calc(100vw - var(--nav));\n  height: calc(100vh - var(--head) - var(--foot));\n  overflow: hidden;\n  pointer-events: none;\n  z-index: 2147483643;\n  fill: none;\n}\n.guide-halo {\n  stroke: #ffffffb3;\n  stroke-width: 3px;\n}\n.guide-line {\n  stroke: var(--guide);\n  stroke-width: 1px;\n}\n.guide-distance {\n  fill: #047857;\n  stroke: #fff;\n  stroke-width: 3px;\n  paint-order: stroke;\n  stroke-linejoin: round;\n  font: 11px system-ui, sans-serif;\n  font-variant-numeric: tabular-nums;\n}\n:host([data-nav-hidden]) .guides {\n  left: 0;\n  width: 100vw;\n}\n.sel i::before {\n  content: "";\n  position: absolute;\n  inset: -5px;\n}\n[data-h="nw"] {\n  left: 0;\n  top: 0;\n  cursor: nwse-resize;\n}\n[data-h="n"] {\n  left: 50%;\n  top: 0;\n  cursor: ns-resize;\n}\n[data-h="ne"] {\n  left: 100%;\n  top: 0;\n  cursor: nesw-resize;\n}\n[data-h="e"] {\n  left: 100%;\n  top: 50%;\n  cursor: ew-resize;\n}\n[data-h="se"] {\n  left: 100%;\n  top: 100%;\n  cursor: nwse-resize;\n}\n[data-h="s"] {\n  left: 50%;\n  top: 100%;\n  cursor: ns-resize;\n}\n[data-h="sw"] {\n  left: 0;\n  top: 100%;\n  cursor: nesw-resize;\n}\n[data-h="w"] {\n  left: 0;\n  top: 50%;\n  cursor: ew-resize;\n}\n.menu-panel {\n  position: fixed;\n  z-index: 2147483647;\n  min-width: 180px;\n  max-width: min(330px, calc(100vw - 20px));\n  max-height: 70vh;\n  overflow: auto;\n  padding: 6px;\n  border-radius: 10px;\n  background: white;\n  box-shadow: 0 6px 28px #00000024;\n  font-size: 12px;\n}\n.menu-panel button {\n  width: 100%;\n  justify-content: flex-start;\n  height: 34px;\n  padding: 0 9px;\n  border-radius: 6px;\n  font-size: 12px;\n}\n.menu-panel .icon {\n  width: 16px;\n  height: 16px;\n}\n.menu-caption {\n  font-size: 11px;\n  color: #6a6a6a;\n  padding: 8px 9px 4px;\n}\n.menu-separator {\n  height: 1px;\n  background: #eee;\n  margin: 5px 7px;\n}\n.status-detail {\n  font-size: 12px;\n  line-height: 1.65;\n  white-space: normal;\n  margin: 6px 8px;\n  color: #555;\n  max-width: 265px;\n}\n.status-panel button {\n  height: auto;\n  min-height: 34px;\n  white-space: normal;\n  text-align: left;\n}\n.modal {\n  position: fixed;\n  inset: 0;\n  z-index: 2147483647;\n  background: #0005;\n  display: flex;\n  padding: 36px;\n  font:\n    13px/1.4 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    sans-serif;\n  color: #222;\n}\n.box {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  background: #fff;\n  border-radius: 12px;\n  overflow: hidden;\n  min-width: 0;\n}\n.mh {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  padding: 11px 16px;\n  background: #f6f6f6;\n  flex-wrap: wrap;\n}\n.mh .hint {\n  color: #666;\n  font-size: 11px;\n}\n.mh .sp {\n  flex: 1;\n}\ntextarea {\n  flex: 1;\n  min-height: 0;\n  border: 0;\n  outline: none;\n  resize: none;\n  padding: 18px;\n  font:\n    12px/1.6 ui-monospace,\n    Menlo,\n    Consolas,\n    monospace;\n  white-space: pre;\n  tab-size: 2;\n  caret-color: #222;\n}\n.toast {\n  position: fixed;\n  left: 50%;\n  bottom: 65px;\n  transform: translateX(-50%);\n  max-width: calc(100vw - 40px);\n  padding: 10px 16px;\n  border-radius: 9px;\n  background: #222;\n  color: #fff;\n  font:\n    12px/1.5 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    sans-serif;\n  opacity: 0;\n  transition: opacity 0.15s;\n  pointer-events: none;\n  z-index: 2147483647;\n}\n.toast.show {\n  opacity: 1;\n}\n.empty-canvas {\n  position: fixed;\n  left: var(--nav);\n  right: 0;\n  top: var(--head);\n  bottom: var(--foot);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-direction: column;\n  gap: 14px;\n  color: #666;\n  font-size: 13px;\n}\n.empty-canvas p {\n  margin: 0;\n}\n.empty-canvas > .icon {\n  width: 30px;\n  height: 30px;\n  color: #aaa;\n}\n.play-controls {\n  position: fixed;\n  bottom: 22px;\n  left: 50%;\n  transform: translateX(-50%);\n  z-index: 2147483647;\n  display: flex;\n  align-items: center;\n  gap: 5px;\n  padding: 5px 8px;\n  background: #ffffffed;\n  border-radius: 10px;\n  box-shadow: 0 4px 18px #0002;\n  opacity: 0;\n  transition: opacity 0.15s;\n}\n.play-controls button {\n  height: 31px;\n  min-width: 31px;\n}\n.play-controls.visible,\n.play-controls:hover,\n.play-controls:focus-within {\n  opacity: 1;\n}\n.play-controls .play-title {\n  max-width: 190px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-size: 12px;\n  color: #555;\n  margin: 0 7px;\n}\n.play-controls .pageno {\n  font-size: 12px;\n}\n.play-exit {\n  position: fixed;\n  top: 16px;\n  right: 16px;\n  z-index: 2147483647;\n  background: #fffffff0;\n  color: #222;\n}\n:host([data-playing]) .head,\n:host([data-playing]) .nav,\n:host([data-playing]) .footer,\n:host([data-playing]) .tbar,\n:host([data-playing]) .sel,\n:host([data-playing]) .guides,\n:host([data-playing]) .selection-members,\n:host([data-playing]) .marquee,\n:host([data-playing]) .empty-canvas {\n  display: none !important;\n}\n:host(:not([data-playing])) .play-controls,\n:host(:not([data-playing])) .play-exit {\n  display: none !important;\n}\n:host([data-nav-hidden]) .nav {\n  display: none;\n}\n:host([data-nav-hidden]) .footer {\n  left: 0;\n}\n:host([data-nav-hidden]) .tbar {\n  left: 50%;\n  max-width: calc(100vw - 24px);\n}\n:host([data-nav-hidden]) .empty-canvas {\n  left: 0;\n}\n@media (max-width: 1050px) {\n  .head {\n    gap: 9px;\n    padding: 0 10px;\n  }\n  .document-title {\n    max-width: 140px;\n  }\n  .save-state {\n    max-width: 95px;\n    font-size: 10px;\n  }\n  .group-gap {\n    margin-left: 6px;\n  }\n  .actions {\n    flex: initial;\n  }\n  .document {\n    flex: 1;\n  }\n  .head button {\n    padding-inline: 7px;\n  }\n  .actions .button-label {\n    display: none;\n  }\n}\n@media (max-width: 760px) {\n  :host {\n    --nav: 170px;\n  }\n  .head {\n    gap: 4px;\n  }\n  .document-title {\n    max-width: 100px;\n    font-size: 12px;\n  }\n  .save-state {\n    max-width: 27px;\n  }\n  .save-state .state-text {\n    display: none;\n  }\n  .head .preview-button span,\n  .head .export-label {\n    display: none;\n  }\n  .head .group-gap {\n    margin-left: 2px;\n  }\n  .head .layout-toggle {\n    margin-inline: 3px;\n  }\n  .head .layout-toggle button { padding-inline: 6px; font-size: 11px; }\n  .page-title {\n    max-width: 110px;\n  }\n  .footer {\n    padding: 0 7px;\n  }\n  .tbar {\n    gap: 1px;\n    padding: 4px;\n  }\n  .tbar button {\n    padding-inline: 5px;\n    min-width: 28px;\n  }\n  .nav-head {\n    padding-inline: 12px;\n  }\n}\n@media (max-width: 540px) {\n  :host {\n    --nav: 0px;\n  }\n  .nav {\n    display: none !important;\n  }\n  .footer {\n    left: 0;\n  }\n  .tbar {\n    left: 50%;\n    max-width: calc(100vw - 16px);\n  }\n  .document-title {\n    max-width: 80px;\n  }\n  .head {\n    padding-inline: 6px;\n  }\n  .head button {\n    padding-inline: 5px;\n    min-width: 28px;\n  }\n  .head .document {\n    gap: 2px;\n  }\n  .head .nav-toggle {\n    display: inline-flex;\n  }\n  .head .selection-tool {\n    display: none;\n  }\n  .head .done-button span,\n  .head .preview-button > .icon:last-child {\n    display: none;\n  }\n  :host([data-editing]) .head .preview-button {\n    display: none;\n  }\n  .head .document { flex: 0; gap: 3px; }\n  .head .document-title { display: none; }\n  .head .save-state { width: 22px; min-width: 22px; max-width: 22px; padding: 0; flex-shrink: 0; }\n  .head .tools > [data-act="undo"], .head .tools > [data-act="redo"] { display: none; }\n  .head .actions { flex: initial; }\n  .head [data-act="export"] > .icon:last-child {\n    display: none;\n  }\n  :host([data-mobile-nav]) .nav {\n    display: flex !important;\n    width: 170px;\n    bottom: 40px;\n    box-shadow: 5px 0 20px #0001;\n  }\n  .head .actions {\n    gap: 1px;\n  }\n  .page-title {\n    max-width: 90px;\n  }\n  .footer .fit span {\n    display: none;\n  }\n  .modal {\n    padding: 10px;\n  }\n  .mh .hint {\n    display: none;\n  }\n}\n@media (prefers-reduced-motion: reduce) {\n  * {\n    transition: none !important;\n    scroll-behavior: auto !important;\n  }\n}\n@media print {\n  :host {\n    display: none !important;\n  }\n}\n\n.more-text-formats {\n  display: flex;\n  gap: 4px;\n  padding: 3px 6px;\n}\n.more-text-formats button {\n  width: 32px;\n  padding: 0;\n  justify-content: center;\n}\n:host([data-readonly]) .tools {\n  display: none;\n}\n\n.play-exit:focus-visible {\n  opacity: 1 !important;\n}\n\n/* Experimental text sizing; diagnostics stay inside the editor shadow root. */\n.text-layout-panel { width: 268px; }\n.text-layout-panel strong { display: block; padding: 8px 10px 0; font-weight: 550; }\n.text-layout-status { margin: 8px 10px 12px; max-width: 232px; color: var(--muted); line-height: 1.6; }\n.text-layout-status[data-overflow="true"] { color: #a84c18; }\n\n/* AI review controls live outside the scaled content. */\n.review-actions { position:fixed; z-index:2147483645; display:flex; align-items:center; padding:3px; gap:0; background:var(--paper); border-radius:8px; box-shadow:0 3px 12px #0002; }\n.review-actions button { height:30px; min-width:62px; font-size:12px; border-radius:6px; }\n.review-accept { background:#202020; color:#fff; }\nbutton.review-accept:hover:not(:disabled) { background:#3c3c3c; }\nbutton[aria-disabled=true] { opacity:.45; cursor:default; }\n.review-scope { color:var(--muted); font-size:12px; padding:0 8px; }\n.review-summary { position:fixed; z-index:2147483646; width:280px; background:var(--paper); border-radius:8px; box-shadow:0 5px 20px #0002; }\n.review-summary-bar { display:flex; padding:4px; gap:4px; }\n.review-trigger { flex:1; justify-content:space-between; font-size:12px; }\n.review-trigger .icon { transform:rotate(180deg); }\n.review-trigger[aria-expanded=true] .icon { transform:none; }\n.review-summary-bar .review-accept { height:30px; font-size:12px; }\n.review-panel { padding:10px 12px 4px; overflow:auto; }\n.review-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; }\n.review-message { color:var(--muted); font-size:12px; line-height:1.5; margin:4px 0 10px; }\n.review-item { display:flex; gap:8px; padding:8px 0; border-top:1px solid var(--line); align-items:center; }\n.review-item[data-current] .review-name { font-weight:600; }\n.review-info { flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:4px; }\n.review-name { width:100%; min-width:0; display:flex; justify-content:flex-start; gap:4px; text-align:left; padding:0; font-size:12px; }\n.review-page { flex-shrink:0; white-space:nowrap; }\n.review-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.review-name:disabled { opacity:1; }\n.review-kind { display:inline-block; padding:1px 5px; border-radius:3px; background:var(--hover); font-size:10px; line-height:16px; color:var(--muted); }\n.review-item-actions { display:flex; flex-shrink:0; gap:2px; margin-left:auto; }\n.review-item-actions button { height:28px; padding:0 6px; font-size:12px; }\n.review-before { position:fixed; z-index:2147483643; overflow:hidden; background:var(--workspace); pointer-events:none; }\n.review-projection { position:absolute; overflow:hidden; pointer-events:none; }\n.review-projection iframe { position:absolute; left:0; top:0; border:0; transform-origin:top left; background:white; pointer-events:none; }\n.review-hint { position:fixed; right:16px; bottom:112px; pointer-events:none; z-index:2147483646; font-size:12px; color:var(--muted); background:var(--paper); padding:6px 10px; border-radius:6px; }\n';
+  var editor_default = ':host {\n  all: initial;\n  --paper: #fff;\n  --workspace: #f2f2f2;\n  --hover: #ededed;\n  --active: #e4e4e4;\n  --ink: #202020;\n  --muted: #646464;\n  --line: #e7e7e7;\n  --selection: #258bff;\n  --guide: #10b981;\n  --radius: 8px;\n  --nav: 170px;\n  --head: 52px;\n  --foot: 40px;\n  font:\n    13px/1.35 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    "PingFang SC",\n    sans-serif;\n  color: var(--ink);\n  color-scheme: light;\n}\n* {\n  box-sizing: border-box;\n}\n[hidden] {\n  display: none !important;\n}\n::selection {\n  background: #d5d5d5;\n  color: #171717;\n}\nbutton,\ninput,\nselect,\ntextarea {\n  font: inherit;\n  color: inherit;\n}\nbutton {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 7px;\n  min-width: 32px;\n  height: 32px;\n  padding: 0 9px;\n  border: 0;\n  border-radius: var(--radius);\n  background: transparent;\n  cursor: pointer;\n  white-space: nowrap;\n  line-height: 1.2;\n}\nbutton:hover:not(:disabled) {\n  background: var(--hover);\n}\nbutton[aria-pressed="true"] {\n  background: var(--active);\n}\nbutton:disabled {\n  opacity: 0.35;\n  cursor: default;\n}\nbutton:focus-visible,\ninput:focus-visible,\nselect:focus-visible,\n[role="button"]:focus-visible {\n  outline: 2px solid var(--selection);\n  outline-offset: 2px;\n}\nbutton.primary {\n  background: #202020;\n  color: #fff;\n}\nbutton.primary:hover:not(:disabled) {\n  background: #3c3c3c;\n}\n.icon {\n  display: block;\n  flex-shrink: 0;\n  pointer-events: none;\n}\n.icon-only {\n  width: 32px;\n  padding: 0;\n}\n.head {\n  position: fixed;\n  inset: 0 0 auto;\n  height: var(--head);\n  z-index: 2147483647;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 20px;\n  padding: 0 16px;\n  background: var(--paper);\n}\n.grp {\n  display: flex;\n  align-items: center;\n  gap: 3px;\n  min-width: 0;\n}\n.document {\n  flex: 1;\n  gap: 9px;\n}\n.document-title {\n  min-width: 0;\n  max-width: 260px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-weight: 550;\n}\n.save-state {\n  min-width: 0;\n  max-width: 155px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  justify-content: flex-start;\n  white-space: nowrap;\n  color: var(--muted);\n  font-size: 11px;\n  padding: 0 5px;\n}\n.save-state .state-text {\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.save-state .icon {\n  width: 14px;\n  height: 14px;\n}\n.tools {\n  flex-shrink: 0;\n}\n.layout-toggle {\n  margin: 0 7px;\n}\n.layout-toggle button {\n  gap: 5px;\n}\n.done-button {\n  background: var(--hover);\n}\n.actions {\n  flex: 1;\n  justify-content: flex-end;\n}\n.group-gap {\n  margin-left: 13px;\n}\n.view-seg {\n  display: flex;\n  align-items: center;\n  gap: 0;\n}\n.view-seg button {\n  border-radius: 7px;\n}\n.view-seg .fullscreen {\n  padding-inline: 6px;\n  min-width: 26px;\n}\n.view-seg .fullscreen .icon {\n  width: 16px;\n  height: 16px;\n}\n.nav {\n  position: fixed;\n  left: 0;\n  top: var(--head);\n  bottom: 0;\n  width: var(--nav);\n  z-index: 2147483645;\n  display: flex;\n  flex-direction: column;\n  background: #f8f8f8;\n}\n.nav-head {\n  height: 47px;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 13px 0 20px;\n  flex-shrink: 0;\n}\n.nav-head strong {\n  font-size: 12px;\n  font-weight: 550;\n  color: var(--muted);\n}\n.thumb-list {\n  flex: 1;\n  min-height: 0;\n  overflow: auto;\n  padding: 6px 12px 24px;\n  scrollbar-width: thin;\n  scrollbar-color: #cecece transparent;\n  overscroll-behavior: contain;\n}\n.thumb {\n  position: relative;\n  margin-bottom: 18px;\n  border-radius: 7px;\n}\n.thumb-main {\n  outline: 0;\n  cursor: pointer;\n  position: relative;\n}\n.frame {\n  position: relative;\n  width: 146px;\n  overflow: hidden;\n  background: white;\n  border-radius: 3px;\n  box-shadow: 0 0 0 1px #dedede;\n}\n.frame iframe {\n  position: absolute;\n  left: 0;\n  top: 0;\n  border: 0;\n  transform-origin: 0 0;\n  pointer-events: none;\n  background: #fff;\n}\n.thumb.active .frame {\n  box-shadow: 0 0 0 1.5px var(--selection);\n}\n.thumb.active .label {\n  color: #171717;\n}\n.thumb-main:hover .frame {\n  box-shadow: 0 0 0 1.5px #8a8a8a;\n}\n.thumb-main:focus-visible .frame {\n  outline: 2px solid var(--selection);\n  outline-offset: 3px;\n}\n.label {\n  padding: 8px 28px 0 2px;\n  color: #666;\n  font-size: 11px;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  line-height: 16px;\n}\n.thumb-more {\n  position: absolute;\n  right: 0;\n  bottom: -4px;\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  opacity: 0;\n  background: #f8f8f8;\n}\n.thumb:hover .thumb-more,\n.thumb:focus-within .thumb-more,\n.thumb.active .thumb-more {\n  opacity: 1;\n}\n.thumb-more .icon {\n  width: 15px;\n  height: 15px;\n}\n.thumb.dragging {\n  opacity: 0.35;\n}\n.thumb.drop-before::before,\n.thumb.drop-after::after {\n  content: "";\n  position: absolute;\n  left: 0;\n  right: 0;\n  height: 2px;\n  background: #333;\n  pointer-events: none;\n}\n.thumb.drop-before::before {\n  top: -10px;\n}\n.thumb.drop-after::after {\n  bottom: -10px;\n}\n.rename-input {\n  width: 100%;\n  height: 25px;\n  padding: 2px 4px;\n  border: 1px solid #999;\n  border-radius: 4px;\n  background: #fff;\n  font-size: 12px;\n}\n.empty-list {\n  font-size: 12px;\n  color: var(--muted);\n  padding: 10px 5px;\n  line-height: 1.7;\n}\n.footer {\n  position: fixed;\n  bottom: 0;\n  left: var(--nav);\n  right: 0;\n  height: var(--foot);\n  z-index: 2147483645;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 12px;\n  background: #fff;\n  gap: 14px;\n}\n.footer button {\n  height: 28px;\n  min-width: 28px;\n  padding: 0 5px;\n}\n.page-controls {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  min-width: 0;\n}\n.pageno {\n  font-size: 12px;\n  color: #555;\n  font-variant-numeric: tabular-nums;\n  white-space: nowrap;\n  text-align: center;\n  min-width: 46px;\n}\n.page-title {\n  max-width: 260px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-size: 12px;\n  color: #666;\n  margin-left: 9px;\n  justify-content: flex-start;\n}\n.page-title:disabled {\n  opacity: 1;\n}\n.zoom {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n}\n.zoom .zv {\n  min-width: 49px;\n  font-size: 12px;\n  font-variant-numeric: tabular-nums;\n}\n.zoom .fit {\n  margin-left: 7px;\n}\n.footer .icon {\n  width: 16px;\n  height: 16px;\n}\n.tbar {\n  --hover: #353535;\n  --active: #4a4a4a;\n  --muted: #d0d0d0;\n  position: fixed;\n  left: calc(var(--nav) + (100vw - var(--nav)) / 2);\n  top: calc(var(--head) + 10px);\n  transform: translateX(-50%);\n  z-index: 2147483646;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 5px 6px;\n  background: #202020;\n  color: #f8f8f8;\n  border-radius: 10px;\n  box-shadow: 0 3px 16px #00000014;\n  max-width: calc(100vw - var(--nav) - 24px);\n}\n.text-tools,\n.image-tools,\n.object-tools {\n  display: flex;\n  align-items: center;\n  gap: 3px;\n}\n.tbar .seg { background: #353535; }\n.tbar .seg button[aria-pressed="true"] { background: #555; color: #fff; box-shadow: none; }\n.image-tools > [data-act="image-replace"] { font-size: 12px; font-weight: 400; gap: 5px; }\n.tbar .color-control .color-swatch { box-shadow: 0 0 0 1px #ffffff90; }\n.tbar .fs {\n  width: 52px;\n  height: 29px;\n  background: #383838;\n  border: 0;\n  border-radius: 5px;\n  padding: 0 4px;\n  text-align: center;\n  font-variant-numeric: tabular-nums;\n  appearance: textfield;\n}\n.fs::-webkit-inner-spin-button {\n  appearance: none;\n}\n.color-control { position: relative; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:7px; cursor:pointer; }\n.color-control:hover { background:var(--hover); }\n.color-control input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }\n.color-control .color-swatch {\n  display: block;\n  width: 19px;\n  height: 19px;\n  border-radius: 50%;\n  background: currentColor;\n  box-shadow: inset 0 0 0 1px #0002;\n}\n.add-text { gap: 0; width: 36px; }\n.add-text .icon:first-child { width: 12px; height: 12px; }\n.add-text .icon:last-child { width: 17px; height: 17px; }\n.menu-panel[data-menu="more"], .menu-panel[data-menu="element"], .menu-panel[data-menu="page"] { width: 190px; min-width: 190px; }\n.seg {\n  display: flex;\n  padding: 2px;\n  border-radius: 7px;\n  background: #f3f3f3;\n}\n.seg button {\n  height: 27px;\n  font-size: 12px;\n  padding: 0 10px;\n}\n.seg button[aria-pressed="true"] {\n  background: #fff;\n  box-shadow: 0 1px 3px #0001;\n}\n.compact-select {\n  border: 0;\n  background: #f4f4f4;\n  height: 29px;\n  padding: 0 7px;\n  border-radius: 5px;\n  font-size: 12px;\n}\n.tbar .icon {\n  width: 17px;\n  height: 17px;\n}\n.sel {\n  position: fixed;\n  display: none;\n  border: 1px solid var(--selection);\n  box-shadow: 0 0 0 1px #ffffffb3;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.sel.typing {\n  border-style: dashed;\n}\n.sel i {\n  position: absolute;\n  width: 8px;\n  height: 8px;\n  margin: -4px 0 0 -4px;\n  background: #fff;\n  border: 1px solid var(--selection);\n  border-radius: 1px;\n  pointer-events: auto;\n  box-shadow: 0 0 0 1px #ffffff80;\n}\n.sel.typing i {\n  display: none;\n}\n.sel.multiple i {\n  display: none;\n}\n.sel.unsupported i { display:none; }\n.rotate-handle {\n  position:fixed; width:24px; height:24px; padding:4px; margin:-12px;\n  border:1px solid var(--selection); border-radius:50%; background:var(--paper);\n  color:var(--selection); z-index:2147483645; cursor:grab;\n  box-shadow:0 0 0 1px #ffffff80;\n}\n.rotate-handle .icon { width:14px; height:14px; }\n.rotate-handle:active { cursor:grabbing; }\n.rotation-feedback {\n  position:fixed; padding:3px 6px; border-radius:5px; background:#202020;\n  color:#fff; font-size:11px; font-variant-numeric:tabular-nums;\n  pointer-events:none; z-index:2147483645;\n}\n.rotation-panel label { display:flex; align-items:center; gap:6px; margin:4px 6px 8px; }\n.rotation-angle { width:80px; height:28px; border:1px solid var(--line); border-radius:5px; padding:3px 6px; }\n.rotation-multiple { margin:4px 6px; font-size:12px; color:var(--muted); line-height:1.5; }\n.selection-member {\n  position: fixed;\n  border: 1px dashed var(--selection);\n  box-shadow: 0 0 0 1px #ffffffb3;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.marquee {\n  position: fixed;\n  border: 1px solid var(--selection);\n  background: #258bff18;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.selection-count {\n  padding: 0 7px;\n  color: var(--muted);\n  font-size: 12px;\n  white-space: nowrap;\n}\n.guides {\n  position: fixed;\n  left: var(--nav);\n  top: var(--head);\n  width: calc(100vw - var(--nav));\n  height: calc(100vh - var(--head) - var(--foot));\n  overflow: hidden;\n  pointer-events: none;\n  z-index: 2147483643;\n  fill: none;\n}\n.guide-halo {\n  stroke: #ffffffb3;\n  stroke-width: 3px;\n}\n.guide-line {\n  stroke: var(--guide);\n  stroke-width: 1px;\n}\n.guide-distance {\n  fill: #047857;\n  stroke: #fff;\n  stroke-width: 3px;\n  paint-order: stroke;\n  stroke-linejoin: round;\n  font: 11px system-ui, sans-serif;\n  font-variant-numeric: tabular-nums;\n}\n:host([data-nav-hidden]) .guides {\n  left: 0;\n  width: 100vw;\n}\n.sel i::before {\n  content: "";\n  position: absolute;\n  inset: -5px;\n}\n[data-h="nw"] {\n  left: 0;\n  top: 0;\n  cursor: nwse-resize;\n}\n[data-h="n"] {\n  left: 50%;\n  top: 0;\n  cursor: ns-resize;\n}\n[data-h="ne"] {\n  left: 100%;\n  top: 0;\n  cursor: nesw-resize;\n}\n[data-h="e"] {\n  left: 100%;\n  top: 50%;\n  cursor: ew-resize;\n}\n[data-h="se"] {\n  left: 100%;\n  top: 100%;\n  cursor: nwse-resize;\n}\n[data-h="s"] {\n  left: 50%;\n  top: 100%;\n  cursor: ns-resize;\n}\n[data-h="sw"] {\n  left: 0;\n  top: 100%;\n  cursor: nesw-resize;\n}\n[data-h="w"] {\n  left: 0;\n  top: 50%;\n  cursor: ew-resize;\n}\n.menu-panel {\n  position: fixed;\n  z-index: 2147483647;\n  min-width: 180px;\n  max-width: min(330px, calc(100vw - 20px));\n  max-height: 70vh;\n  overflow: auto;\n  padding: 6px;\n  border-radius: 10px;\n  background: white;\n  box-shadow: 0 6px 28px #00000024;\n  font-size: 12px;\n}\n.menu-panel button {\n  width: 100%;\n  justify-content: flex-start;\n  height: 34px;\n  padding: 0 9px;\n  border-radius: 6px;\n  font-size: 12px;\n}\n.menu-panel .icon {\n  width: 16px;\n  height: 16px;\n}\n.menu-caption {\n  font-size: 11px;\n  color: #6a6a6a;\n  padding: 8px 9px 4px;\n}\n.menu-separator {\n  height: 1px;\n  background: #eee;\n  margin: 5px 7px;\n}\n.status-detail {\n  font-size: 12px;\n  line-height: 1.65;\n  white-space: normal;\n  margin: 6px 8px;\n  color: #555;\n  max-width: 265px;\n}\n.status-panel button {\n  height: auto;\n  min-height: 34px;\n  white-space: normal;\n  text-align: left;\n}\n.modal {\n  position: fixed;\n  inset: 0;\n  z-index: 2147483647;\n  background: #0005;\n  display: flex;\n  padding: 36px;\n  font:\n    13px/1.4 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    sans-serif;\n  color: #222;\n}\n.box {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  background: #fff;\n  border-radius: 12px;\n  overflow: hidden;\n  min-width: 0;\n}\n.mh {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  padding: 11px 16px;\n  background: #f6f6f6;\n  flex-wrap: wrap;\n}\n.mh .hint {\n  color: #666;\n  font-size: 11px;\n}\n.mh .sp {\n  flex: 1;\n}\ntextarea {\n  flex: 1;\n  min-height: 0;\n  border: 0;\n  outline: none;\n  resize: none;\n  padding: 18px;\n  font:\n    12px/1.6 ui-monospace,\n    Menlo,\n    Consolas,\n    monospace;\n  white-space: pre;\n  tab-size: 2;\n  caret-color: #222;\n}\n.toast {\n  position: fixed;\n  left: 50%;\n  bottom: 65px;\n  transform: translateX(-50%);\n  max-width: calc(100vw - 40px);\n  padding: 10px 16px;\n  border-radius: 9px;\n  background: #222;\n  color: #fff;\n  font:\n    12px/1.5 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    sans-serif;\n  opacity: 0;\n  transition: opacity 0.15s;\n  pointer-events: none;\n  z-index: 2147483647;\n}\n.toast.show {\n  opacity: 1;\n}\n.empty-canvas {\n  position: fixed;\n  left: var(--nav);\n  right: 0;\n  top: var(--head);\n  bottom: var(--foot);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-direction: column;\n  gap: 14px;\n  color: #666;\n  font-size: 13px;\n}\n.empty-canvas p {\n  margin: 0;\n}\n.empty-canvas > .icon {\n  width: 30px;\n  height: 30px;\n  color: #aaa;\n}\n.play-controls {\n  position: fixed;\n  bottom: 22px;\n  left: 50%;\n  transform: translateX(-50%);\n  z-index: 2147483647;\n  display: flex;\n  align-items: center;\n  gap: 5px;\n  padding: 5px 8px;\n  background: #ffffffed;\n  border-radius: 10px;\n  box-shadow: 0 4px 18px #0002;\n  opacity: 0;\n  transition: opacity 0.15s;\n}\n.play-controls button {\n  height: 31px;\n  min-width: 31px;\n}\n.play-controls.visible,\n.play-controls:hover,\n.play-controls:focus-within {\n  opacity: 1;\n}\n.play-controls .play-title {\n  max-width: 190px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-size: 12px;\n  color: #555;\n  margin: 0 7px;\n}\n.play-controls .pageno {\n  font-size: 12px;\n}\n.play-exit {\n  position: fixed;\n  top: 16px;\n  right: 16px;\n  z-index: 2147483647;\n  background: #fffffff0;\n  color: #222;\n}\n:host([data-playing]) .head,\n:host([data-playing]) .nav,\n:host([data-playing]) .footer,\n:host([data-playing]) .tbar,\n:host([data-playing]) .sel,\n:host([data-playing]) .guides,\n:host([data-playing]) .selection-members,\n:host([data-playing]) .marquee,\n:host([data-playing]) .empty-canvas {\n  display: none !important;\n}\n:host(:not([data-playing])) .play-controls,\n:host(:not([data-playing])) .play-exit {\n  display: none !important;\n}\n:host([data-nav-hidden]) .nav {\n  display: none;\n}\n:host([data-nav-hidden]) .footer {\n  left: 0;\n}\n:host([data-nav-hidden]) .tbar {\n  left: 50%;\n  max-width: calc(100vw - 24px);\n}\n:host([data-nav-hidden]) .empty-canvas {\n  left: 0;\n}\n@media (max-width: 1050px) {\n  .head {\n    gap: 9px;\n    padding: 0 10px;\n  }\n  .document-title {\n    max-width: 140px;\n  }\n  .save-state {\n    max-width: 95px;\n    font-size: 10px;\n  }\n  .group-gap {\n    margin-left: 6px;\n  }\n  .actions {\n    flex: initial;\n  }\n  .document {\n    flex: 1;\n  }\n  .head button {\n    padding-inline: 7px;\n  }\n  .actions .button-label {\n    display: none;\n  }\n}\n@media (max-width: 760px) {\n  :host {\n    --nav: 170px;\n  }\n  .head {\n    gap: 4px;\n  }\n  .document-title {\n    max-width: 100px;\n    font-size: 12px;\n  }\n  .save-state {\n    max-width: 27px;\n  }\n  .save-state .state-text {\n    display: none;\n  }\n  .head .preview-button span,\n  .head .export-label {\n    display: none;\n  }\n  .head .group-gap {\n    margin-left: 2px;\n  }\n  .head .layout-toggle {\n    margin-inline: 3px;\n  }\n  .head .layout-toggle button { padding-inline: 6px; font-size: 11px; }\n  .page-title {\n    max-width: 110px;\n  }\n  .footer {\n    padding: 0 7px;\n  }\n  .tbar {\n    gap: 1px;\n    padding: 4px;\n  }\n  .tbar button {\n    padding-inline: 5px;\n    min-width: 28px;\n  }\n  .nav-head {\n    padding-inline: 12px;\n  }\n}\n@media (max-width: 540px) {\n  :host {\n    --nav: 0px;\n  }\n  .nav {\n    display: none !important;\n  }\n  .footer {\n    left: 0;\n  }\n  .tbar {\n    left: 50%;\n    max-width: calc(100vw - 16px);\n  }\n  .document-title {\n    max-width: 80px;\n  }\n  .head {\n    padding-inline: 6px;\n  }\n  .head button {\n    padding-inline: 5px;\n    min-width: 28px;\n  }\n  .head .document {\n    gap: 2px;\n  }\n  .head .nav-toggle {\n    display: inline-flex;\n  }\n  .head .selection-tool {\n    display: none;\n  }\n  .head .done-button span,\n  .head .preview-button > .icon:last-child {\n    display: none;\n  }\n  :host([data-editing]) .head .preview-button {\n    display: none;\n  }\n  .head .document { flex: 0; gap: 3px; }\n  .head .document-title { display: none; }\n  .head .save-state { width: 22px; min-width: 22px; max-width: 22px; padding: 0; flex-shrink: 0; }\n  .head .tools > [data-act="undo"], .head .tools > [data-act="redo"] { display: none; }\n  .head .actions { flex: initial; }\n  .head [data-act="export"] > .icon:last-child {\n    display: none;\n  }\n  :host([data-mobile-nav]) .nav {\n    display: flex !important;\n    width: 170px;\n    bottom: 40px;\n    box-shadow: 5px 0 20px #0001;\n  }\n  .head .actions {\n    gap: 1px;\n  }\n  .page-title {\n    max-width: 90px;\n  }\n  .footer .fit span {\n    display: none;\n  }\n  .modal {\n    padding: 10px;\n  }\n  .mh .hint {\n    display: none;\n  }\n}\n@media (prefers-reduced-motion: reduce) {\n  * {\n    transition: none !important;\n    scroll-behavior: auto !important;\n  }\n}\n@media print {\n  :host {\n    display: none !important;\n  }\n}\n\n.more-text-formats {\n  display: flex;\n  gap: 4px;\n  padding: 3px 6px;\n}\n.more-text-formats button {\n  width: 32px;\n  padding: 0;\n  justify-content: center;\n}\n:host([data-readonly]) .tools {\n  display: none;\n}\n\n.play-exit:focus-visible {\n  opacity: 1 !important;\n}\n\n/* Experimental text sizing; diagnostics stay inside the editor shadow root. */\n.text-layout-panel { width: 268px; }\n.text-layout-panel strong { display: block; padding: 8px 10px 0; font-weight: 550; }\n.text-layout-status { margin: 8px 10px 12px; max-width: 232px; color: var(--muted); line-height: 1.6; }\n.text-layout-status[data-overflow="true"] { color: #a84c18; }\n\n/* AI review controls live outside the scaled content. */\n.review-actions { position:fixed; z-index:2147483645; display:flex; align-items:center; padding:3px; gap:0; background:var(--paper); border-radius:8px; box-shadow:0 3px 12px #0002; }\n.review-actions button { height:30px; min-width:62px; font-size:12px; border-radius:6px; }\n.review-accept { background:#202020; color:#fff; }\nbutton.review-accept:hover:not(:disabled) { background:#3c3c3c; }\nbutton[aria-disabled=true] { opacity:.45; cursor:default; }\n.review-scope { color:var(--muted); font-size:12px; padding:0 8px; }\n.review-summary { position:fixed; z-index:2147483646; width:280px; background:var(--paper); border-radius:8px; box-shadow:0 5px 20px #0002; }\n.review-summary-bar { display:flex; padding:4px; gap:4px; }\n.review-trigger { flex:1; justify-content:space-between; font-size:12px; }\n.review-trigger .icon { transform:rotate(180deg); }\n.review-trigger[aria-expanded=true] .icon { transform:none; }\n.review-summary-bar .review-accept { height:30px; font-size:12px; }\n.review-panel { padding:10px 12px 4px; overflow:auto; }\n.review-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; }\n.review-message { color:var(--muted); font-size:12px; line-height:1.5; margin:4px 0 10px; }\n.review-item { display:flex; gap:8px; padding:8px 0; border-top:1px solid var(--line); align-items:center; }\n.review-item[data-current] .review-name { font-weight:600; }\n.review-info { flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:4px; }\n.review-name { width:100%; min-width:0; display:flex; justify-content:flex-start; gap:4px; text-align:left; padding:0; font-size:12px; }\n.review-page { flex-shrink:0; white-space:nowrap; }\n.review-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.review-name:disabled { opacity:1; }\n.review-kind { display:inline-block; padding:1px 5px; border-radius:3px; background:var(--hover); font-size:10px; line-height:16px; color:var(--muted); }\n.review-item-actions { display:flex; flex-shrink:0; gap:2px; margin-left:auto; }\n.review-item-actions button { height:28px; padding:0 6px; font-size:12px; }\n.review-before { position:fixed; z-index:2147483643; overflow:hidden; background:var(--workspace); pointer-events:none; }\n.review-projection { position:absolute; overflow:hidden; pointer-events:none; }\n.review-projection iframe { position:absolute; left:0; top:0; border:0; transform-origin:top left; background:white; pointer-events:none; }\n.review-hint { position:fixed; right:16px; bottom:112px; pointer-events:none; z-index:2147483646; font-size:12px; color:var(--muted); background:var(--paper); padding:6px 10px; border-radius:6px; }\n\n/* Crop controls share the existing compact, neutral editor surface. */\n.crop-source{position:fixed;border:1px dashed #16a878;pointer-events:none;z-index:34;box-sizing:border-box;opacity:.75}\n.crop-panel{position:fixed;z-index:70;width:286px;max-width:calc(100vw - 16px);padding:14px;background:#fff;color:#222;border:1px solid #ddd;border-radius:12px;box-shadow:0 6px 24px #0002;font:13px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;box-sizing:border-box}\n.crop-heading,.crop-controls,.crop-actions{display:flex;align-items:center;gap:8px}.crop-heading{justify-content:space-between;margin-bottom:12px}.crop-heading span{font-size:12px;color:#777}.crop-controls input[type=range]{width:100%;min-width:40px;accent-color:#222}.crop-controls input[type=number]{width:52px;padding:5px;border:1px solid #ddd;border-radius:5px;font:inherit}.crop-actions{justify-content:flex-end;margin-top:12px}.crop-actions button{padding:6px 14px;border:0;border-radius:6px;background:#eee;color:#222;font:inherit;cursor:pointer}.crop-actions .primary{background:#222;color:#fff}\n.crop-controls label,.crop-controls>span{white-space:nowrap;flex:0 0 auto}.crop-controls input[type=range]{width:0;flex:1 1 auto}.crop-actions button:hover{filter:brightness(.95)}.crop-actions button:focus-visible,.crop-controls input:focus-visible{outline:2px solid #1683ff;outline-offset:2px}\n';
 
   // node_modules/lucide/dist/esm/icons/arrow-down.mjs
   var ArrowDown = [
@@ -336,6 +734,12 @@ property of their respective owners.
   var Copy = [
     ["rect", { width: "14", height: "14", x: "8", y: "8", rx: "2", ry: "2" }],
     ["path", { d: "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" }]
+  ];
+
+  // node_modules/lucide/dist/esm/icons/crop.mjs
+  var Crop = [
+    ["path", { d: "M6 2v14a2 2 0 0 0 2 2h14" }],
+    ["path", { d: "M18 22V8a2 2 0 0 0-2-2H2" }]
   ];
 
   // node_modules/lucide/dist/esm/icons/download.mjs
@@ -647,6 +1051,7 @@ property of their respective owners.
     Check,
     CircleAlert,
     Lock,
+    Crop,
     RefreshCw,
     Save,
     Scan,
@@ -663,11 +1068,11 @@ property of their respective owners.
     const nodes = icons[name];
     if (!nodes) throw new Error(`Unknown icon: ${name}`);
     return `<svg xmlns="http://www.w3.org/2000/svg" class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${nodes.map(
-      ([tag, attrs]) => `<${tag} ${Object.entries(attrs).map(([k, v]) => `${k}="${escape(v)}"`).join(" ")}/>`
+      ([tag, attrs2]) => `<${tag} ${Object.entries(attrs2).map(([k, v]) => `${k}="${escape(v)}"`).join(" ")}/>`
     ).join("")}</svg>`;
   }
-  function button(action, name, label, { text = "", cls = "", attrs = "" } = {}) {
-    return `<button type="button" data-act="${action}" class="${cls}" title="${escape(label)}" aria-label="${escape(label)}" ${attrs}>${icon(name)}${text ? `<span>${escape(text)}</span>` : ""}</button>`;
+  function button(action, name, label, { text = "", cls = "", attrs: attrs2 = "" } = {}) {
+    return `<button type="button" data-act="${action}" class="${cls}" title="${escape(label)}" aria-label="${escape(label)}" ${attrs2}>${icon(name)}${text ? `<span>${escape(text)}</span>` : ""}</button>`;
   }
 
   // html-design/src/review.js
@@ -1024,9 +1429,11 @@ property of their respective owners.
     <div class="text-tools"><input class="fs" type="number" min="6" max="999" aria-label="字号" title="字号，单位 px">${fmt("bold", "Bold", "加粗 (Ctrl/⌘ B)")}
       <label class="color-control" title="文字颜色" aria-label="文字颜色"><span class="color-swatch"></span><input type="color" class="cpick" aria-label="文字颜色"></label>
       ${button("text-align", "AlignLeft", "左对齐；点击切换为居中", { cls: "icon-only text-align" })}</div>
-    <div class="image-tools" hidden>${button("image-replace", "RefreshCw", "替换图片", { text: "替换" })}<div class="seg" role="group" aria-label="图片填充模式"><button data-act="image-fit" title="完整显示，保持比例">适应</button><button data-act="image-cover" title="裁切铺满，保持比例">填充</button></div></div>
+    <div class="image-tools" hidden>${button("image-crop", "Crop", "裁切图片", { text: "裁切" })}${button("image-replace", "RefreshCw", "替换图片", { text: "替换" })}<div class="seg" role="group" aria-label="图片填充模式"><button data-act="image-fit" title="完整显示，保持比例">适应</button><button data-act="image-cover" title="裁切铺满，保持比例">填充</button></div></div>
     <div class="object-tools">${button("rotation", "RotateCw", "旋转", { cls: "icon-only", attrs: 'aria-expanded="false" aria-haspopup="menu"' })}${button("element-more", "Ellipsis", "元素操作", { cls: "icon-only", attrs: 'aria-expanded="false" aria-haspopup="menu"' })}</div>
   </div>
+  <div class="crop-source" hidden aria-hidden="true"></div>
+  <section class="crop-panel" aria-label="图片裁切" hidden><div class="crop-heading"><strong>裁切</strong><span>拖动图片调整取景</span></div><div class="crop-controls"><label for="crop-zoom">缩放</label><input id="crop-zoom" class="crop-zoom" aria-label="裁切缩放" type="range" min="100" max="500" step="1"><input class="crop-zoom-value" aria-label="裁切缩放百分比" type="number" min="100" max="2000" step="1"><span>%</span></div><div class="crop-actions"><button data-act="crop-cancel">取消</button><button class="primary" data-act="crop-done">完成</button></div></section>
   <div class="sel">${HANDLES.map((h) => `<i data-h="${h}" title="${h.length === 2 ? "拖动缩放（文字角点同步缩放字号）" : "调整边界，不改变字号"}"></i>`).join("")}</div>
   <button type="button" class="rotate-handle" aria-label="旋转选中元素" title="拖动旋转；Shift 15°步进，Alt 自由旋转" hidden>${icon("RotateCw")}</button><output class="rotation-feedback" aria-live="off" hidden></output>
   <div class="menu-panel rotation-panel" data-menu="rotation" role="dialog" aria-label="旋转" hidden><div class="rotation-single"><label>角度 <input type="number" class="rotation-angle" step="1" aria-label="旋转角度"><span>°</span></label>${button("rotation-reset", "RotateCw", "重置旋转为0°", { text: "重置为 0°" })}</div><p class="rotation-multiple" hidden>拖动旋转手柄，以整体中心旋转。</p></div>
@@ -1572,7 +1979,7 @@ property of their respective owners.
     toast
   }) {
     let pan = { x: 0, y: 0 }, space = false, panning, restore, playTimer;
-    const clamp = (z) => Math.max(0.1, Math.min(4, Math.round(z * 1e3) / 1e3));
+    const clamp2 = (z) => Math.max(0.1, Math.min(4, Math.round(z * 1e3) / 1e3));
     function bounds() {
       if (S.playing) return { x: 0, y: 0, w: innerWidth, h: innerHeight };
       const nav = root.hasAttribute("data-editor-nav") ? parseFloat(getComputedStyle(ui.host).getPropertyValue("--nav")) || 0 : 0;
@@ -1599,7 +2006,7 @@ property of their respective owners.
       draw();
     }
     function zoom(value, at = null) {
-      const old = S.zoom, z = clamp(value), v = bounds();
+      const old = S.zoom, z = clamp2(value), v = bounds();
       if (at) {
         const cx = v.x + v.w / 2, cy = v.y + v.h / 2, k = z / old;
         pan = {
@@ -1630,7 +2037,7 @@ property of their respective owners.
         0.1,
         Math.min((v.w - padding) / b.w, (v.h - padding) / b.h, 4)
       );
-      S.zoom = clamp(z);
+      S.zoom = clamp2(z);
       drawViewport();
     }
     function step(dir) {
@@ -1969,8 +2376,8 @@ property of their respective owners.
       }
       const body = document.body.cloneNode(false);
       body.innerHTML = inner;
-      const attrs = [...root.attributes].filter((a) => !/^data-edit/.test(a.name)).map((a) => `${a.name}="${esc(a.value)}"`).join(" ");
-      return `<!DOCTYPE html><html ${attrs}><head><meta charset="utf-8"><base href="${esc(location.href)}">${contentCSS()}<style id="thumb-fix">${fixCSS(sizeOf(b))}</style></head>${body.outerHTML}</html>`;
+      const attrs2 = [...root.attributes].filter((a) => !/^data-edit/.test(a.name)).map((a) => `${a.name}="${esc(a.value)}"`).join(" ");
+      return `<!DOCTYPE html><html ${attrs2}><head><meta charset="utf-8"><base href="${esc(location.href)}">${contentCSS()}<style id="thumb-fix">${fixCSS(sizeOf(b))}</style></head>${body.outerHTML}</html>`;
     }
     function layout2(b) {
       const t = thumbs.get(b), sz = sizeOf(b), w = thumbWidth();
@@ -6749,72 +7156,6 @@ property of their respective owners.
     };
   }
 
-  // html-design/src/geometry.js
-  function elementGeometry(el) {
-    const number2 = (value) => parseFloat(value) || 0;
-    const angleValue = (value) => {
-      if (value === "none") return 0;
-      const parts = value.trim().split(/\s+/), angle = parts.pop();
-      if (parts.length && parts.join(" ") !== "z" && parts.join(" ") !== "0 0 1") return NaN;
-      const n = parseFloat(angle);
-      return angle.endsWith("rad") && !angle.endsWith("grad") ? n * 180 / Math.PI : angle.endsWith("grad") ? n * 0.9 : angle.endsWith("turn") ? n * 360 : n;
-    };
-    const cs = getComputedStyle(el), r = el.getBoundingClientRect();
-    const chain = [];
-    for (let n = el; n; n = n.parentElement) chain.unshift(n);
-    let matrix = new DOMMatrix(), parent = matrix, supported = true;
-    for (const n of chain) {
-      const s = getComputedStyle(n), t = new DOMMatrix(s.transform), angle = angleValue(s.rotate);
-      const scales = s.scale === "none" ? [1, 1] : s.scale.split(/\s+/).map(Number);
-      if (scales.length === 1) scales.push(scales[0]);
-      const x = Math.hypot(t.a, t.b), y = Math.hypot(t.c, t.d), tolerance = 1e-4 * Math.max(1, x * y);
-      if (!t.is2D || t.a * t.d - t.b * t.c <= 0 || x < 1e-6 || Math.abs(x - y) > 1e-4 * Math.max(x, y) || Math.abs(t.a * t.c + t.b * t.d) > tolerance || !Number.isFinite(angle) || scales.length !== 2 || scales[0] <= 0 || Math.abs(scales[0] - scales[1]) > 1e-4 || s.perspective !== "none" || s.offsetPath !== "none") supported = false;
-      const zoom = Number(s.zoom) || 1;
-      if (n === el) parent = matrix.scale(zoom);
-      if (s.display !== "inline" || n.matches("img,svg,canvas,video,iframe")) {
-        matrix = matrix.rotate(Number.isFinite(angle) ? angle : 0).scale(scales[0] || 1).multiply(new DOMMatrix([t.a, t.b, t.c, t.d, 0, 0]));
-      }
-      matrix = matrix.scale(zoom);
-    }
-    const scale = Math.hypot(matrix.a, matrix.b);
-    const border = (axis) => {
-      const sides = axis === "width" ? ["Left", "Right"] : ["Top", "Bottom"];
-      const value = parseFloat(cs[axis]);
-      return Number.isFinite(value) ? value + (cs.boxSizing === "border-box" ? 0 : sides.reduce((sum, side) => sum + number2(cs[`padding${side}`]) + number2(cs[`border${side}Width`]), 0)) : NaN;
-    };
-    const inline = cs.display === "inline" && !el.matches("img,svg,canvas,video,iframe");
-    const w = inline ? r.width / scale : border("width"), h = inline ? r.height / scale : border("height");
-    if (!scale || !Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0 || inline && el.getClientRects().length > 1) supported = false;
-    const plain = (m) => ({ a: m.a, b: m.b, c: m.c, d: m.d });
-    return {
-      supported,
-      inline,
-      w,
-      h,
-      cx: (r.left + r.right) / 2,
-      cy: (r.top + r.bottom) / 2,
-      scale,
-      angle: Math.atan2(matrix.b, matrix.a) * 180 / Math.PI,
-      individual: angleValue(cs.rotate),
-      matrix: plain(matrix),
-      parent: plain(parent)
-    };
-  }
-  function inverseDelta(matrix, x, y) {
-    const d = matrix.a * matrix.d - matrix.b * matrix.c;
-    return { x: (matrix.d * x - matrix.c * y) / d, y: (matrix.a * y - matrix.b * x) / d };
-  }
-  function mappedDelta(matrix, x, y) {
-    return { x: matrix.a * x + matrix.c * y, y: matrix.b * x + matrix.d * y };
-  }
-  var normalizedAngle = (angle) => ((angle + 180) % 360 + 360) % 360 - 180;
-  function snappedAngle(angle, event) {
-    if (event.altKey) return angle;
-    if (event.shiftKey) return Math.round(angle / 15) * 15;
-    const nearest = Math.round(angle / 90) * 90;
-    return Math.abs(nearest - angle) <= 3 ? nearest : angle;
-  }
-
   // html-design/src/selection.js
   function selectionRoots(nodes) {
     const unique = [...new Set(nodes)].filter((n) => n?.isConnected);
@@ -6898,7 +7239,7 @@ property of their respective owners.
   (() => {
     if (window.__htmlDesignEditor) return;
     window.__htmlDesignEditor = true;
-    const MEDIA = "img,video,canvas,svg,iframe,picture";
+    const MEDIA = "img,video,canvas,svg,iframe,picture,[data-crop-frame]";
     const HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
     const SKIP_ATTR = /^(contenteditable|data-editor-current)$/;
     function main() {
@@ -6969,6 +7310,7 @@ property of their respective owners.
       const selectionOverlay = createSelectionOverlay(ui);
       const textLayout = createTextLayout({ ui });
       let layoutRequest = 0, layoutTimer;
+      const crop = createCrop({ S, ui, select, draw: drawSel, sync: syncBar, push, toast, getPos, setPos, canEdit: () => S.editing && !S.playing && !!persistence?.canEdit() });
       let focusedBeforeModal = null;
       const fromUI = (e) => e.composedPath().includes(host);
       const inStage = (n) => n instanceof Element && !!n.closest("[data-artboard]");
@@ -7047,6 +7389,7 @@ property of their respective owners.
         commit(b, board);
       }
       function history(dir) {
+        if (crop.active) return crop.history(dir);
         endText();
         const from = dir < 0 ? S.undo : S.redo, to = dir < 0 ? S.redo : S.undo, c = from.pop();
         if (!c) return;
@@ -7070,6 +7413,7 @@ property of their respective owners.
         });
       }
       function removeEl(el) {
+        crop.finish();
         const nodes = S.selection.includes(el) ? selectionRoots(S.selection) : [el];
         const b = el.closest("[data-artboard]");
         const places = [...nodes].sort((a, b2) => a.compareDocumentPosition(b2) & 4 ? -1 : 1).map((node) => ({
@@ -7160,8 +7504,8 @@ property of their respective owners.
         ta.readOnly = !writable;
         $("[data-act=flow]").setAttribute("aria-pressed", !isArtboard(b));
         $("[data-act=artboard]").setAttribute("aria-pressed", isArtboard(b));
-        $("[data-act=undo]").disabled = !writable || !S.undo.length;
-        $("[data-act=redo]").disabled = !writable || !S.redo.length;
+        $("[data-act=undo]").disabled = !writable || !(crop.active ? crop.canUndo : S.undo.length);
+        $("[data-act=redo]").disabled = !writable || !(crop.active ? crop.canRedo : S.redo.length);
         [
           "flow",
           "artboard",
@@ -7294,6 +7638,7 @@ property of their respective owners.
         } else el.style.translate = x || y ? `${x}px ${y}px` : "";
       }
       function select(el, keepDrag = false) {
+        if (crop.active && !crop.owns(el)) crop.finish();
         const nodes = selectionRoots(Array.isArray(el) ? el : el ? [el] : []);
         if (nodes.length !== S.selection.length || nodes.some((n, i) => n !== S.selection[i])) {
           if (!keepDrag && S.drag?.cancel) {
@@ -7308,6 +7653,7 @@ property of their respective owners.
         syncBar();
       }
       function drawSel() {
+        crop.refresh();
         guides.refresh();
         S.selection = selectionRoots(S.selection).filter((n) => visible(n));
         S.sel = S.selection.at(-1) || null;
@@ -7445,7 +7791,7 @@ property of their respective owners.
         if (!initial.supported) return toast("这种变换暂不支持拖动、缩放或旋转");
         const media = el.matches(MEDIA), text = !media && !el.querySelector("[data-el],img,svg,canvas,video,iframe") && !!el.textContent.trim();
         const metrics = text && dir.length === 2 ? textMetrics(el) : null;
-        const before = snap(metrics ? metrics.map((m) => m.node) : [el]);
+        const before = snap(metrics ? metrics.map((m) => m.node) : cropImage(el) && el !== cropImage(el) ? [el, cropImage(el)] : [el]);
         const hp = media || el.style.height ? "height" : "minHeight";
         const x0 = e.clientX, y0 = e.clientY;
         let g = initial, p = getPos(el), anchor, moved = false;
@@ -7485,7 +7831,10 @@ property of their respective owners.
             el.style.boxSizing = "border-box";
             el.style.maxWidth = "none";
             if (dir !== "n" && dir !== "s") el.style.width = Math.round(Math.max(8, w) * 1e3) / 1e3 + "px";
-            if (dir !== "e" && dir !== "w") el.style[hp] = Math.round(Math.max(8, h) * 1e3) / 1e3 + "px";
+            if (dir !== "e" && dir !== "w") {
+              el.style[hp] = Math.round(Math.max(8, h) * 1e3) / 1e3 + "px";
+              if (el.matches("[data-crop-frame]")) cropImage(el).style.setProperty("height", "100%", "important");
+            }
             setPos(el, p, p.x, p.y);
             const now = elementGeometry(el), current = resizeAnchor(now, dir);
             const d = inverseDelta(now.parent, anchor.x - current.x, anchor.y - current.y);
@@ -7571,6 +7920,11 @@ property of their respective owners.
         S.drag = operation;
       }
       function positionRotation() {
+        if (crop.active) {
+          $(".rotate-handle").hidden = true;
+          $(".rotation-feedback").hidden = true;
+          return;
+        }
         const button2 = $(".rotate-handle"), feedback = $(".rotation-feedback");
         const show = S.editing && !S.playing && !S.text && S.sel && S.selection.every((n) => elementGeometry(n).supported);
         button2.hidden = !show;
@@ -7588,6 +7942,7 @@ property of their respective owners.
         if (ui.activeElement !== $(".rotation-angle") && S.selection.length === 1) $(".rotation-angle").value = degrees;
       }
       function nudge(el, k, n) {
+        crop.finish();
         const nodes = S.selection.includes(el) ? selectionRoots(S.selection) : [el];
         const dx = k === "arrowleft" ? -n : k === "arrowright" ? n : 0, dy = k === "arrowup" ? -n : k === "arrowdown" ? n : 0;
         if (nodes.some((node) => !elementGeometry(node).supported)) return toast("这种变换暂不支持拖动、缩放或旋转");
@@ -7605,6 +7960,7 @@ property of their respective owners.
         drawSel();
       }
       function duplicate(el) {
+        crop.finish();
         const b = el.closest("[data-artboard]");
         const nodes = S.selection.includes(el) ? selectionRoots(S.selection) : [el];
         const tree = document.createElement("div");
@@ -7716,7 +8072,8 @@ property of their respective owners.
         probe.src = src;
       }
       function pickReplace(img) {
-        S.replace = img;
+        crop.finish();
+        S.replace = cropImage(img);
         fileIn.click();
       }
       fileIn.addEventListener("change", () => {
@@ -7725,18 +8082,25 @@ property of their respective owners.
         ), target = S.replace;
         fileIn.value = "";
         S.replace = null;
-        if (target)
-          files[0] && readFile(
-            files[0],
-            (src) => persistence?.canEdit() && record(
-              [target],
-              () => {
-                target.src = src;
-                target.removeAttribute("srcset");
-              },
-              target.closest("[data-artboard]")
-            )
-          );
+        if (target) files[0] && readFile(files[0], (src) => {
+          const probe = new Image();
+          probe.onload = () => {
+            if (!persistence?.canEdit() || !S.editing || !target.isConnected) return;
+            record([target], () => {
+              target.src = src;
+              target.removeAttribute("srcset");
+              if (target.hasAttribute("data-crop-image")) {
+                target.style.setProperty("--crop-zoom", "1");
+                target.style.setProperty("--crop-x", "50%");
+                target.style.setProperty("--crop-y", "50%");
+                target.style.setProperty("object-fit", "cover", "important");
+              }
+            }, target.closest("[data-artboard]"));
+            drawSel();
+          };
+          probe.onerror = () => toast("图片无法读取，已保留原图");
+          probe.src = src;
+        });
         else files.forEach((f) => readFile(f, addImage));
       });
       function startText(el, x, y) {
@@ -7888,7 +8252,7 @@ property of their respective owners.
         if (rgb && ui.activeElement !== $(".cpick")) $(".cpick").value = "#" + rgb.slice(1).map((n2) => Number(n2).toString(16).padStart(2, "0")).join("");
       }
       function placeTbar() {
-        const el = S.sel, show = S.editing && !S.playing && el?.isConnected && visible(el);
+        const el = S.sel, show = S.editing && !S.playing && !crop.active && el?.isConnected && visible(el);
         tbar.hidden = !show;
         if (!show) {
           $("[data-menu=text-layout]").hidden = true;
@@ -7905,12 +8269,12 @@ property of their respective owners.
         if (!supported) $("[data-menu=rotation]").hidden = true;
         $(".selection-count").hidden = !multi;
         $(".selection-count").textContent = multi ? `已选 ${S.selection.length} 个元素` : "";
-        const image = !multi && el.matches("img"), text = !multi && !el.matches(MEDIA) && !el.querySelector("[data-el]") && !!el.textContent.trim();
+        const image = !multi && !!cropImage(el), text = !multi && !el.matches(MEDIA) && !el.querySelector("[data-el]") && !!el.textContent.trim();
         $(".text-tools").hidden = !text;
         $(".more-text-section").hidden = !text;
         $(".image-tools").hidden = !image;
         if (image) {
-          const fit = getComputedStyle(el).objectFit;
+          const fit = getComputedStyle(cropImage(el)).objectFit;
           $("[data-act=image-fit]").setAttribute(
             "aria-pressed",
             fit === "contain" || fit === "scale-down"
@@ -7980,11 +8344,31 @@ property of their respective owners.
           if (reviewUI?.key(e)) return;
           if (fromUI(e) && ui.activeElement?.matches(".rotate-handle") && ["ArrowLeft", "ArrowRight", "Enter", " "].includes(e.key)) return;
           if (S.playing) return;
+          if (crop.active && (e.ctrlKey || e.metaKey) && ["z", "y"].includes(e.key.toLowerCase())) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            ui.activeElement?.blur();
+            crop.history(e.key.toLowerCase() === "y" || e.shiftKey ? 1 : -1);
+            return;
+          }
+          if (crop.active && e.key === "Enter") {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            ui.activeElement?.blur();
+            crop.finish();
+            return;
+          }
           if (fromUI(e) && pages.key(e)) return;
           if (fromUI(e) && ["Enter", " "].includes(e.key) && !e.ctrlKey && !e.metaKey)
             return;
           if (fromUI(e) && ["ArrowDown", "ArrowUp", "Escape"].includes(e.key) && (ui.activeElement?.closest("[data-menu]") || ui.activeElement?.matches("[aria-expanded=true]")))
             return;
+          if (crop.active && e.key === "Escape") {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            crop.finish(true);
+            return;
+          }
           if (e.key === "Escape" && S.drag?.cancel) {
             S.drag.cancel();
             S.drag = null;
@@ -8033,7 +8417,7 @@ property of their respective owners.
           } else if (mod && k === "d" && can) duplicate(el);
           else if ((k === "delete" || k === "backspace") && can) removeEl(el);
           else if (k === "enter" && can && S.selection.length === 1)
-            el.matches("img") ? pickReplace(el) : startText(el);
+            cropImage(el) ? crop.start(el) : startText(el);
           else if (k.startsWith("arrow") && can && !mod)
             nudge(el, k, e.shiftKey ? 10 : 1);
           else if (!typing && !mod && (k === "pagedown" || !el && k === "arrowright"))
@@ -8111,7 +8495,10 @@ property of their respective owners.
             return;
           }
           if (!S.selection.includes(el)) select(el);
-          if (e.button === 0) startDrag(e, el);
+          if (e.button === 0) {
+            if (crop.active && crop.owns(el)) crop.gesture(e);
+            else startDrag(e, el);
+          }
         },
         true
       );
@@ -8153,7 +8540,7 @@ property of their respective owners.
               if (e.shiftKey || e.ctrlKey || e.metaKey) return;
               const el = e.target.closest("[data-el]");
               if (el) select(el);
-              el?.matches("img") ? pickReplace(el) : startText(el, e.clientX, e.clientY);
+              cropImage(el) ? crop.start(el) : startText(el, e.clientX, e.clientY);
             }
           },
           true
@@ -8209,7 +8596,8 @@ property of their respective owners.
         const h = e.target.closest?.("[data-h]");
         if (h && S.sel && S.editing) {
           e.preventDefault();
-          startResize(e, h.dataset.h);
+          if (crop.active) crop.gesture(e, h.dataset.h);
+          else startResize(e, h.dataset.h);
         }
       });
       function closeMenus() {
@@ -8237,19 +8625,8 @@ property of their respective owners.
         panel.style.top = Math.max(8, Math.min(innerHeight - panel.offsetHeight - 8, y)) + "px";
       }
       function imageFit(value) {
-        const el = S.sel;
-        if (!el?.matches("img")) return;
-        record(
-          [el],
-          () => {
-            const cs = getComputedStyle(el);
-            el.style.width = cs.width;
-            el.style.height = cs.height;
-            el.style.objectFit = value;
-          },
-          el.closest("[data-artboard]")
-        );
-        drawSel();
+        crop.finish();
+        crop.reset(S.sel, value);
       }
       function layer(front) {
         const el = S.sel;
@@ -8366,6 +8743,12 @@ property of their respective owners.
         "page-up": () => pages.moveStep(-1),
         "page-down": () => pages.moveStep(1),
         "image-replace": () => pickReplace(S.sel),
+        "image-crop": () => {
+          endText();
+          crop.start(S.sel);
+        },
+        "crop-done": () => crop.finish(),
+        "crop-cancel": () => crop.finish(true),
         "image-fit": () => imageFit("contain"),
         "image-cover": () => imageFit("cover"),
         "text-align": () => {
@@ -8439,6 +8822,9 @@ property of their respective owners.
         "image-replace",
         "image-fit",
         "image-cover",
+        "image-crop",
+        "crop-done",
+        "crop-cancel",
         "text-height",
         "text-fit",
         "text-align",
@@ -8462,6 +8848,7 @@ property of their respective owners.
           closeMenus();
         if (mutations.has(act) && (!persistence?.canEdit() || !S.editing || S.playing))
           return;
+        if (crop.active && !["crop-done", "crop-cancel", "undo", "redo", "image-crop", "zoom-in", "zoom-out", "zoom-reset", "zoom-fit"].includes(act)) crop.finish();
         ACTS[act]?.(btn);
       });
       ui.addEventListener("keydown", (e) => {
@@ -8595,6 +8982,7 @@ property of their respective owners.
       }
       function goTo(b) {
         const list = boards(), i = list.indexOf(b);
+        crop.finish();
         endText();
         if (S.sel && (!b || !b.contains(S.sel))) select(null);
         setCurrent(i >= 0 ? b : list[0] || null);
@@ -8736,9 +9124,13 @@ property of their respective owners.
         );
       }
       function serialize(finish = true) {
-        if (finish) endText();
+        if (finish) {
+          crop.finish();
+          endText();
+        }
         measure();
         const doc = root.cloneNode(true);
+        if (!finish) crop.cleanClone(doc);
         doc.querySelectorAll(
           "[data-editor-ui], [data-editor-connection], style[data-editor-style], #codex-browser-sidebar-comments-root"
         ).forEach((n) => n.remove());
@@ -8759,6 +9151,7 @@ property of their respective owners.
         setTimeout(() => URL.revokeObjectURL(a.href), 1e3);
       }
       function save() {
+        crop.finish();
         endText();
         persistence.save();
       }
@@ -8770,7 +9163,7 @@ property of their respective owners.
         fileName
       });
       addEventListener("beforeunload", (e) => {
-        if (S.changed || sourcePending() || pages.hasPendingRename()) {
+        if (S.changed || crop.active || sourcePending() || pages.hasPendingRename()) {
           e.preventDefault();
           e.returnValue = "";
         }
@@ -8806,7 +9199,7 @@ property of their respective owners.
         changed: (value) => {
           S.changed = value;
         },
-        isBusy: () => !!S.drag || sourcePending(),
+        isBusy: () => !!S.drag || crop.active || sourcePending(),
         hasPendingSource: () => sourcePending() || pages.hasPendingRename(),
         pause() {
           if (sourcePending() || pages.hasPendingRename()) return false;

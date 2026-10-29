@@ -21,6 +21,12 @@ sources:
     status: current
   - path: html-design/src/guides.js
     status: current
+  - path: html-design/src/crop.js
+    status: current
+  - path: html-design/crop.test.mjs
+    status: current
+  - path: html-design/src/crop-geometry.js
+    status: current
   - path: html-design/src/geometry.js
     status: current
   - path: html-design/rotation.test.mjs
@@ -89,6 +95,14 @@ geometry.js的自包含elementGeometry由编辑器和PPTX浏览器复用：CSS b
 
 单选方向选框/控制点、固定屏幕外侧手柄和实时角度，窄屏夹紧。90°附近3°吸附、Shift15°、Alt自由；数值和重置仅单选，为页面绝对方向（包含祖先/原transform）。指针角度连续跨360，整圈0.01°误差内no-op。resize按局部轴和原border-box尺寸，重新测实际对侧锚点并用父级逆矩阵补偿；文字角点保留富文本比例与6px下限，拖动/键盘微移按页面方向转入父坐标。沿既有Undo/取消/切页/失权收尾，AI交接完成当前拖动后保存；收尾闭包不依赖可能已被清空的S.drag。选框/反馈只在Shadow DOM。
 
+## 按需图片裁切
+
+crop.js 负责有限 cover/pan/resize 数学和裁切会话。有效操作才将原 img 放进版本1 frame，原 data-el 归外框，原节点/id/class/src/alt 和链接仍在内部 img。Typed OM 转移当前布局 CSS（保留 %/auto）、原边框/圆角/变换；内部自然高度使原 auto 占位继续随宽度响应。标准 object-fit/object-position/scale/百分比 translate 与三个 CSS变量是取景真值，运行态派生数学，不增加竞争 JSON。content-box clip 保留 padding 和边框；不支持 API/几何、picture、复杂 mask/filter/clip 或同步 marked 布局探针不等价时拒绝并完整恢复。
+
+会话局部历史按有效手势存结构+属性快照，不进入主 Undo/dirty。完成时逐项合入主历史，取消还原进入状态并丢弃局部记录；Undo 首次迁移恢复原 img，Redo 同一节点回框。无操作/夹住/回起点不迁移；拖框用局部逆变换和实际中心补偿锁定对侧锚点，旋转和非中心 origin 不用 BCR 当原尺寸。保存/导出/页面/选择/编辑结束/AI handoff 完成会话，isBusy 阻止旁路 autosave；serialize(false) 的草稿克隆恢复进入前裁切表示，不修改现场。替换先解码再记录；失败保留原图；Fit/Cover 重置实际取景。
+
+安全转换验证当前布局，无法保证未来外部选择器/媒体查询变化仍改变已移到外框的职责；这不是全 CSS 兼容层。实际普通 Grid/Flex item、百分比/auto/inline/absolute、padding/边框、链接、复制和撤销有行为覆盖；复杂不可保持的当前布局明确拒绝。
+
 ## AI 修改审阅
 
 当前页底自动「放弃｜接受」，多页右下默认收起汇总，删除/异页singleton和文档级保留入口。review.js 的before按hover/focus原位投影、保持自然尺寸与相同zoom，使用隔离只读iframe；Accept 只改元数据，Undo 刷新形成普通历史边界。persistence.js 先结束编辑并 flush，再核对 revision/generation；人工保存可隐式接受相关 scope。详见 contract.ai-review。
@@ -108,3 +122,5 @@ geometry.js的自包含elementGeometry由编辑器和PPTX浏览器复用：CSS b
 ## Open Questions
 
 多选和编辑入口工作已由原开发任务报告完成；首次导入在独立干净副本中复核。未来行为以当前源码和回归为准。
+
+裁切标记本身不证明几何可靠。共用cropGeometry读取真实clip、content-box、内图尺寸/方向/均匀scale/object-position/translate与实际中心；QA只在契约成立时豁免内部预期越界，否则报GEOMETRY_UNSUPPORTED并保持不完整覆盖；PPTX拒绝该不可靠裁切而不凭标记伪造srcRect。PDF仍按实际DOM显示。

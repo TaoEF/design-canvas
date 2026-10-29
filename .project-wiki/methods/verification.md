@@ -22,6 +22,8 @@ sources:
     status: current
   - path: html-design/selection.test.mjs
     status: current
+  - path: html-design/crop.test.mjs
+    status: current
   - path: html-design/rotation.test.mjs
     status: current
   - path: html-design/text-measure.test.mjs
@@ -91,3 +93,5 @@ AI 审阅增加 review.test.mjs（真树语义、部分接受/恢复、私有基
 ## Open Questions
 
 README.md / PRODUCT.md / DESIGN.md：作为当前说明保留在原位，对关键事实逐项核实。demos/recovered/：historical 的本地恢复副本，保留在磁盘并由 Git 忽略；旧预览图为 historical，不自动晋升 Wiki。html-design/SKILL.md：保留现有使用说明，事实以源码为准。尚无历史聊天记录需要复制到 raw/。
+
+裁切回归使用独立编号色块源图，验证数学覆盖、真实旋转局部边角/三个画布缩放、会话取消和每手势历史、%/auto/Grid/Flex/inline/absolute、无操作不迁移、解码失败保护、复制及 managed autosave/AI handoff。srcRect/roundRect/旋转/链接/组关系读取真实 PPTX XML；浏览器 PDF 与独立 LibreOffice UserInstallation 的原生 PPTX→PDF 核对取景/圆角，不能宣称已完成 PowerPoint 人工验收。测试点击图片中心（实际 DOM 几何），不能固定70px偏移而落在小图外；保存断言解析设计 markup，不能误匹配内嵌编辑器源码字面量。

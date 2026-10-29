@@ -32,7 +32,7 @@ export function collectEditableSlide(board) {
   });
   const graphics = [...board.querySelectorAll('svg,canvas')];
   for (const el of board.querySelectorAll('*')) {
-    if (el.closest('svg') && !el.matches('svg')) continue;
+    if ((el.matches('img[data-crop-image]') && el.parentElement?.matches('[data-crop-frame="1"]')) || (el.closest('svg') && !el.matches('svg'))) continue;
     const cs = getComputedStyle(el), box = rect(el);
     if (!el.getClientRects().length || cs.visibility === 'hidden' || cs.opacity === '0' || !box.w || !box.h) continue;
     const name = el.dataset.el || el.className?.baseVal || String(el.className || el.tagName);
@@ -89,7 +89,24 @@ export function collectEditableSlide(board) {
     }
     if (cs.backgroundImage !== 'none' || cs.filter !== 'none') warnings.push(`${name}: 复杂背景或滤镜`);
     if (!box.supported && !el.matches('svg,canvas')) warnings.push(`${name}: 不支持的变换使用外框近似`);
-    if (el.matches('img')) {
+    if (el.matches('[data-crop-frame="1"]')) {
+      const img = el.querySelector(':scope > img[data-crop-image]');
+      const actual = globalThis.__htmlDesignCropGeometry(el, globalThis.__htmlDesignGeometry);
+      if (!actual.supported) throw new Error(`裁切 CSS 无法可靠导出：${actual.reason}`);
+      const imageStyle = getComputedStyle(img), g = globalThis.__htmlDesignGeometry(el);
+      const inset = ['Left','Top','Right','Bottom'].map(side => (parseFloat(cs[`border${side}Width`]) || 0) + (parseFloat(cs[`padding${side}`]) || 0));
+      const w = g.w-inset[0]-inset[2], h = g.h-inset[1]-inset[3];
+      const dx = (inset[0]-inset[2])/2, dy = (inset[1]-inset[3])/2;
+      const cx = g.cx-origin.left+g.matrix.a*dx+g.matrix.c*dy, cy = g.cy-origin.top+g.matrix.b*dx+g.matrix.d*dy;
+      const z = parseFloat(imageStyle.scale) || 1, position = imageStyle.objectPosition.split(/\s+/).map(value => parseFloat(value)/100);
+      if (![w,h,z,...position].every(Number.isFinite) || Math.min(w,h,z,img.naturalWidth,img.naturalHeight)<=0) throw new Error('裁切图片坐标无效');
+      const fit = imageStyle.objectFit, k = (fit === 'contain' ? Math.min(w/img.naturalWidth,h/img.naturalHeight) : Math.max(w/img.naturalWidth,h/img.naturalHeight))*z;
+      const pw=img.naturalWidth*k, ph=img.naturalHeight*k;
+      const crop = fit === 'contain' ? null : { l:position[0]*(pw-w)/pw, t:position[1]*(ph-h)/ph, r:(1-position[0])*(pw-w)/pw, b:(1-position[1])*(ph-h)/ph };
+      const radius = Math.max(0, rx/box.scale-Math.max(...inset));
+      if (!geometry && corners.some(([x,y])=>x>0||y>0)) warnings.push(`${name}: 不统一的图片圆角使用矩形近似`);
+      emit(img, { kind:'image', x:cx-w*box.scale/2, y:cy-h*box.scale/2, w:w*box.scale, h:h*box.scale, rotation:box.rotation, name, source:img.currentSrc||img.src, naturalWidth:img.naturalWidth,naturalHeight:img.naturalHeight, fit:crop?'crop':fit, crop, mask:geometry && radius>0 ? Math.min(.5,radius/Math.min(w,h)) : 0, maskGeometry:geometry === 'ellipse' ? 'ellipse' : 'roundRect', opacity:Number(cs.opacity), href:img.closest('a')?.href });
+    } else if (el.matches('img')) {
       emit(el, { kind: 'image', ...box, name, source: el.currentSrc || el.src, naturalWidth: el.naturalWidth, naturalHeight: el.naturalHeight, fit: cs.objectFit, opacity: Number(cs.opacity), href: el.closest('a')?.href });
     } else if (el.matches('svg,canvas')) {
       emit(el, { kind: 'graphic', ...box, name, index: graphics.indexOf(el) });
@@ -262,7 +279,7 @@ export async function addEditableSlide({ pptx, slide, data, page, board, context
 }
 
 // Runs in the existing export browser, on trusted PptxGenJS XML, never design scripts.
-export function groupEditableSlideXml({ xml, owners, groups }) {
+export function groupEditableSlideXml({ xml, owners, groups, pictures = [] }) {
   const doc = new DOMParser().parseFromString(xml, 'application/xml');
   const p = 'http://schemas.openxmlformats.org/presentationml/2006/main';
   const a = 'http://schemas.openxmlformats.org/drawingml/2006/main';
@@ -273,6 +290,24 @@ export function groupEditableSlideXml({ xml, owners, groups }) {
   if (leaves.length !== owners.length || [...tree.children].some(node => node.localName === 'grpSp')) {
     throw new Error('PPTX 对象对应关系不一致，组合导出已停止');
   }
+  pictures.forEach((picture,i) => {
+    if (!picture) return;
+    const leaf = leaves[i]; if (leaf.localName !== 'pic') throw new Error('PPTX 裁切对象对应关系无效');
+    const make = (name, attributes={}) => { const n=doc.createElementNS(a, `a:${name}`);for(const [key,value] of Object.entries(attributes))n.setAttribute(key,String(value));return n; };
+    if (picture.crop) {
+      const fill = leaf.getElementsByTagNameNS(p,'blipFill')[0];
+      for(const node of [...fill.children])if(node.localName==='srcRect')node.remove();
+      const values = Object.fromEntries(Object.entries(picture.crop).map(([k,v])=>[k,Math.round(Math.max(0,Math.min(1,v))*100000)]));
+      fill.insertBefore(make('srcRect',values), [...fill.children].find(n=>n.localName==='stretch') || null);
+    }
+    if (picture.mask) {
+      const properties=leaf.getElementsByTagNameNS(p,'spPr')[0];
+      for(const node of [...properties.children])if(['prstGeom','custGeom'].includes(node.localName))node.remove();
+      const geometry=make('prstGeom',{prst:picture.maskGeometry||'roundRect'}), list=make('avLst');
+      if (picture.maskGeometry !== 'ellipse') list.append(make('gd',{name:'adj',fmla:`val ${Math.round(picture.mask*100000)}`}));geometry.append(list);
+      properties.insertBefore(geometry, [...properties.children].find(n=>['noFill','solidFill','gradFill','blipFill','pattFill','grpFill','ln','effectLst','effectDag','scene3d','sp3d','extLst'].includes(n.localName))||null);
+    }
+  });
   const definitions = new Map(groups.map(group => [group.id, group]));
   if (definitions.size !== groups.length) throw new Error('PPTX 组合标识重复');
   const root = { children: [] }, registry = new Map();
