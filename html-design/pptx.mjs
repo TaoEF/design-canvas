@@ -1,7 +1,8 @@
 // Browser geometry is the source of truth; text and images remain native PPTX objects.
 export function collectEditableSlide(board) {
   const origin = board.getBoundingClientRect();
-  const items = [], warnings = [];
+  const items = [], warnings = [], sources = [];
+  const emit = (node, item) => { items.push(item); sources.push(node); };
   const cssColor = value => {
     const numbers = String(value).match(/[\d.]+/g)?.map(Number);
     if (!numbers || numbers.length < 3) return { color: '000000', transparency: 100 };
@@ -68,7 +69,7 @@ export function collectEditableSlide(board) {
     if (container && (fill.transparency < 100 || uniformStroke)) {
       // CSS borders lie inside the border box; DrawingML strokes straddle their path.
       const inset = uniformStroke ? uniformStroke.width / 2 : 0;
-      items.push({ kind: 'shape', x: box.x + inset, y: box.y + inset, w: box.w - inset * 2, h: box.h - inset * 2,
+      emit(el, { kind: 'shape', x: box.x + inset, y: box.y + inset, w: box.w - inset * 2, h: box.h - inset * 2,
         name, fill, geometry: geometry?.type || 'rect', radius: Math.max(0, (geometry?.radius || 0) - inset),
         stroke: uniformStroke, opacity: Number(cs.opacity) });
     }
@@ -77,16 +78,16 @@ export function collectEditableSlide(board) {
       const points = side === 'Top' ? [box.x, box.y, box.w, 0]
         : side === 'Bottom' ? [box.x, box.y + box.h, box.w, 0]
           : side === 'Left' ? [box.x, box.y, 0, box.h] : [box.x + box.w, box.y, 0, box.h];
-      items.push({ kind: 'line', points, width, color, name });
+      emit(el, { kind: 'line', points, width, color, name });
     }
     if ((fill.transparency < 100 || sides.some(visibleBorder)) && (!geometry || (sides.some(visibleBorder) && !uniformStroke))) {
       warnings.push(`${name}: 边框或圆角使用简化映射`);
     }
     if (cs.backgroundImage !== 'none' || cs.filter !== 'none') warnings.push(`${name}: 复杂背景或滤镜`);
     if (el.matches('img')) {
-      items.push({ kind: 'image', ...box, name, source: el.currentSrc || el.src, naturalWidth: el.naturalWidth, naturalHeight: el.naturalHeight, fit: cs.objectFit, opacity: Number(cs.opacity) });
+      emit(el, { kind: 'image', ...box, name, source: el.currentSrc || el.src, naturalWidth: el.naturalWidth, naturalHeight: el.naturalHeight, fit: cs.objectFit, opacity: Number(cs.opacity) });
     } else if (el.matches('svg,canvas')) {
-      items.push({ kind: 'graphic', ...box, name, index: graphics.indexOf(el) });
+      emit(el, { kind: 'graphic', ...box, name, index: graphics.indexOf(el) });
     } else if (el.hasAttribute('data-el') && !el.querySelector('[data-el]') && el.textContent.trim()) {
       // Keep authored breaks, not the browser's width-dependent soft wraps.
       const runs = [];
@@ -149,7 +150,7 @@ export function collectEditableSlide(board) {
         if (block) { pendingSpace = null; pendingBlockBreak = true; }
       };
       visit(el);
-      if (runs.length) items.push({
+      if (runs.length) emit(el, {
         kind: 'text', ...box, name, runs, ...baseStyle,
         align: ['left', 'center', 'right', 'justify'].includes(cs.textAlign) ? cs.textAlign : 'left',
         lineHeight: parseFloat(cs.lineHeight) || baseStyle.fontSize * 1.2,
@@ -158,7 +159,19 @@ export function collectEditableSlide(board) {
       });
     }
   }
-  return { background: cssColor(getComputedStyle(board).backgroundColor), items, warnings };
+  // Nodes, not public names/classes, own export groups. No metadata enters the DOM.
+  const candidates = [...board.querySelectorAll('[data-el]')].filter(node =>
+    !node.matches('[data-stage],[data-artboard]') && sources.some(source => source !== node && node.contains(source)));
+  const groups = candidates.map((node, i) => ({ id: `g${i}`, name: node.dataset.el }));
+  const groupByNode = new Map(candidates.map((node, i) => [node, groups[i].id]));
+  items.forEach((item, i) => {
+    const path = [];
+    for (let node = sources[i]; node && node !== board; node = node.parentElement) {
+      if (groupByNode.has(node)) path.unshift(groupByNode.get(node));
+    }
+    item.groupPath = path;
+  });
+  return { background: cssColor(getComputedStyle(board).backgroundColor), items, groups, warnings };
 }
 
 export async function addEditableSlide({ pptx, slide, data, page, board, context, scale = 1 }) {
@@ -190,14 +203,15 @@ export async function addEditableSlide({ pptx, slide, data, page, board, context
       // Explicit segments avoid PptxGenJS treating a trailing newline in a rich run
       // differently from a newline followed by more text in the same run.
       const runs = item.runs.flatMap(run => run.text.split('\n').map((text, i, parts) => ({
-        text, options: { ...textOptions(run.options), breakLine: i < parts.length - 1 },
+        text, options: { ...textOptions(run.options), breakLine: i < parts.length - 1,
+          hyperlink: item.href ? { url: item.href } : undefined },
       })));
       slide.addText(runs, {
         ...position, ...textOptions(item),
         x: position.x, y: position.y, w: position.w + px(2), h: position.h + px(2),
         margin: item.padding.map(pt), valign: 'top', fit: 'none', wrap: true,
         lineSpacing: pt(item.lineHeight), paraSpaceBefore: 0, paraSpaceAfter: 0,
-        lang: 'zh-CN', hyperlink: item.href ? { url: item.href } : undefined,
+        lang: 'zh-CN',
       });
     } else {
       let source;
@@ -237,4 +251,74 @@ export async function addEditableSlide({ pptx, slide, data, page, board, context
     }
   }
   slide.addNotes(data.warnings.length ? `文字和图片均为可编辑元素。以下效果可能简化：\n${data.warnings.join('\n')}` : '文字和图片均为可编辑元素。');
+}
+
+// Runs in the existing export browser, on trusted PptxGenJS XML, never design scripts.
+export function groupEditableSlideXml({ xml, owners, groups }) {
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const p = 'http://schemas.openxmlformats.org/presentationml/2006/main';
+  const a = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+  if (doc.querySelector('parsererror')) throw new Error('PPTX XML 无法解析，组合导出已停止');
+  const tree = doc.getElementsByTagNameNS(p, 'spTree')[0];
+  if (!tree) throw new Error('PPTX 缺少对象树，组合导出已停止');
+  const leaves = [...tree.children].filter(node => ['sp', 'pic', 'graphicFrame', 'cxnSp'].includes(node.localName));
+  if (leaves.length !== owners.length || [...tree.children].some(node => node.localName === 'grpSp')) {
+    throw new Error('PPTX 对象对应关系不一致，组合导出已停止');
+  }
+  const definitions = new Map(groups.map(group => [group.id, group]));
+  if (definitions.size !== groups.length) throw new Error('PPTX 组合标识重复');
+  const root = { children: [] }, registry = new Map();
+  owners.forEach((path, i) => {
+    let parent = root;
+    for (const id of path) {
+      if (!definitions.has(id)) throw new Error('PPTX 组合归属未知');
+      let group = registry.get(id);
+      if (!group) {
+        group = { ...definitions.get(id), children: [], parent };
+        registry.set(id, group); parent.children.push(group);
+      }
+      // The DOM walk must yield contiguous subtrees; otherwise grouping changes paint order.
+      if (group.parent !== parent || parent.children.at(-1) !== group) throw new Error('PPTX 组合顺序不连续');
+      parent = group;
+    }
+    parent.children.push({ node: leaves[i] });
+  });
+  let nextId = Math.max(0, ...[...doc.getElementsByTagNameNS(p, 'cNvPr')].map(node => Number(node.getAttribute('id')) || 0)) + 1;
+  const element = (ns, name, attributes = {}) => {
+    const node = doc.createElementNS(ns, name);
+    for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
+    return node;
+  };
+  const bounds = node => {
+    const properties = [...node.children].find(child => ['spPr', 'grpSpPr', 'xfrm'].includes(child.localName));
+    const xfrm = properties?.localName === 'xfrm' ? properties : properties?.getElementsByTagNameNS(a, 'xfrm')[0];
+    const off = xfrm && [...xfrm.children].find(child => child.localName === 'off');
+    const ext = xfrm && [...xfrm.children].find(child => child.localName === 'ext');
+    if (!off || !ext) throw new Error('PPTX 对象缺少可组合坐标');
+    const values = [off.getAttribute('x'), off.getAttribute('y'), ext.getAttribute('cx'), ext.getAttribute('cy')].map(Number);
+    if (!values.every(Number.isFinite) || values[2] < 0 || values[3] < 0) throw new Error('PPTX 组合坐标无效');
+    return values;
+  };
+  const render = entry => {
+    if (entry.node) return entry.node;
+    const children = entry.children.map(render);
+    if (children.length === 1) return children[0]; // Omit a wrapper that adds no useful grouping.
+    const boxes = children.map(bounds);
+    const x = Math.min(...boxes.map(box => box[0])), y = Math.min(...boxes.map(box => box[1]));
+    const w = Math.max(1, Math.max(...boxes.map(box => box[0] + box[2])) - x);
+    const h = Math.max(1, Math.max(...boxes.map(box => box[1] + box[3])) - y);
+    const group = element(p, 'p:grpSp'), nv = element(p, 'p:nvGrpSpPr');
+    nv.append(element(p, 'p:cNvPr', { id: nextId++, name: entry.name }), element(p, 'p:cNvGrpSpPr'), element(p, 'p:nvPr'));
+    const properties = element(p, 'p:grpSpPr'), xfrm = element(a, 'a:xfrm');
+    xfrm.append(element(a, 'a:off', { x, y }), element(a, 'a:ext', { cx: w, cy: h }),
+      element(a, 'a:chOff', { x, y }), element(a, 'a:chExt', { cx: w, cy: h }));
+    properties.append(xfrm); group.append(nv, properties, ...children);
+    return group;
+  };
+  // Build first, then replace only drawable children; retain spTree schema properties/extLst.
+  const result = root.children.map(render);
+  for (const node of leaves) if (node.parentNode === tree) node.remove();
+  const extension = [...tree.children].find(node => node.localName === 'extLst') || null;
+  for (const node of result) tree.insertBefore(node, extension);
+  return new XMLSerializer().serializeToString(doc);
 }

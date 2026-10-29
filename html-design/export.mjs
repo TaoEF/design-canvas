@@ -1,9 +1,10 @@
 import { chromium } from 'playwright';
 import { PDFDocument } from 'pdf-lib';
 import PptxGenJS from 'pptxgenjs';
+import JSZip from 'jszip';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { collectEditableSlide, addEditableSlide } from './pptx.mjs';
+import { collectEditableSlide, addEditableSlide, groupEditableSlideXml } from './pptx.mjs';
 
 export function browserOptions() {
   const executablePath = process.env.HTML_DESIGN_CHROME;
@@ -114,14 +115,27 @@ export async function exportDocument({ html, baseUrl, title = 'design', format }
     pptx.title = title;
     pptx.subject = 'HTML 画板导出（可编辑文字与图片）';
     pptx.author = 'HTML Design';
+    const grouping = [];
     for (let i = 0; i < sizes.length; i++) {
       await select(i);
       const slide = pptx.addSlide();
       const data = await slides.nth(i).evaluate(collectEditableSlide);
+      grouping.push({ owners: data.items.map(item => item.groupPath), groups: data.groups });
       await addEditableSlide({ pptx, slide, data, page, board: slides.nth(i), context, scale: first.width / sizes[i].width });
       if (options.onSlideImage) await options.onSlideImage(i, await slides.nth(i).screenshot({ type: 'png', scale: 'device', animations: 'disabled' }));
     }
-    return { bytes: await pptx.write({ outputType: 'nodebuffer', compression: true }), pages: sizes.length };
+    let bytes = await pptx.write({ outputType: 'nodebuffer', compression: true });
+    if (grouping.some(plan => plan.groups.length)) {
+      const zip = await JSZip.loadAsync(bytes);
+      for (const [i, plan] of grouping.entries()) {
+        if (!plan.groups.length) continue;
+        const file = `ppt/slides/slide${i + 1}.xml`;
+        const xml = await zip.file(file).async('string');
+        zip.file(file, await page.evaluate(groupEditableSlideXml, { xml, ...plan }));
+      }
+      bytes = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+    }
+    return { bytes, pages: sizes.length };
   } finally {
     await browser.close();
   }

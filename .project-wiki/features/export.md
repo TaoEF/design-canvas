@@ -32,7 +32,7 @@ confidence: high
 
 ## Source Of Truth
 
-浏览器 `src/export.js` 提交快照；服务 `/__html-design/export/pdf|pptx`；`export.mjs` 使用 Playwright、pdf-lib、PptxGenJS；`pptx.mjs` 收集和映射对象。
+浏览器 `src/export.js` 提交快照；服务 `/__html-design/export/pdf|pptx`；`export.mjs` 使用 Playwright、pdf-lib、PptxGenJS 与运行时 JSZip；`pptx.mjs` 收集和映射对象，并用现有浏览器 DOMParser/XMLSerializer 包装原生组合。
 
 
 ## Contracts
@@ -44,7 +44,11 @@ PPTX 每个文字元素对应一个可编辑文本框，开启 `wrap="square"`�
 
 四边宽度、颜色/透明度一致且为可见实线，配合可可靠表达的统一圆角和未旋转/缩放几何时，容器背景与边框使用同一个原生 shape；透明背景也保留边框，无边框或全透明边框不发出冗余边线。CSS 边框位于 border-box 内，原生 stroke 的中心线内缩半边宽；圆角使用 PptxGenJS 4 的 `rectRadius`（英寸），减去内缩后写入实际 DrawingML adjustment。胶囊形保留 roundRect，不误作 ellipse；全椭圆可映射为 ellipse。
 
-不同边宽/颜色/样式、非统一或一般椭圆圆角、缩放/旋转等不合并成伪统一描边，保留按边回退并在 notes 提示简化；不支持的圆角背景退为矩形。容器子文字仍是独立可编辑文本框，不整体栅格化或事后分组。此能力只合并装饰，不提供整卡联动编辑。
+不同边宽/颜色/样式、非统一或一般椭圆圆角、缩放/旋转等不合并成伪统一描边，保留按边回退并在 notes 提示简化；不支持的圆角背景退为矩形。容器子文字仍是独立可编辑文本框，不整体栅格化。
+
+带 `data-el` 且有实际导出后代的语义容器导出为原生 `p:grpSp`，自身背景/描边与后代文字、图片可一起移动缩放；子对象仍可单独编辑或取消组合。分组只派生于来源 DOM 节点与祖先路径，不按可能重复的 class/objectName 匹配，不写回设计 HTML；不强制组合 stage、整页、无标记布局层，空组与单对象包装省略，支持嵌套组。
+
+PptxGenJS 4 没有公开 addGroup API；生成后以真实 XML 树移动原叶子节点，JSZip 只替换对应 slide XML，图片/超链接关系和原叶子顺序、格式、坐标不变。组边界来自原生对象变换框（包含溢出后代），`off/ext` 与 `chOff/chExt` 初始相同，避免初始偏移或缩放；新组 ID 高于已有对象 ID。对象数或归属顺序不能核对时明确失败，不输出损坏文件。文字超链接写到 PptxGenJS rich run options，确保生成实际 relationship ID，而不是悬空引用。此分组只作用于导出文件，不新增浏览器编辑器内分组功能。
 
 ## Workflows
 

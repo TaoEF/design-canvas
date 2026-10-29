@@ -3,13 +3,17 @@ import assert from 'node:assert/strict';
 import { PDFDocument } from 'pdf-lib';
 import JSZip from 'jszip';
 import { createPreviewServer } from './server.mjs';
+import { chromium } from 'playwright';
+import PptxGenJS from 'pptxgenjs';
+import { browserOptions } from './export.mjs';
+import { groupEditableSlideXml } from './pptx.mjs';
 
-let server, origin;
+let server, origin, xmlBrowser;
 before(async () => {
   server = await createPreviewServer({ port: 0 });
   origin = `http://127.0.0.1:${server.address().port}`;
 });
-after(() => new Promise(resolve => server.close(resolve)));
+after(async () => { await xmlBrowser?.close(); await new Promise(resolve => server.close(resolve)); });
 
 const fixture = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>Snapshot test</title>
 <style>body{margin:40px}[data-stage]{padding:80px;transform:scale(.5)}[data-artboard]{display:flex;flex-direction:column;box-sizing:border-box;width:600px;height:300px;background:#a23c2a;color:white;padding:30px;margin:40px}h1{font:40px Arial;margin:0}.second{width:800px;height:400px;background:#d9e7ec;color:#111}</style></head><body>
@@ -116,6 +120,42 @@ test('PPTX paragraphs reflow at the textbox width while authored breaks and rich
   assert.deepEqual(paragraphs('column'), ['Top', 'Bottom']);
 });
 
+async function xmlPage(run) {
+  xmlBrowser ||= await chromium.launch(browserOptions());
+  const page = await xmlBrowser.newPage();
+  try { return await run(page); } finally { await page.close(); }
+}
+async function inspectSlide(xml) {
+  return xmlPage(page => page.evaluate(xml => {
+    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+    if (doc.querySelector('parsererror')) throw Error('invalid XML');
+    const ns = 'http://schemas.openxmlformats.org/presentationml/2006/main';
+    const drawable = node => ['sp', 'pic', 'grpSp', 'graphicFrame', 'cxnSp'].includes(node.localName);
+    const leaves = [], groups = [];
+    const visit = node => {
+      const props = [...node.children].find(n => ['nvSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr', 'nvCxnSpPr'].includes(n.localName));
+      const nv = props?.getElementsByTagNameNS(ns, 'cNvPr')[0];
+      const info = { kind: node.localName, id: nv?.getAttribute('id'), name: nv?.getAttribute('name') };
+      if (node.localName === 'grpSp') {
+        info.children = [...node.children].filter(drawable).map(visit);
+        info.schema = [...node.children].slice(0, 2).map(n => n.localName);
+        const xfrm = [...node.children].find(n => n.localName === 'grpSpPr').children[0];
+        info.transform = Object.fromEntries([...xfrm.children].map(n => [n.localName, Object.fromEntries([...n.attributes].map(a => [a.name, a.value]))]));
+        groups.push(info);
+      } else {
+        info.xml = new XMLSerializer().serializeToString(node);
+        info.text = [...node.getElementsByTagNameNS('http://schemas.openxmlformats.org/drawingml/2006/main', 't')].map(n => n.textContent).join('');
+        leaves.push(info);
+      }
+      return info;
+    };
+    const tree = doc.getElementsByTagNameNS(ns, 'spTree')[0];
+    const top = [...tree.children].filter(drawable).map(visit);
+    return { top, leaves, groups, ids: [...doc.getElementsByTagNameNS(ns, 'cNvPr')].map(n => n.getAttribute('id')),
+      references: [...doc.getElementsByTagName('*')].flatMap(n => [...n.attributes].filter(a => a.namespaceURI === 'http://schemas.openxmlformats.org/officeDocument/2006/relationships').map(a => a.value)) };
+  }, xml));
+}
+
 // Synthetic fixtures only: no user attachment content is stored in the repository.
 const shapesOf = xml => [...xml.matchAll(/<p:sp>.*?<\/p:sp>/gs)].map(match => match[0]);
 const namedShape = (xml, name) => {
@@ -141,7 +181,18 @@ test('PPTX uniform rounded cards use one native fill/stroke shape each, with edi
     </section></main></body></html>`;
   const { xml } = await slideXml(html);
   assert.equal(shapesOf(xml).length, 10, 'three containers plus seven textboxes, formerly 22 fragments');
-  assert.doesNotMatch(xml, /-border"|<p:pic>|<p:grpSp>/);
+  assert.doesNotMatch(xml, /-border"|<p:pic>/);
+  const structure = await inspectSlide(xml);
+  assert.deepEqual(structure.top.map(n => n.kind), ['sp', 'grpSp', 'grpSp', 'grpSp']);
+  assert.equal(structure.groups.length, 3);
+  for (const group of structure.groups) {
+    assert.deepEqual(group.children.map(n => n.kind), ['sp', 'sp', 'sp']);
+    assert.equal(group.children.filter(n => /<p:txBody>/.test(n.xml)).length, 2);
+    assert.deepEqual(group.schema, ['nvGrpSpPr', 'grpSpPr']);
+    assert.deepEqual(group.transform.off, group.transform.chOff);
+    assert.deepEqual(group.transform.ext, group.transform.chExt);
+  }
+  assert.equal(new Set(structure.ids).size, structure.ids.length);
   for (let i = 0; i < 3; i++) {
     const shape = namedShape(xml, `card${i}`);
     assert.match(shape, /<a:solidFill><a:srgbClr val="FFF7ED"/);
@@ -193,6 +244,67 @@ test('PPTX container mapping preserves transparent, absent and differing borders
   assert.match(namedShape(xml, 'different-corners'), /<a:prstGeom prst="rect"/, 'unsupported corners do not masquerade as precise rounding');
   assert.match(namedShape(xml, 'elliptic-corners'), /<a:prstGeom prst="rect"/);
   assert.match(await zip.file('ppt/notesSlides/notesSlide1.xml').async('string'), /different-corners/);
+});
+
+test('PPTX semantic groups preserve nested ownership, image/link references and skip layout/empty/single wrappers', async () => {
+  const html = `<!doctype html><html><head><style>[data-artboard]{width:800px;height:600px;position:relative}p{margin:0;font:20px/28px Arial}.repeat{padding:5px}.outer{position:absolute;left:40px;top:60px;width:300px;background:#abcdef;border:1px solid red}.inner{position:relative;background:#fedcba;padding:10px}img{width:80px;height:60px;object-fit:cover}</style></head><body><main data-stage><section data-artboard="p1">
+    <div class="layout"><p data-el="title">Standalone title</p>
+    <div data-el="outer" class="outer repeat"><div class="layout"><div data-el="inner" class="inner repeat">
+      <div class="repeat" style="background:#123456"><p data-el="nested-text">Nested text</p></div>
+      <img data-el="image" src="/demos/assets/bricks.jpg">
+      <a href="https://example.com/target"><p data-el="link">Editable hyperlink</p></a>
+      <p data-el="overflow" style="position:absolute;left:-80px;top:-30px;width:100px">Overflow</p>
+    </div></div><p data-el="sibling">Outer sibling</p></div>
+    <div data-el="cousin" class="repeat" style="position:absolute;left:450px;top:80px"><div class="repeat" style="background:#654321"><p data-el="cousin-text">Cousin</p></div><p data-el="cousin-second">Second child</p></div>
+    <div data-el="single"><p data-el="only-child">Single child</p></div><div data-el="empty"></div>
+    <div class="layout"><p data-el="layout-first">First ungrouped</p><p data-el="layout-second">Second ungrouped</p></div>
+    </div></section></main></body></html>`;
+  const { xml, zip } = await slideXml(html), structure = await inspectSlide(xml);
+  assert.deepEqual(structure.groups.map(g => g.name).sort(), ['cousin', 'inner', 'outer']);
+  const outer = structure.groups.find(g => g.name === 'outer');
+  assert.deepEqual(outer.children.map(n => n.name), ['outer', 'inner', 'sibling']);
+  const inner = structure.groups.find(g => g.name === 'inner');
+  assert.ok(inner.children.some(n => n.kind === 'pic' && n.name === 'image'));
+  assert.ok(inner.children.some(n => n.name === 'repeat' && n.xml.includes('123456')));
+  assert.ok(structure.groups.find(g => g.name === 'cousin').children.some(n => n.name === 'repeat' && n.xml.includes('654321')), 'duplicate classes are owned by their source DOM node');
+  assert.ok(Number(inner.transform.off.x) < 40 * 9525, 'group includes overflowing child geometry');
+  for (const group of structure.groups) {
+    assert.deepEqual(group.transform.off, group.transform.chOff);
+    assert.deepEqual(group.transform.ext, group.transform.chExt);
+  }
+  assert.equal(new Set(structure.ids).size, structure.ids.length);
+  assert.ok(structure.top.some(n => n.name === 'only-child'));
+  assert.ok(structure.top.some(n => n.name === 'layout-first'));
+  assert.ok(structure.top.some(n => n.name === 'layout-second'));
+  assert.match(namedShape(xml, 'link'), /<a:hlinkClick[^>]*r:id=/);
+  const rels = await zip.file('ppt/slides/_rels/slide1.xml.rels').async('string');
+  for (const reference of structure.references) assert.match(rels, new RegExp(`Id="${reference}"`));
+  assert.match(rels, /Target="https:\/\/example.com\/target"/);
+  assert.ok(Object.keys(zip.files).some(name => name.startsWith('ppt/media/') && !zip.files[name].dir));
+});
+
+test('PPTX grouping wraps original XML leaves without changing geometry, formatting, crop, links or order', async () => {
+  const pptx = new PptxGenJS(), slide = pptx.addSlide();
+  slide.addShape(pptx.ShapeType.roundRect, { x: 1, y: 1, w: 3, h: 2, rectRadius: .1, fill: { color: 'ABCDEF' }, line: { color: '123456', width: .75 } });
+  slide.addText('Native child', { x: .8, y: .9, w: 2, h: .4, bold: true, wrap: true, hyperlink: { url: 'https://example.com' } });
+  slide.addImage({ data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6hywAAAAASUVORK5CYII=', x: 2, y: 1, w: 1, h: 1 });
+  slide.addText('Outside', { x: 5, y: 1, w: 2, h: 1 });
+  const zip = await JSZip.loadAsync(await pptx.write({ outputType: 'nodebuffer' }));
+  const original = await zip.file('ppt/slides/slide1.xml').async('string');
+  const plan = { xml: original, owners: [['outer'], ['outer', 'inner'], ['outer', 'inner'], []], groups: [{ id: 'outer', name: 'Container' }, { id: 'inner', name: 'Nested' }] };
+  const grouped = await xmlPage(page => page.evaluate(groupEditableSlideXml, plan));
+  const before = await inspectSlide(original), after = await inspectSlide(grouped);
+  assert.deepEqual(after.leaves, before.leaves, 'all leaf XML, including transforms and relationship IDs, survives exactly');
+  assert.equal(after.groups.length, 2);
+  assert.equal(new Set(after.ids).size, after.ids.length);
+  assert.deepEqual(after.top.map(n => n.kind), ['grpSp', 'sp']);
+  for (const group of after.groups) {
+    assert.deepEqual(group.schema, ['nvGrpSpPr', 'grpSpPr']);
+    assert.deepEqual(group.transform.off, group.transform.chOff);
+    assert.deepEqual(group.transform.ext, group.transform.chExt);
+  }
+  await assert.rejects(xmlPage(page => page.evaluate(groupEditableSlideXml, { ...plan, owners: [] })), /对象对应关系/);
+  await assert.rejects(xmlPage(page => page.evaluate(groupEditableSlideXml, { ...plan, owners: [['outer'], [], ['outer'], []] })), /组合顺序不连续/);
 });
 
 test('invalid export requests and cross-origin writes are rejected without touching files', async () => {
