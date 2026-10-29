@@ -1,4 +1,4 @@
-# HTML-PPT-Canvas
+# dom-slides
 
 可编辑的单文件 HTML 画板，支持本地自动保存、AI 协作和 PDF / 可编辑 PPTX 导出。
 
@@ -7,24 +7,24 @@
 先安装 Node.js 22.20 或更新版本（[skills CLI 官方要求](https://github.com/vercel-labs/skills#install-a-skill)），在希望使用技能的项目中运行：
 
 ```sh
-npx skills add TaoEF/HTML-PPT-Canvas --skill html-ppt-canvas -a codex
+npx skills add TaoEF/dom-slides --skill dom-slides -a codex
 ```
 
 默认安装到当前项目；加 `-g` 可全局安装。然后在 Codex 中调用，例如：
 
 ```text
-$html-ppt-canvas 为新产品做一份 6 页发布演示，保存为可编辑 HTML。
+$dom-slides 为新产品做一份 6 页发布演示，保存为可编辑 HTML。
 ```
 
-技能调用名为 `html-ppt-canvas`，源码路径仍保留 `html-design/`；CLI 可在没有标准目录技能时通过递归搜索发现仓库的 `html-design/SKILL.md`（[发现规则](https://github.com/vercel-labs/skills/blob/main/docs/creating-skills.md#skill-discovery)）。安装技能提供指令与内嵌编辑器资源，不会安装 Node.js、本项目依赖或启动服务。
+技能调用名为 `dom-slides`，源码路径仍保留 `html-design/`；CLI 可在没有标准目录技能时通过递归搜索发现仓库的 `html-design/SKILL.md`（[发现规则](https://github.com/vercel-labs/skills/blob/main/docs/creating-skills.md#skill-discovery)）。安装技能提供指令与内嵌编辑器资源，不会安装 Node.js、本项目依赖或启动服务。
 
 ## 本地运行
 
 项目运行需要 Node.js 20+；这与上面的安装 CLI 版本要求不同。优先复用已有匹配源码目录；没有时克隆到一个尚不存在的新目录，再从完整源码根目录运行：
 
 ```sh
-git clone https://github.com/TaoEF/HTML-PPT-Canvas.git
-cd HTML-PPT-Canvas
+git clone https://github.com/TaoEF/dom-slides.git
+cd dom-slides
 npm ci
 npm start
 ```
@@ -118,7 +118,7 @@ npm test
 
 AI 从 [AGENTS.md](AGENTS.md) 进入 [开发流程](.harness/index.md)，长期知识保存在 [项目 Wiki](.project-wiki/index.md)。未经核实的材料先进入 [raw/](raw/README.md)。
 
-[GitHub 仓库](https://github.com/TaoEF/HTML-PPT-Canvas) · [HTML-PPT-Canvas Development](https://github.com/users/TaoEF/projects/4) · [发布管理约定](GITHUB-PROJECT-MANAGEMENT.md)
+[GitHub 仓库](https://github.com/TaoEF/dom-slides) · [dom-slides Development](https://github.com/users/TaoEF/projects/4) · [发布管理约定](GITHUB-PROJECT-MANAGEMENT.md)
 
 ```sh
 npm run project:check

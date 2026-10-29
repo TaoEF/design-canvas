@@ -1,9 +1,9 @@
 ---
-name: html-ppt-canvas
+name: dom-slides
 description: 生成和局部修改可视化编辑的 HTML 演示、PPT 设计、海报或多页画板，支持浏览器编辑、AI 修改审阅及 PDF/可编辑 PPTX 导出。用户要求制作这类设计、修改已有 HTML 设计稿或将其导出为 PDF/PPTX 时使用。
 ---
 
-# HTML-PPT-Canvas
+# dom-slides
 
 产出是**单个 HTML 文件**：内容 + 样式 + 内嵌编辑器。人在浏览器中可编辑、管理页面和播放，并保存为 HTML；外链图片、字体、CSS 仍需要其资源可用。AI 和人改的是同一份文件，必须保留下列结构和用户状态。
 
@@ -168,7 +168,7 @@ AI 经协作 `commit` 后，待审阅页底显示「放弃｜接受」：悬停�
 
 ## 已知限制
 
-当前已提供文字适配与只读文字检查；整体 DesignQA、“避首尾”检测和 AI commit 自动 QA 反馈仍在 [Issue #7 规划](https://github.com/TaoEF/HTML-PPT-Canvas/issues/7)。Canva 级高级图片裁切、Recharts 图表引擎、调色板与图片色彩语义分析也尚未交付，不能将图片现有的适应/填充描述为高级裁切。
+当前已提供文字适配与只读文字检查；整体 DesignQA、“避首尾”检测和 AI commit 自动 QA 反馈仍在 [Issue #7 规划](https://github.com/TaoEF/dom-slides/issues/7)。Canva 级高级图片裁切、Recharts 图表引擎、调色板与图片色彩语义分析也尚未交付，不能将图片现有的适应/填充描述为高级裁切。
 
 - 插入的图片会以 base64 写进 HTML，图片多的话文件会变大。
 - 在“源码”里应用修改时，新加的 `<script>` 不会马上运行，要保存后重新打开。

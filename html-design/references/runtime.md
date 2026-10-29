@@ -2,19 +2,19 @@
 
 ## 两个目录，两个用途
 
-安装的 `html-ppt-canvas` skill 提供 `SKILL.md`、`references/` 和 `editor.js` 等技能资源；它不等于完整项目。可读取其中 `editor.js` 的原文内嵌到新 HTML，使编辑器逻辑随文件携带。不要在该目录执行项目运行命令，也不要假定它的上级有项目依赖。
+安装的 `dom-slides` skill 提供 `SKILL.md`、`references/` 和 `editor.js` 等技能资源；它不等于完整项目。可读取其中 `editor.js` 的原文内嵌到新 HTML，使编辑器逻辑随文件携带。不要在该目录执行项目运行命令，也不要假定它的上级有项目依赖。
 
 本地服务、协作、文字测量和 PDF/PPTX 导出命令需要**完整源码根目录**：其中有根 `package.json`、`package-lock.json`、`html-design/server.mjs`、`html-design/collaborate.mjs` 和安装后的 `node_modules/`。以下命令均从这个根目录执行，命令中的 `html-design/` 是源码子目录，不是任意已安装 skill 的路径。
 
 ## 取得源码与依赖
 
-先查找用户工作区内是否已有匹配的 `TaoEF/HTML-PPT-Canvas` 源码目录，核对仓库来源和上述文件，优先复用。不要把其他项目的 `package.json` 当作本项目。不要重新克隆覆盖已有目录或用户稿件。
+先查找用户工作区内是否已有匹配的 `TaoEF/dom-slides` 源码目录，核对仓库来源和上述文件，优先复用。不要把其他项目的 `package.json` 当作本项目。不要重新克隆覆盖已有目录或用户稿件。
 
 没有可用源码时，在用户工作区选择一个**尚不存在的新目录**，例如：
 
 ```sh
-git clone https://github.com/TaoEF/HTML-PPT-Canvas.git /absolute/workspace/HTML-PPT-Canvas
-cd /absolute/workspace/HTML-PPT-Canvas
+git clone https://github.com/TaoEF/dom-slides.git /absolute/workspace/dom-slides
+cd /absolute/workspace/dom-slides
 npm ci
 ```
 

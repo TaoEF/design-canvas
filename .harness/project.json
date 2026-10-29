@@ -1,12 +1,12 @@
 {
-  "name": "HTML-PPT-Canvas",
+  "name": "dom-slides",
   "capabilities": [
     "ai-wiki",
     "github"
   ],
   "github": {
-    "repository": "TaoEF/HTML-PPT-Canvas",
-    "url": "https://github.com/TaoEF/HTML-PPT-Canvas",
+    "repository": "TaoEF/dom-slides",
+    "url": "https://github.com/TaoEF/dom-slides",
     "visibility": "public",
     "defaultBranch": "main",
     "integrationBranch": "main",
