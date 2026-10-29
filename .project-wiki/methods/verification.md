@@ -73,7 +73,7 @@ confidence: high
 
 Flex 示例回归使用真实浏览器指针拉伸边点，验证兄弟框宽度与位置联动；保存重开保持 Flex，导出为原生自动换行文本框。富文本缩小适配后保存重开保持节点与格式，PPTX 保持多字号与颜色，PDF 保持页数。真实 web font 请求失败必须拒绝测量/适配且不改原稿，移除失败字体后恢复浏览器实测。
 
-AI 审阅增加 review.test.mjs（真树语义、部分接受/恢复、私有基线、租约/并发、事务6故障点、重启/历史轮转）与 review-browser.test.mjs（真实 before 隔离、输入flush、只读、历史边界、下载/离线和导出）。`npm test` 固定执行 `node --test --test-concurrency=2 html-design/*.test.mjs`，本地与 CI 共用并发数 2 的完整回归配置，避免多个 Playwright 套件竞争资源；单独延长某条用例的等待不能替代一致的并发配置。
+AI 审阅增加 review.test.mjs（真树语义、部分接受/恢复、私有基线、租约/并发、事务6故障点、重启/历史轮转）与 review-browser.test.mjs（真实 before 隔离、输入flush、只读、历史边界、下载/离线和导出）。`npm test` 固定执行 `node --test --test-concurrency=1 html-design/*.test.mjs`，本地与 CI 共用并发数 1 的完整回归配置，将浏览器套件按文件串行执行，以减少低资源 Linux 上的资源竞争；保留原测试语义与等待上限，接受运行时间增加。
 
 ## Update Rules
 
