@@ -617,20 +617,26 @@ for(const command of ['page-copy','page-delete','rename','page-down'])test(`M02:
 const order = page => page.locator('[data-stage]>[data-artboard]').evaluateAll(ns=>ns.map(n=>n.dataset.artboard));
 async function dragThumb(page,id,to,{drop=true}={}){const a=await page.locator(`.thumb[data-page-id=${id}] .frame`).boundingBox(),b=await page.locator(`.thumb[data-page-id=${to}]`).boundingBox();await page.mouse.move(a.x+30,a.y+25);await page.mouse.down();await page.mouse.move(b.x+30,b.y+b.height-4,{steps:8});if(drop)await page.mouse.up();}
 test('M05: viewer drag is visual until drop; cancellation does not acquire or write, and commit waits for lease',async t=>{
-  const f=await fixture(t,'page-drag');await f.load();const b=await viewerFor(f,'page-drag');let takes=0,saves=0;
-  b.on('request',r=>{if(r.url().endsWith('/takeover'))takes++;if(r.url().endsWith('/save'))saves++;});
+  const f=await fixture(t,'page-drag');await f.load();const b=await viewerFor(f,'page-drag');let takes=0,saves=0,takeoverSeen;
+  const takeoverRequest=new Promise(resolve=>takeoverSeen=resolve);
+  b.on('request',r=>{if(r.url().endsWith('/takeover')){takes++;takeoverSeen(r);}if(r.url().endsWith('/save'))saves++;});
   await dragThumb(b,'p1','p2',{drop:false});await b.keyboard.press('Escape');await b.mouse.up();assert.deepEqual(await order(b),['p1','p2']);assert.equal(takes,0);assert.equal(saves,0);
   await dragThumb(b,'p1','p2',{drop:false});await b.evaluate(()=>dispatchEvent(new PointerEvent('pointercancel',{bubbles:true})));await b.mouse.up();assert.deepEqual(await order(b),['p1','p2']);assert.equal(takes,0);
-  let release,seen;const gate=new Promise(r=>release=r),waiting=new Promise(r=>seen=r);
-  await f.page.route('**/__html-design/document/yield',async route=>{seen();await gate;await route.continue();});
-  try{await dragThumb(b,'p1','p2');await within(waiting);assert.deepEqual(await order(b),['p1','p2']);assert.equal(saves,0);assert.equal(takes,1);release();await b.waitForFunction(()=>document.querySelector('[data-stage]').firstElementChild?.dataset.artboard==='p2');await saved(b);assert.equal(saves,1);assert.equal(await b.locator('.dragging,.drop-before,.drop-after').count(),0);assert.equal(await b.locator('html[data-editing]').count(),0);
-    await dragThumb(b,'p2','p1',{drop:false});
-    const current=await readFile(f.file,'utf8');
-    await writeFile(f.file,current.replace(/(<section data-artboard="p2"[^]*?<\/section>)(<section data-artboard="p1"[^]*?<\/section>)/,'$2$1'));
-    await b.mouse.up();await b.locator('.toast').filter({hasText:/已有更新/}).waitFor();
-    await b.waitForFunction(()=>document.querySelector('[data-stage]').firstElementChild?.dataset.artboard==='p1');
-    assert.equal(saves,1,'external reordering invalidates the old drop without a second save');
-  }finally{release();}
+  // Keep the clean owner's lease until explicit close; no hidden heartbeat or held route is needed.
+  await f.page.route('**/__html-design/document/yield',route=>route.abort('aborted').catch(()=>{}));
+  await dragThumb(b,'p1','p2');
+  const takeover=await within(takeoverRequest).catch(error=>{throw new Error('M05: drop did not request takeover',{cause:error});});
+  const response=await within(takeover.response()).catch(error=>{throw new Error('M05: takeover response did not arrive',{cause:error});});
+  assert.equal(response?.status(),200);const pending=await response.json();assert.equal(pending.role,'viewer');assert.equal(pending.pending?.mine,true);
+  assert.deepEqual(await order(b),['p1','p2']);assert.equal(saves,0);assert.equal(takes,1);
+  await f.page.close();
+  await b.waitForFunction(()=>document.querySelector('[data-stage]').firstElementChild?.dataset.artboard==='p2');await saved(b);assert.equal(saves,1);assert.equal(await b.locator('.dragging,.drop-before,.drop-after').count(),0);assert.equal(await b.locator('html[data-editing]').count(),0);
+  await dragThumb(b,'p2','p1',{drop:false});
+  const current=await readFile(f.file,'utf8');
+  await writeFile(f.file,current.replace(/(<section data-artboard="p2"[^]*?<\/section>)(<section data-artboard="p1"[^]*?<\/section>)/,'$2$1'));
+  await b.mouse.up();await b.locator('.toast').filter({hasText:/已有更新/}).waitFor();
+  await b.waitForFunction(()=>document.querySelector('[data-stage]').firstElementChild?.dataset.artboard==='p1');
+  assert.equal(saves,1,'external reordering invalidates the old drop without a second save');
 });
 test('M03/M05: AI pending/lease cancels a preview drag and disables every page write entry',async t=>{
   const f=await fixture(t,'page-ai');await f.load();await dragThumb(f.page,'p1','p2',{drop:false});
