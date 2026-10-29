@@ -105,3 +105,10 @@ K07 同时双击/Enter+Space、延迟的交接前heartbeat或同token pending重
 K08 网络断开、lease过期、AI锁、他人pending及窗口关闭等失败路径fail closed；本窗口自动交接/写状态可恢复，无永久busy/refreshing、无删除token后循环401、无过期后台回调执行。
 K09 在takeover等待及review响应门闩期间，B普通Edit/拖动/源码应用仍锁定，A合法flush/yield和B自己的等待poll仍能完成，无reviewing短路死锁。hover/focus只预览不takeover；click才触发。
 K10 build和原A-I保护、服务端直接viewer API拒写、AI/lease/CAS/故障恢复继续通过；只改已明确变化的viewer UI断言。完整concurrency=2回归、wiki/project/graph/diff通过。Planner最终候选独立两窗口覆盖Accept/Undo/All、人工脏内容保护及无editing，并提供新稿入口。用户确认前不进下一项或远端交付。
+
+## L. 同轮追加label与页码验收（2026-10-29）
+
+L01 使用ID为p8/p12但实际第1/2页的样本，修改/新增项按after真实顺序显示第1/2页；与页脚/缩略图导航一致，不从ID推数字。接受某页/删除其他页后剩余显示与当前顺序一致。
+L02 删除项显示baseline原顺序的「原第N页」，不能显示成当前N；恢复后导航当前页正确。共享CSS/document项仅显示整份文档，无虚假page number。
+L03 修改/新增/删除为非按钮小label，归于左侧页面信息，不在右侧action组，不可Tab聚焦、不触发定位/审阅写；页码、长名称、label、两个动作在桌面/390px布局可区分，关键页码与按钮不截断。
+L04 轻量页序字段来自已有解析结果；新增summary元数据不改变设计HTML字节/revision、baseline schema或原权限/恢复语义。相关Node/浏览器断言及最终全量保持，Planner确认一次桌面/窄屏截图与实际行内容。和K同一候选/同一次新增增量检查，不另启动功能。
