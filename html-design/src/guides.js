@@ -25,7 +25,17 @@ export function spacingCandidates(moving, peers, axis, threshold) {
     if (!a || !b || gap < 0) return;
     const [low, high] = crossRange([moving, a, b], axis);
     const offset = position - moving[start], distance = Math.abs(offset);
-    if (high > low && distance <= threshold) candidates.push({ kind: "spacing", axis, mode, peers: [a, b], gap, offset, distance });
+    if (high <= low || distance > threshold) return;
+    const match = { kind: "spacing", axis, mode, peers: [a, b], gap, offset, distance };
+    const placed = { ...moving, [start]: position };
+    const { spans } = spacingSpans(match, placed);
+    // Overlapping peers still occupy whitespace: do not skip them when choosing
+    // the reference pair, or advertise a gap that crosses a third visible object.
+    const [, , cross, crossSize] = dimensions(axis);
+    const blocked = related.some(r => r !== a && r !== b &&
+      r[cross] < high && r[cross] + r[crossSize] > low &&
+      spans.some(([from, to]) => to > from && r[start] < to && end(r) > from));
+    if (!blocked) candidates.push(match);
   };
   if (left && right) {
     const gap = (right[start] - end(left) - moving[size]) / 2;

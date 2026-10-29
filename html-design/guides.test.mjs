@@ -66,6 +66,23 @@ test("spacing competes by minimum correction, preserves edge ties, and drops a r
   assert.deepEqual(snapMove(moving, peers, { x: 0, y: 0 }, 6), snapMove(moving, peers, { x: 0, y: 0 }, 6), "stable candidate ordering");
 });
 
+test("spacing does not scan past a peer overlapping a reference edge or occupied gap", () => {
+  const moving = { x: 336, y: 100, w: 80, h: 60 };
+  const a = { x: 40, y: 100, w: 60, h: 60 }, b = { x: 170, y: 100, w: 100, h: 60 };
+  const blocker = { x: 125, y: 100, w: 90, h: 60 };
+  const mirror = r => ({ ...r, x: 500 - r.x - r.w });
+  const flip = r => ({ x: r.y, y: r.x, w: r.h, h: r.w });
+  for (const [axis, transform] of [["x", r => r], ["x", mirror], ["y", flip], ["y", r => flip(mirror(r))]]) {
+    const m = transform(moving), peers = [a, b, blocker].map(transform);
+    // Both axes and both continuation directions retain visible overlapping peers.
+    assert.deepEqual(spacingCandidates(m, peers, axis, 6), []);
+    assert.equal(snapMove(m, peers, { x: 0, y: 0 }, 6)[axis], 0);
+  }
+  const center = { x: 166, y: 100, w: 100, h: 60 }, right = { ...b, x: 340, w: 80 };
+  assert.deepEqual(spacingCandidates(center, [a, right, { ...blocker, x: 85, w: 40 }], "x", 6), [], "a peer straddling the left edge occupies the centering gap");
+  assert.ok(spacingCandidates(moving, [a, b, { ...blocker, y: 160 }], "x", 6).some(m => m.mode === "after"), "objects outside the common row do not obstruct the gap");
+});
+
 let browser, editor;
 before(async () => {
   editor = await readFile("html-design/editor.js", "utf8");
