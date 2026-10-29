@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, copyFile, rm, readdir, symlink, access, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import http from 'node:http';
 import JSZip from 'jszip';
@@ -158,4 +159,22 @@ test('SIGTERM during a pending browser resource exits with JSON and no partial o
     run.child.kill('SIGTERM');
     const completed = await run.done; const result = failure(completed); assert.equal(completed.code, 143); assert.equal(result.error.code, 'EXPORT_INTERRUPTED'); await absent(output);
   } finally { run.child.kill('SIGKILL'); hold.closeAllConnections(); await new Promise(resolve => hold.close(resolve)); }
+});
+
+
+test('CLI rejects non-regular HTML inputs without opening a FIFO, and interruption cannot leave it blocked', { skip: process.platform === 'win32' }, async () => {
+  const fifo = path.join(dir, 'pipe.html'), output = path.join(dir, 'pipe.pdf');
+  await promisify(execFile)('mkfifo', [fifo]);
+  const run = start(['pdf', fifo, '--output', output], { HTML_DESIGN_CHROME: '/nonexistent-browser' });
+  const timer = setTimeout(() => { run.child.kill('SIGTERM'); }, 1000);
+  let result;
+  try {
+    result = await Promise.race([run.done, new Promise((_, reject) => setTimeout(() => reject(Error('non-regular input blocked after SIGTERM')), 2500).unref())]);
+  } finally { clearTimeout(timer); run.child.kill('SIGKILL'); }
+  assert.equal(result.code, 1, result.stderr);
+  assert.match(failure(result).error.message, /regular HTML file/);
+  await absent(output);
+  const directory = path.join(dir, 'directory.html'); await mkdir(directory);
+  const notFile = failure(await command(['pdf', directory, '--output', output], { HTML_DESIGN_CHROME: '/nonexistent-browser' }));
+  assert.match(notFile.error.message, /regular HTML file/); await absent(output);
 });

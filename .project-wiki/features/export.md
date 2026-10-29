@@ -59,7 +59,7 @@ PptxGenJS 4 没有公开 addGroup API；生成后以真实 XML 树移动原叶�
 
 ## Workflows
 
-`node html-design/export-cli.mjs <pptx|pdf> input.html --output result.xxx` 复用同一 exportDocument，无需打开编辑器或常驻服务。输入最多32MiB，摘要返回实际字节 SHA-256 revision 和绝对输入/输出路径；不写源文件，不自动交接活跃稿。默认随机 loopback 临时只读服务按 realpath 限定输入目录/显式 root，拒绝根外 symlink、隐藏路径与非GET/HEAD；--base-url 只接收 loopback HTTP(S) IP 原稿 URL，使用已有服务且不关闭它。输出独占创建，不覆盖源/已有输出，失败只清理本次拥有的部分文件；finally 关闭临时服务，SIGINT/SIGTERM 通过可选 signal 关闭现有浏览器。具体调用见 references/export-cli.md。
+`node html-design/export-cli.mjs <pptx|pdf> input.html --output result.xxx` 复用同一 exportDocument，无需打开编辑器或常驻服务。输入限定普通文件、最多32MiB，打开前先校验类型，非阻塞/拒绝跟随替换后符号链接的打开配合打开后再校验，避免 FIFO 在检查前阻塞和中断失效；摘要返回实际字节 SHA-256 revision 和绝对输入/输出路径；不写源文件，不自动交接活跃稿。默认随机 loopback 临时只读服务按 realpath 限定输入目录/显式 root，拒绝根外 symlink、隐藏路径与非GET/HEAD；--base-url 只接收 loopback HTTP(S) IP 原稿 URL，使用已有服务且不关闭它。输出独占创建，不覆盖源/已有输出，失败只清理本次拥有的部分文件；finally 关闭临时服务，SIGINT/SIGTERM 通过可选 signal 关闭现有浏览器。具体调用见 references/export-cli.md。
 
 本地预览中选择导出；macOS 可使用已安装 Chrome，其他环境安装 Playwright Chromium，或设置 HTML_DESIGN_CHROME。离线 HTML 保留下载和浏览器打印能力。
 

@@ -2,6 +2,7 @@
 import http from 'node:http';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { constants } from 'node:fs';
 import { open, realpath, stat, lstat, readFile, unlink } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { exportDocument } from './export.mjs';
@@ -76,7 +77,11 @@ export async function exportFile({ format, input, output, root, baseUrl, title }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   const resourceRoot = baseUrl ? null : await realpath(root || path.dirname(path.resolve(input)));
   if (resourceRoot && !inside(resourceRoot, inputPath)) throw new Error('Input is outside the resource root.');
-  const source = await open(inputPath, 'r');
+  const beforeOpen = await stat(inputPath);
+  if (!beforeOpen.isFile() || beforeOpen.size > LIMIT) throw new Error('Input must be a regular HTML file of at most 32 MiB.');
+  // Reject devices/pipes before open, and never block if the path is replaced
+  // by a FIFO between stat and open. NOFOLLOW also rejects a replaced symlink.
+  const source = await open(inputPath, constants.O_RDONLY | (constants.O_NONBLOCK || 0) | (constants.O_NOFOLLOW || 0));
   let snapshot;
   try {
     const info = await source.stat();
