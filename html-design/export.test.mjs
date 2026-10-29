@@ -374,3 +374,36 @@ test('PPTX native rotation uses true local dimensions, accumulated scale/angle a
   await writeFile('.export-test/issue19-test/export-rotation.pptx', await zip.generateAsync({ type: 'nodebuffer' }));
   await writeFile('.export-test/issue19-test/export-rotation.html', html);
 });
+
+for (const grouped of [false, true]) test(`rotated side-specific border fallback has valid directed endpoints across quadrants (${grouped ? 'semantic group' : 'standalone'})`, async () => {
+  const angles = [30, -30, 120, -120, 210, 300, 0, 90, 180, 270];
+  const html = `<html><head><style>body{margin:0}[data-artboard]{position:relative;width:1200px;height:600px}.card{position:absolute;width:200px;height:100px;box-sizing:border-box;background:#abcdef;border:2px solid red;border-left-color:blue}.card p{position:absolute;left:20px;top:20px;width:120px;height:50px;margin:0;font:18px/24px Arial}</style></head><body><main data-stage><section data-artboard="p1">${angles.map((angle, i) => `<div data-el="c${i}" class="card" style="left:${20 + i % 5 * 240}px;top:${70 + Math.floor(i / 5) * 240}px;rotate:${angle}deg">${grouped ? `<p data-el="c${i}-text">Native child</p>` : ''}</div>`).join('')}</section></main></body></html>`;
+  const { xml } = await slideXml(html);
+  const structure = await inspectSlide(xml);
+  assert.equal(structure.groups.length, grouped ? angles.length : 0);
+  const native = await xmlPage(page => page.evaluate(xml => {
+    const doc = new DOMParser().parseFromString(xml, 'application/xml'), a = 'http://schemas.openxmlformats.org/drawingml/2006/main', p = 'http://schemas.openxmlformats.org/presentationml/2006/main';
+    const extents = [...doc.getElementsByTagNameNS(a, 'ext')].map(n => [Number(n.getAttribute('cx')), Number(n.getAttribute('cy'))]);
+    const lines = [...doc.getElementsByTagNameNS(p, 'sp')].filter(n => n.getElementsByTagNameNS(p, 'cNvPr')[0].getAttribute('name').endsWith('-border')).map(n => {
+      const t = n.getElementsByTagNameNS(a, 'xfrm')[0], off = t.getElementsByTagNameNS(a, 'off')[0], ext = t.getElementsByTagNameNS(a, 'ext')[0];
+      const x = Number(off.getAttribute('x')) / 9525, y = Number(off.getAttribute('y')) / 9525, w = Number(ext.getAttribute('cx')) / 9525, h = Number(ext.getAttribute('cy')) / 9525;
+      const flipH = t.getAttribute('flipH') === '1', flipV = t.getAttribute('flipV') === '1';
+      return { name: n.getElementsByTagNameNS(p, 'cNvPr')[0].getAttribute('name'), start: [x + (flipH ? w : 0), y + (flipV ? h : 0)], end: [x + (flipH ? 0 : w), y + (flipV ? 0 : h)] };
+    });
+    return { extents, lines };
+  }, xml));
+  assert.ok(native.extents.every(pair => pair.every(value => Number.isFinite(value) && value >= 0)), 'DrawingML extents must be non-negative, including standalone fallback lines');
+  const sides = [[[-100, -50], [100, -50]], [[100, -50], [100, 50]], [[-100, 50], [100, 50]], [[-100, -50], [-100, 50]]];
+  for (const [i, angle] of angles.entries()) {
+    const lines = native.lines.filter(line => line.name === `c${i}-border`); assert.equal(lines.length, 4);
+    const rad = angle * Math.PI / 180, cos = Math.cos(rad), sin = Math.sin(rad), cx = 120 + i % 5 * 240, cy = 120 + Math.floor(i / 5) * 240;
+    const transformed = ([x, y]) => [cx + cos * x - sin * y, cy + sin * x + cos * y];
+    for (let j = 0; j < 4; j++) for (const [key, point] of [['start', sides[j][0]], ['end', sides[j][1]]]) {
+      const expected = transformed(point); for (let axis = 0; axis < 2; axis++) assert.ok(Math.abs(lines[j][key][axis] - expected[axis]) < .002, JSON.stringify({ grouped, angle, side: j, key, actual: lines[j][key], expected }));
+    }
+  }
+  if (grouped) {
+    assert.equal(structure.leaves.filter(n => n.text === 'Native child').length, angles.length);
+    for (const group of structure.groups) { assert.deepEqual(group.transform.off, group.transform.chOff); assert.deepEqual(group.transform.ext, group.transform.chExt); }
+  }
+});

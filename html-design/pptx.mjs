@@ -200,8 +200,11 @@ export async function addEditableSlide({ pptx, slide, data, page, board, context
       });
     } else if (item.kind === 'line') {
       const [x, y, w, h] = item.points;
+      // DrawingML extents cannot be negative. Preserve both directed endpoints
+      // by translating to the minimum corner and flipping the normalized path.
       slide.addShape(pptx.ShapeType.line, {
-        x: px(x), y: px(y), w: px(w), h: px(h), objectName: `${item.name}-border`,
+        x: px(Math.min(x, x + w)), y: px(Math.min(y, y + h)), w: px(Math.abs(w)), h: px(Math.abs(h)),
+        flipH: w < 0, flipV: h < 0, objectName: `${item.name}-border`,
         line: { color: item.color.color, transparency: item.color.transparency, width: pt(item.width) },
       });
     } else if (item.kind === 'text') {
