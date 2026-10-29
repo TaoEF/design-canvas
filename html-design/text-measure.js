@@ -4331,6 +4331,23 @@ property of their respective owners.
     };
   }
 
+  // html-design/src/qa-result.js
+  var QA_OUTPUT = { idCodeUnits: 256, issueCount: 500, issueBytes: 128 * 1024, clippingAncestors: 32, pathCodeUnits: 4096 };
+  var usableQaId = (value) => typeof value === "string" && value.length > 0 && value.length <= QA_OUTPUT.idCodeUnits;
+  function appendQaIssue(result, issue) {
+    const bytes = new TextEncoder().encode(JSON.stringify(issue)).length + (result.issues.length ? 1 : 0);
+    result.coverage.issueBytes ??= 2;
+    if (result.issues.length >= QA_OUTPUT.issueCount || result.coverage.issueBytes + bytes > QA_OUTPUT.issueBytes) {
+      result.truncated = true;
+      result.status = "issues";
+      result.coverage.issuesOmitted++;
+      return false;
+    }
+    result.coverage.issueBytes += bytes;
+    result.issues.push(issue);
+    return true;
+  }
+
   // html-design/src/qa.js
   var LIMITS = { elements: 2e3, texts: 500, graphemes: 1e5, perText: 2e4, issues: 500 };
   var round2 = (v) => Math.round(v * 1e3) / 1e3;
@@ -4356,9 +4373,9 @@ property of their respective owners.
   };
   function renderedLines(el, board, budget) {
     const cs = getComputedStyle(el), nodes = [el, ...el.querySelectorAll("*")];
-    if (!simpleGeometry(el, board) || cs.writingMode !== "horizontal-tb" || cs.direction !== "ltr" || cs.columnCount !== "auto" || /[\u0590-\u08ff]/u.test(el.textContent) || nodes.some((n) => {
+    if (!simpleGeometry(el, board) || cs.writingMode !== "horizontal-tb" || cs.direction !== "ltr" || cs.columnCount !== "auto" || cs.columnWidth !== "auto" || /[\u0590-\u08ff]/u.test(el.textContent) || nodes.some((n) => {
       const s = getComputedStyle(n);
-      return s.fontSize !== cs.fontSize || s.lineHeight !== cs.lineHeight || s.fontFamily !== cs.fontFamily || !["baseline", "normal"].includes(s.verticalAlign) || n !== el && !["inline", "contents"].includes(s.display) || s.writingMode !== "horizontal-tb" || s.direction !== "ltr" || ["::before", "::after"].some((p) => !["none", "normal", '""'].includes(getComputedStyle(n, p).content));
+      return s.fontSize !== cs.fontSize || s.lineHeight !== cs.lineHeight || s.fontFamily !== cs.fontFamily || !["baseline", "normal"].includes(s.verticalAlign) || n !== el && !["inline", "contents"].includes(s.display) || s.writingMode !== "horizontal-tb" || s.direction !== "ltr" || s.columnCount !== "auto" || s.columnWidth !== "auto" || ["::before", "::after"].some((p) => !["none", "normal", '""'].includes(getComputedStyle(n, p).content));
     })) return { unsupported: "Complex text geometry or mixed baselines." };
     const segments = [[]];
     const segmenter = new Intl.Segmenter("zh", { granularity: "grapheme" });
@@ -4435,12 +4452,15 @@ property of their respective owners.
       text: { seen: candidates.length, checked: textResult.checkedCount, linesChecked: 0, unsupported: 0, hidden: 0, unmarked: 0, limit: LIMITS.texts, perTextCodeUnitLimit: 2e4 },
       graphemes: { checked: 0, limit: LIMITS.graphemes, perTextLimit: LIMITS.perText },
       suppressed: 0,
-      issuesOmitted: 0
+      issuesOmitted: 0,
+      issueBytes: 2,
+      evidenceOmitted: 0
     };
+    const output = { issues, coverage, truncated: false };
     let truncated = textResult.truncated, incomplete = textResult.truncated;
     const target = (board, el) => ({
-      pageId: board?.dataset.artboard && pageIds.filter((v) => v === board.dataset.artboard).length === 1 ? board.dataset.artboard : null,
-      elementId: el?.dataset.el && idCounts.get(el.dataset.el) === 1 ? el.dataset.el : null
+      pageId: usableQaId(board?.dataset.artboard) && pageIds.filter((v) => v === board.dataset.artboard).length === 1 ? board.dataset.artboard : null,
+      elementId: usableQaId(el?.dataset.el) && idCounts.get(el.dataset.el) === 1 ? el.dataset.el : null
     });
     const emit = (code, board, el, evidence = {}, severity = "warning") => {
       const ignored = new Set((el?.getAttribute("data-qa-ignore") || "").split(/\s+/));
@@ -4448,12 +4468,7 @@ property of their respective owners.
         coverage.suppressed++;
         return;
       }
-      if (issues.length >= LIMITS.issues) {
-        truncated = incomplete = true;
-        coverage.issuesOmitted++;
-        return;
-      }
-      issues.push({ code, severity, ...target(board, el), evidence });
+      appendQaIssue(output, { code, severity, ...target(board, el), evidence });
     };
     for (const board of boards) {
       for (const el of board.querySelectorAll("[data-el]")) {
@@ -4463,9 +4478,9 @@ property of their respective owners.
       }
     }
     for (const board of boards) {
-      if (!board.dataset.artboard || pageIds.filter((v) => v === board.dataset.artboard).length !== 1) {
+      if (!usableQaId(board.dataset.artboard) || pageIds.filter((v) => v === board.dataset.artboard).length !== 1) {
         incomplete = true;
-        emit("ID_INVALID", board, null, { kind: "page" }, "error");
+        emit("ID_INVALID", board, null, { kind: "page", length: board.dataset.artboard?.length ?? 0 }, "error");
       }
       for (const el of board.querySelectorAll("[data-el],img")) {
         if (++coverage.elements.seen > LIMITS.elements) {
@@ -4477,9 +4492,9 @@ property of their respective owners.
       if (truncated && coverage.elements.seen > LIMITS.elements) break;
     }
     for (const { board, el } of elements) {
-      if (el.hasAttribute("data-el") && (!el.dataset.el || idCounts.get(el.dataset.el) !== 1)) {
+      if (el.hasAttribute("data-el") && (!usableQaId(el.dataset.el) || idCounts.get(el.dataset.el) !== 1)) {
         incomplete = true;
-        emit("ID_INVALID", board, el, { kind: "element" }, "error");
+        emit("ID_INVALID", board, el, { kind: "element", length: el.dataset.el.length }, "error");
       }
       if (!visible(el, board)) {
         incomplete = true;
@@ -4525,11 +4540,33 @@ property of their respective owners.
         emit(legacyCodes[item.status], board, el, { reason: item.code || item.status }, ["error", "invalid-id"].includes(item.status) ? "error" : "warning");
       } else {
         if (item.overflow) emit("TEXT_OVERFLOW", board, el, { requiredHeight: item.requiredHeight, availableHeight: item.availableHeight, box: item.box });
-        if (item.clippedBy?.length) emit("ANCESTOR_CLIP", board, el, { clippedBy: item.clippedBy, box: item.box });
+        if (item.clippedBy?.length) {
+          if (item.clippedBy.length > QA_OUTPUT.clippingAncestors) {
+            truncated = incomplete = true;
+            coverage.evidenceOmitted += item.clippedBy.length - QA_OUTPUT.clippingAncestors;
+          }
+          const clippedBy = item.clippedBy.slice(0, QA_OUTPUT.clippingAncestors).map((ancestor) => {
+            const bounded = { ...ancestor };
+            for (const key of ["elementId", "id"]) {
+              if (ancestor[key] !== null && ancestor[key] !== void 0 && !usableQaId(ancestor[key])) {
+                incomplete = true;
+                emit("ID_INVALID", board, el, { kind: "clipping-ancestor", attribute: key, length: ancestor[key].length }, "error");
+                bounded[key] = null;
+              }
+            }
+            if (ancestor.tag.length > QA_OUTPUT.idCodeUnits) {
+              bounded.tag = null;
+              truncated = incomplete = true;
+              coverage.evidenceOmitted++;
+            }
+            return bounded;
+          });
+          emit("ANCESTOR_CLIP", board, el, { clippedBy, box: item.box });
+        }
       }
     }
     for (const { board, el, marked } of candidates.slice(0, LIMITS.texts)) {
-      if (!marked || uncheckable.has(el) || !el.dataset.el || idCounts.get(el.dataset.el) !== 1 || !visible(el, board)) continue;
+      if (!marked || uncheckable.has(el) || !usableQaId(el.dataset.el) || idCounts.get(el.dataset.el) !== 1 || !visible(el, board)) continue;
       const result = renderedLines(el, board, coverage.graphemes);
       if (result.truncated) {
         truncated = incomplete = true;
@@ -4556,6 +4593,7 @@ property of their respective owners.
       }
     }
     if (truncated) emit("SCAN_LIMIT", null, null, { limits: LIMITS });
+    truncated ||= output.truncated;
     return {
       schemaVersion: 1,
       status: issues.length || incomplete || truncated ? "issues" : "ok",

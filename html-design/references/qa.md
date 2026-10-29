@@ -27,12 +27,12 @@ One JSON result on stdout contains `schemaVersion: 1`, `status: ok|issues`,
 including overflowing ones. `coverage.text.linesChecked` counts blocks whose
 actual rendered lines were reliable enough for punctuation/orphan checks.
 Coverage separately reports seen/checked elements, hidden/unsupported text and
-elements, scanned graphemes, suppressions and omitted issues. Seen counts are
+elements, scanned graphemes, suppressions, admitted issue bytes and omitted issues/evidence. Seen counts are
 lower bounds when truncated. Never interpret missing issues as a clean result
 without checking `status`, `truncated` and coverage.
 
 Each issue has a stable `code`, `severity: warning|error`, nullable `pageId` and
-`elementId`, and bounded `evidence`. IDs are null when missing or non-unique.
+`elementId`, and bounded `evidence`. IDs are null when missing, non-unique or longer than 256 UTF-16 units; overlong IDs report `ID_INVALID` with their length rather than a shortened locator. This also bounds clipping-ancestor identifiers.
 Line evidence includes a 1-based rendered line number, at most 80 characters,
 and a rectangle relative to its artboard. Boxes and height budgets are CSS
 pixels. Resource evidence contains a bounded URL; embedded image data is omitted.
@@ -58,7 +58,7 @@ is embedded in feedback.
 Line checks use actual DOM Range/grapheme geometry, not Pretext predictions.
 Explicit `<br>` and preserved newlines divide author-controlled segments; a
 single-character explicit line is not an accidental soft-wrap orphan. Mixed
-font sizes/baselines, vertical writing, columns, complex transforms, generated
+font sizes/baselines, vertical writing, columns (either `column-count` or `column-width` on applicable text/descendants), complex transforms, generated
 text, nested text containers or unreliable Range order are reported as
 `LINE_UNSUPPORTED`, `TEXT_UNSUPPORTED` or `GEOMETRY_UNSUPPORTED`, with incomplete
 coverage. They are not guessed or treated as checked. Ordinary inline weight
@@ -78,7 +78,7 @@ suppressed into a clean pass. Unaffected content needs no new attributes.
 
 Limits: 32 MiB input, 100 artboards, 500 text candidates, 2,000 elements/images,
 20,000 UTF-16 units before inspecting one text block, 20,000 graphemes per block,
-100,000 total graphemes, 500 issues and a 30-second browser scan. Image decoding
+100,000 total graphemes, 500 issues, 128 KiB of JSON issue bytes and a 30-second browser scan. Issues are admitted one at a time against both count and byte limits, including resource diagnostics. Clipping evidence includes at most 32 ancestors; omitted evidence also marks truncation. QA source paths are at most 4,096 UTF-16 units and execution-error messages at most 512; with metadata the CLI JSON remains below 160 KiB. Image decoding
 has a five-second per-image bound. Truncation returns incomplete coverage.
 
 This is a first set of layout diagnostics, not a complete visual/aesthetic or

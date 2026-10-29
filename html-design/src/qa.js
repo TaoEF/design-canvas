@@ -1,4 +1,5 @@
 // Read-only facts from the prepared document; no prediction or repair is applied.
+import { QA_OUTPUT, usableQaId, appendQaIssue } from './qa-result.js';
 const LIMITS = { elements: 2000, texts: 500, graphemes: 100000, perText: 20000, issues: 500 };
 const round = v => Math.round(v * 1000) / 1000;
 const START = /^[、。，．！？：；）〕］｝〉》」』】〗〙〛’”％‰…]/u;
@@ -27,12 +28,12 @@ const simpleGeometry = (el, board) => {
 // cannot be assigned to reliable lines by sorting Range.top values.
 function renderedLines(el, board, budget) {
   const cs = getComputedStyle(el), nodes = [el, ...el.querySelectorAll('*')];
-  if (!simpleGeometry(el, board) || cs.writingMode !== 'horizontal-tb' || cs.direction !== 'ltr' || cs.columnCount !== 'auto' ||
+  if (!simpleGeometry(el, board) || cs.writingMode !== 'horizontal-tb' || cs.direction !== 'ltr' || cs.columnCount !== 'auto' || cs.columnWidth !== 'auto' ||
     /[\u0590-\u08ff]/u.test(el.textContent) || nodes.some(n => {
       const s = getComputedStyle(n);
       return s.fontSize !== cs.fontSize || s.lineHeight !== cs.lineHeight || s.fontFamily !== cs.fontFamily ||
         !['baseline', 'normal'].includes(s.verticalAlign) || (n !== el && !['inline', 'contents'].includes(s.display)) ||
-        s.writingMode !== 'horizontal-tb' || s.direction !== 'ltr' ||
+        s.writingMode !== 'horizontal-tb' || s.direction !== 'ltr' || s.columnCount !== 'auto' || s.columnWidth !== 'auto' ||
         ['::before', '::after'].some(p => !['none', 'normal', '""'].includes(getComputedStyle(n, p).content));
     })) return { unsupported: 'Complex text geometry or mixed baselines.' };
   const segments = [[]];
@@ -86,15 +87,15 @@ export async function checkVisualDocument({ boards, candidates, textResult }) {
   const idCounts = new Map(), nodeById = new Map();
   const coverage = { elements: { seen: 0, checked: 0, hidden: 0, unsupported: 0, limit: LIMITS.elements },
     text: { seen: candidates.length, checked: textResult.checkedCount, linesChecked: 0, unsupported: 0, hidden: 0, unmarked: 0, limit: LIMITS.texts, perTextCodeUnitLimit: 20000 },
-    graphemes: { checked: 0, limit: LIMITS.graphemes, perTextLimit: LIMITS.perText }, suppressed: 0, issuesOmitted: 0 };
+    graphemes: { checked: 0, limit: LIMITS.graphemes, perTextLimit: LIMITS.perText }, suppressed: 0, issuesOmitted: 0, issueBytes: 2, evidenceOmitted: 0 };
+  const output = { issues, coverage, truncated: false };
   let truncated = textResult.truncated, incomplete = textResult.truncated;
-  const target = (board, el) => ({ pageId: board?.dataset.artboard && pageIds.filter(v => v === board.dataset.artboard).length === 1 ? board.dataset.artboard : null,
-    elementId: el?.dataset.el && idCounts.get(el.dataset.el) === 1 ? el.dataset.el : null });
+  const target = (board, el) => ({ pageId: usableQaId(board?.dataset.artboard) && pageIds.filter(v => v === board.dataset.artboard).length === 1 ? board.dataset.artboard : null,
+    elementId: usableQaId(el?.dataset.el) && idCounts.get(el.dataset.el) === 1 ? el.dataset.el : null });
   const emit = (code, board, el, evidence = {}, severity = 'warning') => {
     const ignored = new Set((el?.getAttribute('data-qa-ignore') || '').split(/\s+/));
     if (SUPPRESSIBLE.has(code) && ignored.has(code)) { coverage.suppressed++; return; }
-    if (issues.length >= LIMITS.issues) { truncated = incomplete = true; coverage.issuesOmitted++; return; }
-    issues.push({ code, severity, ...target(board, el), evidence });
+    appendQaIssue(output, { code, severity, ...target(board, el), evidence });
   };
   for (const board of boards) {
     for (const el of board.querySelectorAll('[data-el]')) {
@@ -104,7 +105,7 @@ export async function checkVisualDocument({ boards, candidates, textResult }) {
     }
   }
   for (const board of boards) {
-    if (!board.dataset.artboard || pageIds.filter(v => v === board.dataset.artboard).length !== 1) { incomplete = true; emit('ID_INVALID', board, null, { kind: 'page' }, 'error'); }
+    if (!usableQaId(board.dataset.artboard) || pageIds.filter(v => v === board.dataset.artboard).length !== 1) { incomplete = true; emit('ID_INVALID', board, null, { kind: 'page', length: board.dataset.artboard?.length ?? 0 }, 'error'); }
     for (const el of board.querySelectorAll('[data-el],img')) {
       if (++coverage.elements.seen > LIMITS.elements) { truncated = incomplete = true; break; }
       elements.push({ board, el });
@@ -112,7 +113,7 @@ export async function checkVisualDocument({ boards, candidates, textResult }) {
     if (truncated && coverage.elements.seen > LIMITS.elements) break;
   }
   for (const { board, el } of elements) {
-    if (el.hasAttribute('data-el') && (!el.dataset.el || idCounts.get(el.dataset.el) !== 1)) { incomplete = true; emit('ID_INVALID', board, el, { kind: 'element' }, 'error'); }
+    if (el.hasAttribute('data-el') && (!usableQaId(el.dataset.el) || idCounts.get(el.dataset.el) !== 1)) { incomplete = true; emit('ID_INVALID', board, el, { kind: 'element', length: el.dataset.el.length }, 'error'); }
     if (!visible(el, board)) { incomplete = true; coverage.elements.hidden++; emit('HIDDEN_CONTENT', board, el); continue; }
     if (!simpleGeometry(el, board)) { incomplete = true; coverage.elements.unsupported++; emit('GEOMETRY_UNSUPPORTED', board, el); continue; }
     const r = el.getBoundingClientRect(), b = board.getBoundingClientRect();
@@ -142,11 +143,34 @@ export async function checkVisualDocument({ boards, candidates, textResult }) {
       emit(legacyCodes[item.status], board, el, { reason: item.code || item.status }, ['error', 'invalid-id'].includes(item.status) ? 'error' : 'warning');
     } else {
       if (item.overflow) emit('TEXT_OVERFLOW', board, el, { requiredHeight: item.requiredHeight, availableHeight: item.availableHeight, box: item.box });
-      if (item.clippedBy?.length) emit('ANCESTOR_CLIP', board, el, { clippedBy: item.clippedBy, box: item.box });
+      if (item.clippedBy?.length) {
+        if (item.clippedBy.length > QA_OUTPUT.clippingAncestors) {
+          truncated = incomplete = true;
+          coverage.evidenceOmitted += item.clippedBy.length - QA_OUTPUT.clippingAncestors;
+        }
+        const clippedBy = item.clippedBy.slice(0, QA_OUTPUT.clippingAncestors).map(ancestor => {
+          const bounded = { ...ancestor };
+          for (const key of ['elementId', 'id']) {
+            if (ancestor[key] !== null && ancestor[key] !== undefined && !usableQaId(ancestor[key])) {
+              incomplete = true;
+              emit('ID_INVALID', board, el, { kind: 'clipping-ancestor', attribute: key, length: ancestor[key].length }, 'error');
+              bounded[key] = null;
+            }
+          }
+          // Custom element tag names are author controlled as well.
+          if (ancestor.tag.length > QA_OUTPUT.idCodeUnits) {
+            bounded.tag = null;
+            truncated = incomplete = true;
+            coverage.evidenceOmitted++;
+          }
+          return bounded;
+        });
+        emit('ANCESTOR_CLIP', board, el, { clippedBy, box: item.box });
+      }
     }
   }
   for (const { board, el, marked } of candidates.slice(0, LIMITS.texts)) {
-    if (!marked || uncheckable.has(el) || !el.dataset.el || idCounts.get(el.dataset.el) !== 1 || !visible(el, board)) continue;
+    if (!marked || uncheckable.has(el) || !usableQaId(el.dataset.el) || idCounts.get(el.dataset.el) !== 1 || !visible(el, board)) continue;
     const result = renderedLines(el, board, coverage.graphemes);
     if (result.truncated) { truncated = incomplete = true; coverage.text.unsupported++; emit('SCAN_LIMIT', board, el, { kind: 'graphemes' }); continue; }
     if (result.unsupported) { incomplete = true; coverage.text.unsupported++; emit('LINE_UNSUPPORTED', board, el, { reason: result.unsupported }); continue; }
@@ -163,6 +187,7 @@ export async function checkVisualDocument({ boards, candidates, textResult }) {
     }
   }
   if (truncated) emit('SCAN_LIMIT', null, null, { limits: LIMITS });
+  truncated ||= output.truncated;
   return { schemaVersion: 1, status: issues.length || incomplete || truncated ? 'issues' : 'ok', units: 'css-px',
     pageCount: boards.length, textCount: textResult.textCount, checkedCount: textResult.checkedCount, truncated, coverage, issues };
 }

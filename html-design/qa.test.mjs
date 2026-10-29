@@ -76,7 +76,8 @@ test('temporary resources and explicit original base load CSS/images; broken ima
   const resources = path.join(dir, 'resources'); await mkdir(resources);
   await writeFile(path.join(resources, 'style.css'), 'p{width:70px!important;height:10px;overflow:hidden}');
   await writeFile(path.join(resources, 'pixel.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="red"/></svg>');
-  await symlink(path.join(dir, '中文 设计.html'), path.join(resources, 'outside.css'));
+  await writeFile(path.join(dir, 'outside.css'), 'body{color:red}');
+  await symlink(path.join(dir, 'outside.css'), path.join(resources, 'outside.css'));
   const source = wrap('<p data-el="text">Relative resource layout check</p><p data-el="font" style="font-family:MissingFont">Missing font</p><img data-el="image" src="pixel.svg" width="10" height="10"><img data-el="bad" src="missing.png" width="20" height="20">', '', '<link rel="stylesheet" href="style.css"><link rel="stylesheet" href="outside.css"><style>@font-face{font-family:MissingFont;src:url(missing.woff2)}</style>');
   const file = path.join(resources, 'deck.html'); await writeFile(file, source);
   const result = await checkFile(file);
@@ -131,4 +132,38 @@ test('QA interruption closes a pending browser resource and exits with one error
     assert.equal(result.code, 1); assert.equal(result.out, ''); assert.equal(result.result.status, 'error');
     assert.equal(await readFile(file, 'utf8'), wrap('<p data-el="title">Unchanged</p>', '', '<link rel="stylesheet" href="pending.css">'));
   } finally { server.closeAllConnections(); await new Promise(r => server.close(r)); }
+});
+
+test('column-width alone remains unsupported even when deliberate overflow is suppressed', async () => {
+  const result = await qa(wrap('<p data-el="columns" data-qa-ignore="TEXT_OVERFLOW" style="width:400px;height:28px;column-width:100px;column-gap:0">一二三四五六七八九十甲乙</p>'));
+  assert.equal(result.status, 'issues');
+  assert.ok(codes(result).includes('LINE_UNSUPPORTED'));
+  assert.equal(result.coverage.text.linesChecked, 0);
+  assert.equal(result.coverage.text.unsupported, 1);
+});
+
+test('oversized target and clipping identifiers become null with invalid-ID facts before bounded issue admission', async () => {
+  const long = '标'.repeat(16384);
+  const amplified = await qa(wrap(Array.from({ length: 250 }, (_, i) => `<p data-el="t${i}" style="display:none">Text</p>`).join('')).replace('data-artboard="p1"', `data-artboard="${long}"`));
+  assert.ok(amplified.issues.some(i => i.code === 'ID_INVALID' && i.evidence.length === long.length));
+  assert.ok(amplified.issues.every(i => i.pageId === null));
+  assert.ok(Buffer.byteLength(JSON.stringify(amplified)) < 140000);
+  assert.equal(amplified.status, 'issues');
+  const clip = await qa(wrap(`<div id="${long}" data-el="${long}" style="width:30px;height:10px;overflow:hidden"><p data-el="child" style="width:100px">Clipped content</p></div>`));
+  assert.ok(clip.issues.some(i => i.code === 'ID_INVALID' && i.elementId === null));
+  const ancestors = clip.issues.find(i => i.code === 'ANCESTOR_CLIP').evidence.clippedBy;
+  assert.equal(ancestors[0].elementId, null); assert.equal(ancestors[0].id, null);
+  assert.ok(!JSON.stringify(clip).includes(long));
+  const validId = '合'.repeat(256);
+  const valid = await qa(wrap(`<div data-el="${validId}" style="position:absolute;left:790px;width:20px;height:20px"></div>`));
+  assert.equal(valid.issues[0].elementId, validId, 'bounded valid IDs remain exact locators');
+  const budgeted = await qa(wrap(Array.from({ length: 250 }, (_, i) => `<div data-el="${i}-${'合'.repeat(250)}" style="position:absolute;left:790px;width:20px;height:20px"></div>`).join('')).replace('data-artboard="p1"', `data-artboard="${validId}"`));
+  assert.equal(budgeted.truncated, true); assert.equal(budgeted.status, 'issues');
+  assert.ok(budgeted.coverage.issuesOmitted > 0); assert.ok(budgeted.coverage.issueBytes <= 128 * 1024);
+  assert.ok(Buffer.byteLength(JSON.stringify(budgeted)) < 140000, 'valid identifier repetition is bounded at issue admission too');
+  let deep = '<p data-el="deep" style="width:400px">Nested clipping</p>';
+  for (let i = 0; i < 35; i++) deep = `<div style="width:100px;height:20px;overflow:hidden">${deep}</div>`;
+  const clipped = await qa(wrap(deep));
+  assert.equal(clipped.truncated, true); assert.ok(clipped.coverage.evidenceOmitted >= 3);
+  assert.equal(clipped.issues.find(i => i.code === 'ANCESTOR_CLIP').evidence.clippedBy.length, 32);
 });

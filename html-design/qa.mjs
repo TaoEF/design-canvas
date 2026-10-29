@@ -3,6 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createResourceServer, localResourceUrl, readSavedSnapshot } from './saved-file.mjs';
 import { measureDocumentText } from './text-measure.mjs';
+import { QA_OUTPUT } from './src/qa-result.js';
 
 const help = `Read-only layout QA for a saved HTML snapshot. Prints one bounded JSON result.
 Usage: node html-design/qa.mjs check <file.html> [--base-url <loopback-url>]
@@ -16,6 +17,7 @@ export async function checkFile(input, { baseUrl, signal } = {}) {
   if (!/\.html?$/i.test(input)) throw new Error('Input must be an HTML file.');
   if (baseUrl) baseUrl = localResourceUrl(baseUrl);
   const { inputPath, resourceRoot, snapshot, revision } = await readSavedSnapshot(input, { baseUrl, signal });
+  if (inputPath.length > QA_OUTPUT.pathCodeUnits) throw new Error('QA source path exceeds 4096 UTF-16 units.');
   let resources;
   try {
     if (!baseUrl) {
@@ -41,7 +43,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       if (result.status !== 'ok') process.exitCode = 2;
     }
   } catch (error) {
-    console.error(JSON.stringify({ schemaVersion: 1, status: 'error', error: { code: 'QA_FAILED', message: error.message } }));
+    console.error(JSON.stringify({ schemaVersion: 1, status: 'error', error: { code: 'QA_FAILED', message: error.message.slice(0, 512) } }));
     process.exitCode = 1;
   } finally { process.removeListener('SIGINT', abort); process.removeListener('SIGTERM', abort); }
 }

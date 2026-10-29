@@ -22,6 +22,8 @@ sources:
     status: current
   - path: html-design/src/qa.js
     status: current
+  - path: html-design/src/qa-result.js
+    status: current
   - path: html-design/saved-file.mjs
     status: current
   - path: html-design/qa.test.mjs
@@ -59,7 +61,7 @@ measure 输入纯文本、字体、行高与候选内容宽度；check 扫描保
 
 `qa.mjs check` 在同一次浏览器准备和文字 check 上增补实际 Range/字素行诊断、可见对象越界和图片解码检查。与 export-cli 共用 saved-file.mjs 的普通文件/32MiB/单快照读取及临时只读资源边界；不读未保存 DOM，不申请编辑权或写回。schemaVersion1、英文规则码/有界事实、SHA-256 来源、CSS px、覆盖/截断/豁免计数与0/2/1退出码见 references/qa.md。旧 text.mjs measure/check 字段和退出码保持。
 
-实际软折行才参与末行孤汉字（含结束标点）、单标点孤行与禁则行首/行尾检测，显式br/保留换行独立分段。复杂变换、竖排/多栏、混合字号/基线或不可靠Range明确不支持，不用预测替代事实。data-qa-ignore仅豁免具体观察规则；ID、资源失败、隐藏/不支持覆盖与扫描超限不可豁免为通过。没有整体审美评分、自动修复、commit门禁或定位UI；#19/#6后续需衔接旋转/裁切边界。
+实际软折行才参与末行孤汉字（含结束标点）、单标点孤行与禁则行首/行尾检测，显式br/保留换行独立分段。复杂变换、竖排/多栏（column-count或column-width，包括适用后代）、混合字号/基线或不可靠Range明确不支持，不用预测替代事实。data-qa-ignore仅豁免具体观察规则；ID、资源失败、隐藏/不支持覆盖与扫描超限不可豁免为通过。QA标识最多256 UTF-16单元，过长目标/裁切祖先ID返回null和ID_INVALID，不截短成定位符。每条诊断追加前同时限制500条与128KiB issue JSON字节，裁切证据最多32层；省略项标为truncated/incomplete，合法ID保持原值。QA来源路径4096单元、错误文案512单元，连同元数据输出小于160KiB；旧text接口不套用这些新增边界。没有整体审美评分、自动修复、commit门禁或定位UI；#19/#6后续需衔接旋转/裁切边界。
 
 ## Workflows
 

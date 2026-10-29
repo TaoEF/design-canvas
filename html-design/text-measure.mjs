@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { chromium } from 'playwright';
 import { browserOptions } from './export.mjs';
+import { appendQaIssue } from './src/qa-result.js';
 
 export function validateTextRequest(input) {
   const allowed = ['text', 'font', 'lineHeight', 'widths', 'maxHeight', 'letterSpacing', 'whiteSpace', 'wordBreak'];
@@ -66,8 +67,7 @@ export async function measureDocumentText({ mode, input, html = '<!doctype html>
     if (resourceErrors.length) result.status = 'issues';
     if (mode === 'qa') {
       for (const resource of resourceErrors.slice(0, 100)) {
-        if (result.issues.length >= 500) { result.truncated = true; result.coverage.issuesOmitted++; continue; }
-        result.issues.push({ code: 'RESOURCE_FAILED', severity: 'error', pageId: null, elementId: null,
+        appendQaIssue(result, { code: 'RESOURCE_FAILED', severity: 'error', pageId: null, elementId: null,
           evidence: { ...resource, url: resource.url.slice(0, 200) } });
       }
       if (resourceErrors.length > 100) { result.truncated = true; result.coverage.issuesOmitted += resourceErrors.length - 100; }
