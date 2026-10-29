@@ -6,7 +6,7 @@ owners:
   - html-design/export.mjs
   - html-design/pptx.mjs
   - html-design/src/export.js
-updated: 2026-10-28
+updated: 2026-10-29
 sources:
   - path: html-design/export.mjs
     status: current
@@ -42,6 +42,10 @@ confidence: high
 PPTX 每个文字元素对应一个可编辑文本框，开启 `wrap="square"`，不自动缩小字号或按文字撑宽。只保留 HTML 的显式换行（br、块段落、white-space 保留的换行），不将浏览器因当前宽度产生的软折行固化。普通空白按 CSS 合并，跨 span 保留词间空格，pre/pre-wrap/break-spaces 保留空格。富文本样式继续按 run 映射，混合字号或基线差异不能凭字符几何位置推断换行。Flex/Grid 子项会被浏览器块化，横排子项不能因此各自变成硬段落；正 column-gap 简化为词间空格，Flex column 子项保留纵向分隔。
 
 
+四边宽度、颜色/透明度一致且为可见实线，配合可可靠表达的统一圆角和未旋转/缩放几何时，容器背景与边框使用同一个原生 shape；透明背景也保留边框，无边框或全透明边框不发出冗余边线。CSS 边框位于 border-box 内，原生 stroke 的中心线内缩半边宽；圆角使用 PptxGenJS 4 的 `rectRadius`（英寸），减去内缩后写入实际 DrawingML adjustment。胶囊形保留 roundRect，不误作 ellipse；全椭圆可映射为 ellipse。
+
+不同边宽/颜色/样式、非统一或一般椭圆圆角、缩放/旋转等不合并成伪统一描边，保留按边回退并在 notes 提示简化；不支持的圆角背景退为矩形。容器子文字仍是独立可编辑文本框，不整体栅格化或事后分组。此能力只合并装饰，不提供整卡联动编辑。
+
 ## Workflows
 
 本地预览中选择导出；macOS 可使用已安装 Chrome，其他环境安装 Playwright Chromium，或设置 HTML_DESIGN_CHROME。离线 HTML 保留下载和浏览器打印能力。
@@ -49,7 +53,7 @@ PPTX 每个文字元素对应一个可编辑文本框，开启 `wrap="square"`�
 
 ## Failure Modes
 
-复杂 CSS、滤镜、圆角与字体可能简化；目标机器缺字体会改变显示。图片加载错误、比例不符或并发导出会明确失败，不能发布不完整产物。
+复杂 CSS、滤镜、非统一/不支持的圆角与字体可能简化；目标机器缺字体会改变显示。图片加载错误、比例不符或并发导出会明确失败，不能发布不完整产物。
 
 固定浏览器软折行并关闭文本框换行，会导致 WPS / PowerPoint 拉宽后段落仍无法重新排版（Issue #3）。需同时修正文本内容和 wrap 属性；仅打开 wrap 无法删除已固化的换行。PPTX 原生排版与浏览器可能存在折行差异，以可编辑段落语义为准；PDF 继续保留浏览器布局。导出回归检查真实生成的 slide XML，覆盖中英文、富文本、显式空行和空格。
 

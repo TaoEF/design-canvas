@@ -32,18 +32,55 @@ export function collectEditableSlide(board) {
     if (!el.getClientRects().length || cs.visibility === 'hidden' || cs.opacity === '0' || !box.w || !box.h) continue;
     const name = el.dataset.el || el.className?.baseVal || String(el.className || el.tagName);
     const fill = cssColor(cs.backgroundColor);
-    if (fill.transparency < 100 && !el.matches('img,svg,canvas')) {
-      items.push({ kind: 'shape', ...box, name, fill, radius: parseFloat(cs.borderRadius) || 0, opacity: Number(cs.opacity) });
+    const sides = ['Top', 'Right', 'Bottom', 'Left'].map(side => ({
+      side, width: parseFloat(cs[`border${side}Width`]) || 0,
+      style: cs[`border${side}Style`], color: cssColor(cs[`border${side}Color`]),
+    }));
+    const visibleBorder = side => side.width > 0 && !['none', 'hidden'].includes(side.style) && side.color.transparency < 100;
+    // Only merge geometry we can express faithfully. Translations are harmless;
+    // scaled/rotated/skewed boxes need the existing side-specific approximation.
+    let axisAligned = true;
+    for (let node = el; node && node !== board.parentElement; node = node.parentElement) {
+      const style = getComputedStyle(node), matrix = new DOMMatrix(style.transform);
+      if (!matrix.is2D || matrix.a !== 1 || matrix.d !== 1 || matrix.b || matrix.c ||
+          !['none', '0deg'].includes(style.rotate) || !['none', '1'].includes(style.scale) || Number(style.zoom) !== 1) axisAligned = false;
     }
-    for (const side of ['Top', 'Right', 'Bottom', 'Left']) {
-      const width = parseFloat(cs[`border${side}Width`]);
-      if (width && cs[`border${side}Style`] !== 'none') {
-        const color = cssColor(cs[`border${side}Color`]);
-        const points = side === 'Top' ? [box.x, box.y, box.w, 0]
-          : side === 'Bottom' ? [box.x, box.y + box.h, box.w, 0]
-            : side === 'Left' ? [box.x, box.y, 0, box.h] : [box.x + box.w, box.y, 0, box.h];
-        items.push({ kind: 'line', points, width, color, name });
-      }
+    const corners = ['TopLeft', 'TopRight', 'BottomRight', 'BottomLeft'].map(corner => {
+      const parts = cs[`border${corner}Radius`].split(/\s+/);
+      const length = (value, size) => value.endsWith('%') ? parseFloat(value) * size / 100 : parseFloat(value);
+      return [length(parts[0], box.w), length(parts[1] || parts[0], box.h)];
+    });
+    // CSS reduces all radii by a common factor when adjacent corners overlap.
+    const factor = Math.min(1, ...[
+      box.w / (corners[0][0] + corners[1][0]), box.w / (corners[3][0] + corners[2][0]),
+      box.h / (corners[0][1] + corners[3][1]), box.h / (corners[1][1] + corners[2][1]),
+    ]);
+    const [rx, ry] = corners[0].map(value => value * factor);
+    const near = (a, b) => Math.abs(a - b) < .01;
+    const uniformCorners = corners.every(([x, y]) => near(x * factor, rx) && near(y * factor, ry));
+    const geometry = axisAligned && uniformCorners && (near(rx, ry) || (near(rx, box.w / 2) && near(ry, box.h / 2)))
+      ? { type: near(rx, ry) ? (rx > 0 ? 'roundRect' : 'rect') : 'ellipse', radius: rx } : null;
+    const first = sides[0];
+    const uniformStroke = geometry && sides.every(side => visibleBorder(side) && side.style === 'solid' &&
+      side.width === first.width && side.color.color === first.color.color && side.color.transparency === first.color.transparency) &&
+      first.width < Math.min(box.w, box.h) && (geometry.type !== 'roundRect' || geometry.radius > first.width / 2) ? first : null;
+    const container = !el.matches('img,svg,canvas');
+    if (container && (fill.transparency < 100 || uniformStroke)) {
+      // CSS borders lie inside the border box; DrawingML strokes straddle their path.
+      const inset = uniformStroke ? uniformStroke.width / 2 : 0;
+      items.push({ kind: 'shape', x: box.x + inset, y: box.y + inset, w: box.w - inset * 2, h: box.h - inset * 2,
+        name, fill, geometry: geometry?.type || 'rect', radius: Math.max(0, (geometry?.radius || 0) - inset),
+        stroke: uniformStroke, opacity: Number(cs.opacity) });
+    }
+    if (!container || !uniformStroke) for (const border of sides.filter(visibleBorder)) {
+      const { side, width, color } = border;
+      const points = side === 'Top' ? [box.x, box.y, box.w, 0]
+        : side === 'Bottom' ? [box.x, box.y + box.h, box.w, 0]
+          : side === 'Left' ? [box.x, box.y, 0, box.h] : [box.x + box.w, box.y, 0, box.h];
+      items.push({ kind: 'line', points, width, color, name });
+    }
+    if ((fill.transparency < 100 || sides.some(visibleBorder)) && (!geometry || (sides.some(visibleBorder) && !uniformStroke))) {
+      warnings.push(`${name}: 边框或圆角使用简化映射`);
     }
     if (cs.backgroundImage !== 'none' || cs.filter !== 'none') warnings.push(`${name}: 复杂背景或滤镜`);
     if (el.matches('img')) {
@@ -136,9 +173,12 @@ export async function addEditableSlide({ pptx, slide, data, page, board, context
   for (const item of data.items) {
     const position = { x: px(item.x), y: px(item.y), w: px(item.w), h: px(item.h), objectName: item.name };
     if (item.kind === 'shape') {
-      slide.addShape(item.radius >= Math.min(item.w, item.h) / 2 ? pptx.ShapeType.ellipse : item.radius > 2 ? pptx.ShapeType.roundRect : pptx.ShapeType.rect, {
-        ...position, fill: { color: item.fill.color, transparency: Math.max(item.fill.transparency, (1 - item.opacity) * 100) },
-        line: { transparency: 100 }, radius: px(item.radius),
+      slide.addShape(pptx.ShapeType[item.geometry], {
+        ...position, fill: { color: item.fill.color, transparency: 100 - (100 - item.fill.transparency) * item.opacity },
+        line: item.stroke ? { color: item.stroke.color.color,
+          transparency: 100 - (100 - item.stroke.color.transparency) * item.opacity, width: pt(item.stroke.width) }
+          : { transparency: 100 },
+        rectRadius: item.geometry === 'roundRect' ? px(item.radius) : undefined,
       });
     } else if (item.kind === 'line') {
       const [x, y, w, h] = item.points;

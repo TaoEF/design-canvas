@@ -116,6 +116,85 @@ test('PPTX paragraphs reflow at the textbox width while authored breaks and rich
   assert.deepEqual(paragraphs('column'), ['Top', 'Bottom']);
 });
 
+// Synthetic fixtures only: no user attachment content is stored in the repository.
+const shapesOf = xml => [...xml.matchAll(/<p:sp>.*?<\/p:sp>/gs)].map(match => match[0]);
+const namedShape = (xml, name) => {
+  const shape = shapesOf(xml).find(s => s.includes(`name="${name}"`));
+  assert.ok(shape, `shape ${name} exists`);
+  return shape;
+};
+async function slideXml(html) {
+  const response = await request('pptx', html);
+  assert.equal(response.status, 200, await response.clone().text());
+  const zip = await JSZip.loadAsync(await response.arrayBuffer());
+  return { xml: await zip.file('ppt/slides/slide1.xml').async('string'), zip };
+}
+
+test('PPTX uniform rounded cards use one native fill/stroke shape each, with editable reflowing children', async () => {
+  const html = `<!doctype html><html><head><style>
+    [data-artboard]{width:960px;height:540px;position:relative}
+    .card{position:absolute;top:100px;width:240px;height:180px;box-sizing:border-box;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:18px}
+    h1,p{margin:0;font:20px/28px Arial} h1{font-size:32px}
+    </style></head><body><main data-stage><section data-artboard="p1">
+    <h1 data-el="title">Synthetic cards</h1>
+    ${[0, 1, 2].map(i => `<div data-el="card${i}" class="card" style="left:${40 + i * 280}px"><p data-el="card${i}-title">Card ${i + 1}</p><p data-el="card${i}-body">An editable paragraph with enough text to wrap at the authored width.</p></div>`).join('')}
+    </section></main></body></html>`;
+  const { xml } = await slideXml(html);
+  assert.equal(shapesOf(xml).length, 10, 'three containers plus seven textboxes, formerly 22 fragments');
+  assert.doesNotMatch(xml, /-border"|<p:pic>|<p:grpSp>/);
+  for (let i = 0; i < 3; i++) {
+    const shape = namedShape(xml, `card${i}`);
+    assert.match(shape, /<a:solidFill><a:srgbClr val="FFF7ED"/);
+    assert.match(shape, /<a:ln w="9525"[^>]*>.*?<a:srgbClr val="FED7AA"/s);
+    assert.match(shape, /<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 6425"/);
+    assert.match(shape, new RegExp(`<a:off x="${Math.round((40 + i * 280 + .5) * 9525)}" y="957263"`));
+    assert.match(shape, /<a:ext cx="2276475" cy="1704975"/);
+    assert.doesNotMatch(shape, /<p:txBody>/);
+    for (const suffix of ['title', 'body']) assert.match(namedShape(xml, `card${i}-${suffix}`), /<a:bodyPr[^>]*wrap="square"/);
+    const body = namedShape(xml, `card${i}-body`);
+    assert.equal((body.match(/<a:p>/g) || []).length, 1, 'soft wraps remain a single native paragraph');
+  }
+});
+
+test('PPTX container mapping preserves transparent, absent and differing borders without false unification', async () => {
+  const definitions = [
+    ['transparent-fill', 'background:transparent;border:2px solid rgba(20,40,60,.5);border-radius:10px'],
+    ['no-border', 'background:#abcdef;border:0;border-radius:0'],
+    ['transparent-border', 'background:#abcdef;border:4px solid transparent;border-radius:8px'],
+    ['invisible', 'background:transparent;border:4px solid transparent'],
+    ['different-color', 'background:#abcdef;border:2px solid red;border-left-color:blue'],
+    ['different-width', 'background:#abcdef;border:2px solid red;border-left-width:4px'],
+    ['different-style', 'background:#abcdef;border:2px solid red;border-left-style:dashed'],
+    ['different-corners', 'background:#abcdef;border:2px solid red;border-radius:12px 4px'],
+    ['pill', 'background:#abcdef;border:2px solid red;border-radius:999px'],
+    ['small-radius', 'background:#abcdef;border:1px solid red;border-radius:2px'],
+    ['alpha', 'background:rgba(171,205,239,.5);border:2px solid rgba(20,40,60,.5);border-radius:10px;opacity:.5'],
+    ['ellipse', 'background:#abcdef;border:2px solid red;border-radius:50%'],
+    ['elliptic-corners', 'background:#abcdef;border:2px solid red;border-radius:20%'],
+    ['transformed', 'background:#abcdef;border:2px solid red;transform:scale(.8)'],
+    ['tiny-radius', 'background:#abcdef;border:4px solid red;border-radius:1px'],
+  ];
+  const html = `<!doctype html><html><head><style>[data-artboard]{width:800px;height:600px;position:relative}.box{position:absolute;width:100px;height:60px;box-sizing:border-box}</style></head><body><main data-stage><section data-artboard="p1">${definitions.map(([id, style], i) => `<div class="box" data-el="${id}" style="left:${20 + i % 5 * 140}px;top:${20 + Math.floor(i / 5) * 150}px;${style}"></div>`).join('')}</section></main></body></html>`;
+  const { xml, zip } = await slideXml(html);
+  const transparent = namedShape(xml, 'transparent-fill');
+  assert.match(transparent, /<a:ln w="19050"[^>]*>.*?<a:srgbClr val="14283C"><a:alpha val="50000"/s);
+  assert.doesNotMatch(xml, /name="transparent-fill-border"|name="transparent-border-border"|name="no-border-border"|name="invisible(?:-border)?"/);
+  assert.match(namedShape(xml, 'no-border'), /<a:prstGeom prst="rect"/);
+  assert.match(namedShape(xml, 'transparent-border'), /<a:off x="2857500" y="190500"/);
+  for (const id of ['different-color', 'different-width', 'different-style', 'different-corners', 'elliptic-corners', 'transformed', 'tiny-radius']) {
+    assert.equal(shapesOf(xml).filter(s => s.includes(`name="${id}-border"`)).length, 4, `${id} keeps its side-specific fallback`);
+    assert.match(namedShape(xml, id), /<a:ln[^>]*>.*?<a:alpha val="0"/s, 'fallback fill must not add a uniform stroke');
+  }
+  assert.match(namedShape(xml, 'pill'), /<a:prstGeom prst="roundRect"/);
+  assert.match(namedShape(xml, 'pill'), /fmla="val 50000"/);
+  assert.match(namedShape(xml, 'small-radius'), /<a:prstGeom prst="roundRect"/);
+  assert.equal((namedShape(xml, 'alpha').match(/<a:alpha val="25000"/g) || []).length, 2, 'fill and stroke combine CSS alpha with element opacity');
+  assert.match(namedShape(xml, 'ellipse'), /<a:prstGeom prst="ellipse"/);
+  assert.match(namedShape(xml, 'different-corners'), /<a:prstGeom prst="rect"/, 'unsupported corners do not masquerade as precise rounding');
+  assert.match(namedShape(xml, 'elliptic-corners'), /<a:prstGeom prst="rect"/);
+  assert.match(await zip.file('ppt/notesSlides/notesSlide1.xml').async('string'), /different-corners/);
+});
+
 test('invalid export requests and cross-origin writes are rejected without touching files', async () => {
   assert.equal((await request('pdf', fixture, { Origin: 'https://example.com' })).status, 403);
   assert.equal((await request('exe')).status, 404);
