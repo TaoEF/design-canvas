@@ -148,11 +148,6 @@ button.primary:hover:not(:disabled) {
 .done-button {
   background: var(--hover);
 }
-:host(:not([data-editing])) .nav-head [data-act="page-add"] {
-  display: none;
-}
-.page-preview-hint { margin: 0; }
-:host([data-editing]) .page-preview-hint { display: none; }
 .actions {
   flex: 1;
   justify-content: flex-end;
@@ -993,12 +988,15 @@ button[aria-disabled=true] { opacity:.45; cursor:default; }
 .review-panel { padding:10px 12px 4px; overflow:auto; }
 .review-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .review-message { color:var(--muted); font-size:12px; line-height:1.5; margin:4px 0 10px; }
-.review-item { display:flex; flex-wrap:wrap; gap:4px; padding:8px 0; border-top:1px solid var(--line); align-items:center; }
+.review-item { display:flex; gap:8px; padding:8px 0; border-top:1px solid var(--line); align-items:center; }
 .review-item[data-current] .review-name { font-weight:600; }
-.review-name { flex:1; min-width:0; display:block; overflow:hidden; text-overflow:ellipsis; text-align:left; padding:0 2px; font-size:12px; }
+.review-info { flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
+.review-name { width:100%; min-width:0; display:flex; justify-content:flex-start; gap:4px; text-align:left; padding:0; font-size:12px; }
+.review-page { flex-shrink:0; white-space:nowrap; }
+.review-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .review-name:disabled { opacity:1; }
-.review-kind { font-size:11px; color:var(--muted); }
-.review-item-actions { display:flex; gap:2px; margin-left:auto; }
+.review-kind { display:inline-block; padding:1px 5px; border-radius:3px; background:var(--hover); font-size:10px; line-height:16px; color:var(--muted); }
+.review-item-actions { display:flex; flex-shrink:0; gap:2px; margin-left:auto; }
 .review-item-actions button { height:28px; padding:0 6px; font-size:12px; }
 .review-before { position:fixed; z-index:2147483643; overflow:hidden; background:var(--workspace); pointer-events:none; }
 .review-projection { position:absolute; overflow:hidden; pointer-events:none; }

@@ -524,15 +524,16 @@ test("keyboard adaptation opens with useful focus and image menus skip hidden te
   } finally { await p.close(); }
 });
 
-test("thumbnail More remains discoverable in preview without enabling page writes", async () => {
+test("thumbnail More exposes direct page management while ordinary content still requires Edit", async () => {
   const p = await open(undefined, false);
   try {
     const more = p.locator('.thumb.active .thumb-more');
     assert.ok(await more.isVisible()); assert.equal(await more.locator('svg').count(), 1);
     await more.click();
     assert.ok(await p.locator('[data-menu=page]').isVisible());
-    assert.ok(await p.locator('.page-preview-hint').isVisible());
-    assert.ok(await p.locator('[data-act=page-copy]').isDisabled());
+    assert.equal(await p.locator('.page-preview-hint').count(), 0);
+    assert.ok(await p.locator('[data-act=page-copy]').isEnabled());
+    assert.ok(await p.locator('[data-act=add-text]').isDisabled());
     assert.equal(await p.locator('html').getAttribute('data-editing'), null);
     await p.locator('[data-act=edit]').click(); await more.click();
     assert.equal(await p.locator('.page-preview-hint').isVisible(), false);

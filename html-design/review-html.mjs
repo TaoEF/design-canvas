@@ -48,7 +48,7 @@ export function reviewDiff(beforeHTML, afterHTML) {
   const items = [...new Set([...before.ids, ...after.ids])].flatMap(id => {
     const b = before.byId.get(id), a = after.byId.get(id);
     if (b && a && equal(signature(b), signature(a))) return [];
-    return [{ id, kind: !b ? 'added' : !a ? 'deleted' : 'updated', title: attr(a || b, 'data-title') || id }];
+    return [{ id, kind: !b ? 'added' : !a ? 'deleted' : 'updated', title: attr(a || b, 'data-title') || id, currentPage: a ? after.ids.indexOf(id) + 1 : null, originalPage: b ? before.ids.indexOf(id) + 1 : null }];
   });
   return { scope: 'pages', items, reasons: [] };
 }

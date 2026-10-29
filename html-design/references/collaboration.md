@@ -36,7 +36,7 @@ AI commit 后，当前pending页底自动显示「放弃｜接受」，多页右
 
 同页连续 AI 修改保留首次未接受基线。逐页接受只更新恢复参考，不重写 HTML；部分接受后再发生文档级修改，整份撤回仍保留已接受的页。人工编辑并保存会接受被修改页的 AI 结果；如果存在文档级待审阅，则人工修改接受整个审阅。保存反馈会说明隐式接受。选择/进入编辑/缩放、data-bbox 和序号变化不属于真实设计修改。
 
-浏览器先结束手势/改字并 flush，再检查 revision、review generation、写租约和交接状态。flush 可能已经接受目标，所以列表变化时必须重新选择；服务不接受浏览器提供任意旧 HTML 来恢复。Undo 成功刷新文档，清空旧 DOM 的普通撤销/重做命令，之后人工编辑仍可形成新历史。owner 在预览态也可操作，viewer 只读。
+浏览器先结束手势/改字并 flush，再检查 revision、review generation、写租约和交接状态。flush 可能已经接受目标，所以列表变化时必须重新选择；服务不接受浏览器提供任意旧 HTML 来恢复。Undo 成功刷新文档，清空旧 DOM 的普通撤销/重做命令，之后人工编辑仍可形成新历史。owner 与 viewer 均可在预览态直接操作；viewer 点击后后台执行已有 takeover→原 owner flush/yield→grant 流程，不要求先进入编辑。hover/focus 只读取 before，不接管。交接期间版本、目标或审阅代数变化时停止旧动作，不重放；等待有界，源码或未确认页面名等输入保护保持。页面新增/复制/重命名/移动/删除/拖动同样后台交接，并在 AI pending/lease 期间锁定；普通元素编辑仍需显式编辑模式。
 
 ### 持久基线和事务恢复
 
@@ -44,7 +44,7 @@ AI commit 后，当前pending页底自动显示「放弃｜接受」，多页右
 
 涉及 HTML 的写入先原子落盘 prepared envelope（旧 state、fromRevision、toRevision、next state），再原子替换并同步 HTML 所在目录，最后原子 finalize state。每次读取/服务重启遇到 prepared 时，以实际 HTML 哈希选择：等于 to 完成 next；等于 from 回到旧 state；都不同则保留 journal 和基线、报告冲突并拒绝写入/撤回。存储失败会报错，不声称无待审阅。显式请求标识与最近完成的 AI token 支持丢响应后的相同请求重试；新版本后的旧请求不能覆盖。
 
-审阅摘要只包含 scope、变更列表、原因、generation 和冲突标志；before HTML 按需单独获取。before 在独立 sandbox iframe 中原位呈现（保留兄弟DOM语义，仅在iframe内隐藏其他页，使用before自然尺寸和当前zoom，iframe保持实际窗口viewport、在内部stage缩放定位以保留vw/vh/媒体查询；异步迟到结果不显示），只允许同源资源，不允许脚本、表单或上层导航，另清除脚本/事件/导航元素并使用 CSP；它不进入正式 stage、保存、普通历史或导出。保留原文档资源基址。离线下载不携带服务端基线，不提供服务审阅。
+审阅摘要只包含 scope、变更列表、派生当前/原始页序、原因、generation 和冲突标志；before HTML 按需单独获取。before 在独立 sandbox iframe 中原位呈现（保留兄弟DOM语义，仅在iframe内隐藏其他页，使用before自然尺寸和当前zoom，iframe保持实际窗口viewport、在内部stage缩放定位以保留vw/vh/媒体查询；异步迟到结果不显示），只允许同源资源，不允许脚本、表单或上层导航，另清除脚本/事件/导航元素并使用 CSP；它不进入正式 stage、保存、普通历史或导出。保留原文档资源基址。离线下载不携带服务端基线，不提供服务审阅。
 
 恢复保留当前编辑器 bundle 与不递减的 page/element 序号。不能协调多个服务进程，也不自动合并外部编辑；外部冲突需要保留副本与恢复记录后排查，不能删除审阅文件并假装完成撤回。
 

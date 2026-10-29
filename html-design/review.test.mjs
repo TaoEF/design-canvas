@@ -272,3 +272,11 @@ test('H02: stage whitespace retains layout meaning; removing only a page with un
   const svg = html(page('p1', '<svg><text>first</text><text>second</text></svg>') + page('p2'));
   assert.equal(reviewDiff(svg, svg.replace('second', 'changed')).items[0].id, 'p1', 'merging adjacent HTML text must not collapse SVG text elements');
 });
+
+test('L01/L02/L04: summary page ordinals derive from after/baseline order independently of stable IDs',()=>{
+  const before=html(page('p8','One')+page('p12','Two')), after=html(page('p8','Changed')+page('p50','New'));
+  assert.deepEqual(reviewDiff(before,after).items.map(i=>[i.id,i.kind,i.currentPage,i.originalPage]),[['p8','updated',1,1],['p12','deleted',null,2],['p50','added',2,null]]);
+  const restored=restorePage(after,before,'p12');
+  assert.equal(reviewDiff(before,restored).items.find(i=>i.id==='p50').currentPage,3);
+  const document=reviewDiff(before,after.replace('margin:0','margin:1px')); assert.equal(document.scope,'document'); assert.equal(document.items[0].currentPage,undefined);
+});

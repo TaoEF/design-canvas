@@ -6,7 +6,7 @@ owners:
   - html-design/documents.mjs
   - html-design/collaborate.mjs
   - html-design/src/persistence.js
-updated: 2026-10-28
+updated: 2026-10-29
 sources:
   - path: html-design/documents.mjs
     status: current
@@ -39,6 +39,8 @@ confidence: high
 
 
 ## Contracts
+
+审阅与页面管理由预览态点击触发，客户端共享有界 withLease 复用 takeover/sync 和原owner flush/yield。缺少租约不再让入口灰掉，但服务写入仍严格要求owner、lease与revision；旧revision/目标/审阅代数停止，不自动重放。AI pending/lease阻止这些入口，等待期间普通编辑冻结，未确认rename和源码保护保留。
 
 浏览器使用 `/__html-design/document/` 的 open/read/sync/save/takeover/yield/release；AI 使用 ai/begin/status/commit/cancel。save 与 ai/commit 必须匹配 revision；HTML 必须完整并包含 data-stage/data-artboard。服务限制项目内 HTML、拒绝隐藏路径和跨源写入；请求上限 32 MB。
 

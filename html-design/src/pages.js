@@ -14,12 +14,14 @@ export function createPages({
   select,
   endText,
   writable,
+  submit,
   openMenu,
   closeMenus,
 }) {
   const listUI = ui.querySelector(".thumb-list"),
     thumbs = new Map(),
     sizes = new WeakMap();
+  let renameDraft = null;
   let menuBoard,
     suppressClick = false,
     lastSize = { w: 1280, h: 720 },
@@ -256,9 +258,8 @@ export function createPages({
   function target() {
     return menuBoard?.isConnected ? menuBoard : S.current;
   }
-  function add() {
-    if (!writable()) return;
-    const ref = target(),
+  function add(ref) {
+    const
       sz = ref ? sizeOf(ref) : lastSize,
       b = document.createElement("section");
     b.dataset.artboard = allocatePage();
@@ -282,9 +283,8 @@ export function createPages({
     );
     menuBoard = null;
   }
-  function copy() {
-    const b = target();
-    if (!b || !writable()) return;
+  function copy(b) {
+    if (!b) return;
     const c = b.cloneNode(true),
       id = allocatePage(),
       old = b.dataset.artboard;
@@ -310,9 +310,8 @@ export function createPages({
     );
     menuBoard = null;
   }
-  function remove() {
-    const b = target();
-    if (!b || !writable()) return;
+  function remove(b) {
+    if (!b) return;
     lastSize = sizeOf(b);
     const parent = b.parentNode,
       next = b.nextSibling,
@@ -327,7 +326,7 @@ export function createPages({
     menuBoard = null;
   }
   function move(b, before) {
-    if (!b || !writable() || b === before || b.nextElementSibling === before)
+    if (!b || b === before || b.nextElementSibling === before)
       return;
     const parent = b.parentNode,
       next = b.nextSibling;
@@ -338,61 +337,44 @@ export function createPages({
     );
     menuBoard = null;
   }
+  function execute(nodes, apply, valid = () => true, rename = false) {
+    if (!writable()) return Promise.reject(new Error('当前暂不可操作，请等待同步或 AI 修改结束'));
+    const ids = nodes.map(n => n?.dataset.artboard || null), find = id => id ? boards().find(b => b.dataset.artboard === id) : null;
+    return submit(() => apply(...ids.map(find)), () => valid() && ids.every(id => !id || !!find(id)), rename);
+  }
+  const action = (fn, b = target()) => execute([b], node => fn(node)).catch(() => {});
   function moveStep(dir) {
-    const b = target(),
-      a = boards(),
-      i = a.indexOf(b),
-      j = i + dir;
+    const b = target(), a = boards(), i = a.indexOf(b), j = i + dir;
     if (i < 0 || j < 0 || j >= a.length) return;
-    move(b, dir < 0 ? a[j] : a[j + 1] || null);
+    execute([b, dir < 0 ? a[j] : a[j + 1] || null], move).catch(() => {});
   }
   function rename(b = target()) {
-    if (!b || !writable()) return;
-    closeMenus();
-    goTo(b);
-    const t = thumbs.get(b);
-    if (!t) return;
-    const input = document.createElement("input");
-    input.className = "rename-input";
-    input.value = b.dataset.title || "";
-    input.setAttribute("aria-label", "页面名称");
-    const before = b.dataset.title || "",
-      label = t.label;
-    label.hidden = true;
-    t.append(input);
-    input.focus();
-    input.select();
-    let done = false;
-    function finish(apply) {
+    if (!b || !writable() || renameDraft) return;
+    closeMenus(); goTo(b);
+    const t = thumbs.get(b); if (!t) return;
+    const input = document.createElement('input'); input.className = 'rename-input'; input.value = b.dataset.title || ''; input.setAttribute('aria-label', '页面名称');
+    const before = b.dataset.title || '', label = t.label;
+    const draft = { input }; renameDraft = draft;
+    label.hidden = true; t.append(input); input.focus(); input.select();
+    let done = false, committing = false;
+    function cleanup() { done = true; if (renameDraft === draft) renameDraft = null; input.remove(); label.hidden = false; t.querySelector('.thumb-main')?.focus(); }
+    async function finish(apply) {
       if (done) return;
-      done = true;
-      const after = input.value.trim() || "未命名页面";
-      input.remove();
-      label.hidden = false;
-      if (apply && after !== before)
-        transaction(
-          () => {
-            b.dataset.title = after;
-          },
-          () => {
-            b.dataset.title = before;
-          },
-          b,
-        );
-      else build();
-      t.querySelector(".thumb-main").focus();
+      if (!apply) { cleanup(); return; }
+      if (committing) return;
+      const after = input.value.trim() || '未命名页面';
+      if (after === before) { cleanup(); return; }
+      committing = true; input.readOnly = true;
+      try {
+        await execute([b], target => {
+          transaction(() => { target.dataset.title = after; }, () => { target.dataset.title = before; }, target);
+          cleanup();
+        }, () => !done, true);
+      } catch { if (!done) { committing = false; input.readOnly = false; input.focus(); } }
     }
     input.onblur = () => finish(true);
-    input.onkeydown = (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        finish(true);
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        finish(false);
-      }
+    input.onkeydown = e => {
+      if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(e.key === 'Enter'); }
     };
   }
   function startReorder(e, b) {
@@ -429,6 +411,7 @@ export function createPages({
       raf = requestAnimationFrame(scroll);
     }
     S.drag = {
+      kind: "page",
       move(ev) {
         lastY = ev.clientY;
         if (!moved && Math.hypot(ev.clientX - x, ev.clientY - y) < 6) return;
@@ -448,7 +431,11 @@ export function createPages({
           setTimeout(() => {
             suppressClick = false;
           }, 0);
-          if (ev?.type !== "pointercancel") move(b, before);
+          if (ev?.type !== "pointercancel") {
+            // Finish the gesture before admission can pause it; the DOM stays untouched until lease grant.
+            S.drag = null;
+            execute([b, before], move).catch(() => {});
+          }
         }
       },
       cancel() {
@@ -468,8 +455,9 @@ export function createPages({
       index = boards().indexOf(b),
       mod = e.ctrlKey || e.metaKey;
     menuBoard = b;
-    if (mod && e.key.toLowerCase() === "d") copy();
-    else if (["Delete", "Backspace"].includes(e.key)) remove();
+    if (e.key === "F2") rename(b);
+    else if (mod && e.key.toLowerCase() === "d") action(copy);
+    else if (["Delete", "Backspace"].includes(e.key)) action(remove);
     else if (e.altKey && e.key === "ArrowUp") moveStep(-1);
     else if (e.altKey && e.key === "ArrowDown") moveStep(1);
     else if (["ArrowUp", "ArrowDown"].includes(e.key)) {
@@ -499,12 +487,13 @@ export function createPages({
     paint,
     build,
     markActive,
-    add,
-    copy,
-    remove,
+    add: () => action(add),
+    copy: () => action(copy),
+    remove: () => action(remove),
     moveStep,
     rename,
     key,
+    hasPendingRename: () => !!renameDraft,
     clearTarget() {
       menuBoard = null;
     },

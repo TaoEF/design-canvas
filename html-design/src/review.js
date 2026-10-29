@@ -55,15 +55,18 @@ export function createReview({ ui, persistence, navigate, view, restoreTarget, t
       drawn = key; list.replaceChildren();
       for (const item of state.review.items) {
         const row = document.createElement('div'); row.className = 'review-item review-row'; row.dataset.reviewRow = item.id;
-        const title = document.createElement('button'); title.type = 'button'; title.className = 'review-name'; title.textContent = item.title; title.title = item.title; title.dataset.reviewCommand = 'locate'; title.dataset.reviewId = item.id;
+        const title = document.createElement('button'); title.type = 'button'; title.className = 'review-name'; title.title = item.title; title.dataset.reviewCommand = 'locate'; title.dataset.reviewId = item.id;
         if (state.review.scope === 'document' || item.kind === 'deleted') title.disabled = true;
+        if (state.review.scope !== 'document') { const number = document.createElement('span'); number.className = 'review-page'; number.textContent = `${item.kind === 'deleted' ? '原第' : '第'} ${item.kind === 'deleted' ? item.originalPage : item.currentPage} 页 ·`; title.append(number); }
+        const name = document.createElement('span'); name.className = 'review-title'; name.textContent = item.title; title.append(name);
         const kind = document.createElement('span'); kind.className = 'review-kind'; kind.textContent = { added: '新增', updated: '修改', deleted: '删除' }[item.kind];
         const controls = document.createElement('div'); controls.className = 'review-item-actions'; actions(controls, item);
-        row.append(title, kind, controls); list.append(row);
+        const info = document.createElement('div'); info.className = 'review-info'; info.append(title, kind);
+        row.append(info, controls); list.append(row);
       }
     }
     summary.querySelector('.review-count').textContent = state.review.conflict ? 'AI 审阅异常' : state.review.scope === 'document' ? '整份文档' : `${state.review.items.length} 页修改`;
-    summary.querySelector('.review-message').textContent = state.review.conflict ? '文件在审阅之外发生变化，基线已保留，请下载副本后排查。' : state.review.scope === 'document' ? `整份文档：放弃将恢复全部未接受修改。${state.review.reasons.join('；')}` : state.canReview ? '人工修改并保存某页，会接受该页的 AI 改动。' : '只读：可查看修改前；取得编辑权限后可处理。';
+    summary.querySelector('.review-message').textContent = state.review.conflict ? '文件在审阅之外发生变化，基线已保留，请下载副本后排查。' : state.review.scope === 'document' ? `整份文档：放弃将恢复全部未接受修改。${state.review.reasons.join('；')}` : state.canReview ? '可直接处理；人工修改并保存某页，会接受该页的 AI 改动。' : '可直接处理；点击后将自动同步编辑权限。';
     summary.querySelector('[data-review-command=accept-all]').disabled = !enabled();
     position();
     if (!raf && (state.review.items.length || state.review.conflict)) raf = requestAnimationFrame(tick);
@@ -164,11 +167,11 @@ export function createReview({ ui, persistence, navigate, view, restoreTarget, t
     if (command === 'close') { setExpanded(false, true); return; }
     if (command === 'locate') { endBefore(); navigate(id); position(); bar.querySelector('[data-review-command=accept]')?.focus(); return; }
     if (!['undo', 'accept', 'accept-all'].includes(command)) return;
-    if (!enabled()) { toast('只读查看：取得编辑权限后可处理 AI 修改'); return; }
-    const item = state.review.items.find(i => i.id === id);
+    if (!enabled()) { toast('连接或交接暂不可用，请稍后再试'); return; }
+    const item = state.review.items.find(i => i.id === id), initialPage = pageId();
     endBefore(); busy = true; update(state);
     if (command === 'undo' && item?.kind === 'deleted') restoreTarget(id);
-    try { await persistence().reviewAction(command === 'accept-all' ? 'accept' : command, command === 'accept-all' ? 'all' : id, state.review.generation); }
+    try { await persistence().reviewAction(command === 'accept-all' ? 'accept' : command, command === 'accept-all' ? 'all' : id, state.review.generation, () => initialPage === pageId() && !view().playing); }
     catch (error) { toast(error.message, 6000); }
     finally {
       restoreTarget(null); busy = false; update(state);

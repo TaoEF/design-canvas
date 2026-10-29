@@ -209,7 +209,7 @@ test("browser autosaves text mid-edit, keeps zoom out of HTML, and hands latest 
     await b.goto(`${origin}/demos/test.html`);
     await b
       .locator(".state-text")
-      .filter({ hasText: /其他窗口编辑中/ })
+      .filter({ hasText: /已同步 · 预览中/ })
       .waitFor();
     assert.equal(await b.locator("[data-act=add-text]").isEnabled(), false);
     assert.equal(await a.locator("html").getAttribute("data-editing"), null);
@@ -283,7 +283,7 @@ test("browser autosaves text mid-edit, keeps zoom out of HTML, and hands latest 
       .waitFor();
     await a
       .locator(".state-text")
-      .filter({ hasText: /其他窗口编辑中/ })
+      .filter({ hasText: /已同步 · 预览中/ })
       .waitFor();
     assert.equal(await b.locator("html").getAttribute("data-editing"), "");
     await b.locator("[data-el=p1-title]").dblclick();
@@ -315,7 +315,7 @@ test("one Edit click waits for the old owner's pending save and enters editing a
     await a.locator("[data-act=edit]").click();
     await a.locator("[data-el=p1-title]").dblclick();
     await b.goto(`${origin}/demos/one-click.html`);
-    await b.locator(".state-text").filter({ hasText: /只读/ }).waitFor();
+    await b.locator(".state-text").filter({ hasText: /预览中/ }).waitFor();
     assert.ok(await b.locator("[data-act=edit]").isVisible());
     assert.ok(await b.locator("[data-act=edit]").isEnabled());
     let releaseSave, saveStarted;

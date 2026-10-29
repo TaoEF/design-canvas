@@ -275,7 +275,7 @@ property of their respective owners.
  */
 (() => {
   // html-design/src/editor.css
-  var editor_default = ':host {\n  all: initial;\n  --paper: #fff;\n  --workspace: #f2f2f2;\n  --hover: #ededed;\n  --active: #e4e4e4;\n  --ink: #202020;\n  --muted: #646464;\n  --line: #e7e7e7;\n  --selection: #258bff;\n  --guide: #10b981;\n  --radius: 8px;\n  --nav: 170px;\n  --head: 52px;\n  --foot: 40px;\n  font:\n    13px/1.35 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    "PingFang SC",\n    sans-serif;\n  color: var(--ink);\n  color-scheme: light;\n}\n* {\n  box-sizing: border-box;\n}\n[hidden] {\n  display: none !important;\n}\n::selection {\n  background: #d5d5d5;\n  color: #171717;\n}\nbutton,\ninput,\nselect,\ntextarea {\n  font: inherit;\n  color: inherit;\n}\nbutton {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 7px;\n  min-width: 32px;\n  height: 32px;\n  padding: 0 9px;\n  border: 0;\n  border-radius: var(--radius);\n  background: transparent;\n  cursor: pointer;\n  white-space: nowrap;\n  line-height: 1.2;\n}\nbutton:hover:not(:disabled) {\n  background: var(--hover);\n}\nbutton[aria-pressed="true"] {\n  background: var(--active);\n}\nbutton:disabled {\n  opacity: 0.35;\n  cursor: default;\n}\nbutton:focus-visible,\ninput:focus-visible,\nselect:focus-visible,\n[role="button"]:focus-visible {\n  outline: 2px solid var(--selection);\n  outline-offset: 2px;\n}\nbutton.primary {\n  background: #202020;\n  color: #fff;\n}\nbutton.primary:hover:not(:disabled) {\n  background: #3c3c3c;\n}\n.icon {\n  display: block;\n  flex-shrink: 0;\n  pointer-events: none;\n}\n.icon-only {\n  width: 32px;\n  padding: 0;\n}\n.head {\n  position: fixed;\n  inset: 0 0 auto;\n  height: var(--head);\n  z-index: 2147483647;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 20px;\n  padding: 0 16px;\n  background: var(--paper);\n}\n.grp {\n  display: flex;\n  align-items: center;\n  gap: 3px;\n  min-width: 0;\n}\n.document {\n  flex: 1;\n  gap: 9px;\n}\n.document-title {\n  min-width: 0;\n  max-width: 260px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-weight: 550;\n}\n.save-state {\n  min-width: 0;\n  max-width: 155px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  justify-content: flex-start;\n  white-space: nowrap;\n  color: var(--muted);\n  font-size: 11px;\n  padding: 0 5px;\n}\n.save-state .state-text {\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.save-state .icon {\n  width: 14px;\n  height: 14px;\n}\n.tools {\n  flex-shrink: 0;\n}\n.layout-toggle {\n  margin: 0 7px;\n}\n.layout-toggle button {\n  gap: 5px;\n}\n.done-button {\n  background: var(--hover);\n}\n:host(:not([data-editing])) .nav-head [data-act="page-add"] {\n  display: none;\n}\n.page-preview-hint { margin: 0; }\n:host([data-editing]) .page-preview-hint { display: none; }\n.actions {\n  flex: 1;\n  justify-content: flex-end;\n}\n.group-gap {\n  margin-left: 13px;\n}\n.view-seg {\n  display: flex;\n  align-items: center;\n  gap: 0;\n}\n.view-seg button {\n  border-radius: 7px;\n}\n.view-seg .fullscreen {\n  padding-inline: 6px;\n  min-width: 26px;\n}\n.view-seg .fullscreen .icon {\n  width: 16px;\n  height: 16px;\n}\n.nav {\n  position: fixed;\n  left: 0;\n  top: var(--head);\n  bottom: 0;\n  width: var(--nav);\n  z-index: 2147483645;\n  display: flex;\n  flex-direction: column;\n  background: #f8f8f8;\n}\n.nav-head {\n  height: 47px;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 13px 0 20px;\n  flex-shrink: 0;\n}\n.nav-head strong {\n  font-size: 12px;\n  font-weight: 550;\n  color: var(--muted);\n}\n.thumb-list {\n  flex: 1;\n  min-height: 0;\n  overflow: auto;\n  padding: 6px 12px 24px;\n  scrollbar-width: thin;\n  scrollbar-color: #cecece transparent;\n  overscroll-behavior: contain;\n}\n.thumb {\n  position: relative;\n  margin-bottom: 18px;\n  border-radius: 7px;\n}\n.thumb-main {\n  outline: 0;\n  cursor: pointer;\n  position: relative;\n}\n.frame {\n  position: relative;\n  width: 146px;\n  overflow: hidden;\n  background: white;\n  border-radius: 3px;\n  box-shadow: 0 0 0 1px #dedede;\n}\n.frame iframe {\n  position: absolute;\n  left: 0;\n  top: 0;\n  border: 0;\n  transform-origin: 0 0;\n  pointer-events: none;\n  background: #fff;\n}\n.thumb.active .frame {\n  box-shadow: 0 0 0 1.5px var(--selection);\n}\n.thumb.active .label {\n  color: #171717;\n}\n.thumb-main:hover .frame {\n  box-shadow: 0 0 0 1.5px #8a8a8a;\n}\n.thumb-main:focus-visible .frame {\n  outline: 2px solid var(--selection);\n  outline-offset: 3px;\n}\n.label {\n  padding: 8px 28px 0 2px;\n  color: #666;\n  font-size: 11px;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  line-height: 16px;\n}\n.thumb-more {\n  position: absolute;\n  right: 0;\n  bottom: -4px;\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  opacity: 0;\n  background: #f8f8f8;\n}\n.thumb:hover .thumb-more,\n.thumb:focus-within .thumb-more,\n.thumb.active .thumb-more {\n  opacity: 1;\n}\n.thumb-more .icon {\n  width: 15px;\n  height: 15px;\n}\n.thumb.dragging {\n  opacity: 0.35;\n}\n.thumb.drop-before::before,\n.thumb.drop-after::after {\n  content: "";\n  position: absolute;\n  left: 0;\n  right: 0;\n  height: 2px;\n  background: #333;\n  pointer-events: none;\n}\n.thumb.drop-before::before {\n  top: -10px;\n}\n.thumb.drop-after::after {\n  bottom: -10px;\n}\n.rename-input {\n  width: 100%;\n  height: 25px;\n  padding: 2px 4px;\n  border: 1px solid #999;\n  border-radius: 4px;\n  background: #fff;\n  font-size: 12px;\n}\n.empty-list {\n  font-size: 12px;\n  color: var(--muted);\n  padding: 10px 5px;\n  line-height: 1.7;\n}\n.footer {\n  position: fixed;\n  bottom: 0;\n  left: var(--nav);\n  right: 0;\n  height: var(--foot);\n  z-index: 2147483645;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 12px;\n  background: #fff;\n  gap: 14px;\n}\n.footer button {\n  height: 28px;\n  min-width: 28px;\n  padding: 0 5px;\n}\n.page-controls {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  min-width: 0;\n}\n.pageno {\n  font-size: 12px;\n  color: #555;\n  font-variant-numeric: tabular-nums;\n  white-space: nowrap;\n  text-align: center;\n  min-width: 46px;\n}\n.page-title {\n  max-width: 260px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-size: 12px;\n  color: #666;\n  margin-left: 9px;\n  justify-content: flex-start;\n}\n.page-title:disabled {\n  opacity: 1;\n}\n.zoom {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n}\n.zoom .zv {\n  min-width: 49px;\n  font-size: 12px;\n  font-variant-numeric: tabular-nums;\n}\n.zoom .fit {\n  margin-left: 7px;\n}\n.footer .icon {\n  width: 16px;\n  height: 16px;\n}\n.tbar {\n  --hover: #353535;\n  --active: #4a4a4a;\n  --muted: #d0d0d0;\n  position: fixed;\n  left: calc(var(--nav) + (100vw - var(--nav)) / 2);\n  top: calc(var(--head) + 10px);\n  transform: translateX(-50%);\n  z-index: 2147483646;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 5px 6px;\n  background: #202020;\n  color: #f8f8f8;\n  border-radius: 10px;\n  box-shadow: 0 3px 16px #00000014;\n  max-width: calc(100vw - var(--nav) - 24px);\n}\n.text-tools,\n.image-tools,\n.object-tools {\n  display: flex;\n  align-items: center;\n  gap: 3px;\n}\n.tbar .seg { background: #353535; }\n.tbar .seg button[aria-pressed="true"] { background: #555; color: #fff; box-shadow: none; }\n.image-tools > [data-act="image-replace"] { font-size: 12px; font-weight: 400; gap: 5px; }\n.tbar .color-control .color-swatch { box-shadow: 0 0 0 1px #ffffff90; }\n.tbar .fs {\n  width: 52px;\n  height: 29px;\n  background: #383838;\n  border: 0;\n  border-radius: 5px;\n  padding: 0 4px;\n  text-align: center;\n  font-variant-numeric: tabular-nums;\n  appearance: textfield;\n}\n.fs::-webkit-inner-spin-button {\n  appearance: none;\n}\n.color-control { position: relative; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:7px; cursor:pointer; }\n.color-control:hover { background:var(--hover); }\n.color-control input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }\n.color-control .color-swatch {\n  display: block;\n  width: 19px;\n  height: 19px;\n  border-radius: 50%;\n  background: currentColor;\n  box-shadow: inset 0 0 0 1px #0002;\n}\n.add-text { gap: 0; width: 36px; }\n.add-text .icon:first-child { width: 12px; height: 12px; }\n.add-text .icon:last-child { width: 17px; height: 17px; }\n.menu-panel[data-menu="more"], .menu-panel[data-menu="element"], .menu-panel[data-menu="page"] { width: 190px; min-width: 190px; }\n.seg {\n  display: flex;\n  padding: 2px;\n  border-radius: 7px;\n  background: #f3f3f3;\n}\n.seg button {\n  height: 27px;\n  font-size: 12px;\n  padding: 0 10px;\n}\n.seg button[aria-pressed="true"] {\n  background: #fff;\n  box-shadow: 0 1px 3px #0001;\n}\n.compact-select {\n  border: 0;\n  background: #f4f4f4;\n  height: 29px;\n  padding: 0 7px;\n  border-radius: 5px;\n  font-size: 12px;\n}\n.tbar .icon {\n  width: 17px;\n  height: 17px;\n}\n.sel {\n  position: fixed;\n  display: none;\n  border: 1px solid var(--selection);\n  box-shadow: 0 0 0 1px #ffffffb3;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.sel.typing {\n  border-style: dashed;\n}\n.sel i {\n  position: absolute;\n  width: 8px;\n  height: 8px;\n  margin: -4px 0 0 -4px;\n  background: #fff;\n  border: 1px solid var(--selection);\n  border-radius: 1px;\n  pointer-events: auto;\n  box-shadow: 0 0 0 1px #ffffff80;\n}\n.sel.typing i {\n  display: none;\n}\n.sel.multiple i {\n  display: none;\n}\n.selection-member {\n  position: fixed;\n  border: 1px dashed var(--selection);\n  box-shadow: 0 0 0 1px #ffffffb3;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.marquee {\n  position: fixed;\n  border: 1px solid var(--selection);\n  background: #258bff18;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.selection-count {\n  padding: 0 7px;\n  color: var(--muted);\n  font-size: 12px;\n  white-space: nowrap;\n}\n.guides {\n  position: fixed;\n  left: var(--nav);\n  top: var(--head);\n  width: calc(100vw - var(--nav));\n  height: calc(100vh - var(--head) - var(--foot));\n  overflow: hidden;\n  pointer-events: none;\n  z-index: 2147483643;\n  fill: none;\n}\n.guide-halo {\n  stroke: #ffffffb3;\n  stroke-width: 3px;\n}\n.guide-line {\n  stroke: var(--guide);\n  stroke-width: 1px;\n}\n:host([data-nav-hidden]) .guides {\n  left: 0;\n  width: 100vw;\n}\n.sel i::before {\n  content: "";\n  position: absolute;\n  inset: -5px;\n}\n[data-h="nw"] {\n  left: 0;\n  top: 0;\n  cursor: nwse-resize;\n}\n[data-h="n"] {\n  left: 50%;\n  top: 0;\n  cursor: ns-resize;\n}\n[data-h="ne"] {\n  left: 100%;\n  top: 0;\n  cursor: nesw-resize;\n}\n[data-h="e"] {\n  left: 100%;\n  top: 50%;\n  cursor: ew-resize;\n}\n[data-h="se"] {\n  left: 100%;\n  top: 100%;\n  cursor: nwse-resize;\n}\n[data-h="s"] {\n  left: 50%;\n  top: 100%;\n  cursor: ns-resize;\n}\n[data-h="sw"] {\n  left: 0;\n  top: 100%;\n  cursor: nesw-resize;\n}\n[data-h="w"] {\n  left: 0;\n  top: 50%;\n  cursor: ew-resize;\n}\n.menu-panel {\n  position: fixed;\n  z-index: 2147483647;\n  min-width: 180px;\n  max-width: min(330px, calc(100vw - 20px));\n  max-height: 70vh;\n  overflow: auto;\n  padding: 6px;\n  border-radius: 10px;\n  background: white;\n  box-shadow: 0 6px 28px #00000024;\n  font-size: 12px;\n}\n.menu-panel button {\n  width: 100%;\n  justify-content: flex-start;\n  height: 34px;\n  padding: 0 9px;\n  border-radius: 6px;\n  font-size: 12px;\n}\n.menu-panel .icon {\n  width: 16px;\n  height: 16px;\n}\n.menu-caption {\n  font-size: 11px;\n  color: #6a6a6a;\n  padding: 8px 9px 4px;\n}\n.menu-separator {\n  height: 1px;\n  background: #eee;\n  margin: 5px 7px;\n}\n.status-detail {\n  font-size: 12px;\n  line-height: 1.65;\n  white-space: normal;\n  margin: 6px 8px;\n  color: #555;\n  max-width: 265px;\n}\n.status-panel button {\n  height: auto;\n  min-height: 34px;\n  white-space: normal;\n  text-align: left;\n}\n.modal {\n  position: fixed;\n  inset: 0;\n  z-index: 2147483647;\n  background: #0005;\n  display: flex;\n  padding: 36px;\n  font:\n    13px/1.4 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    sans-serif;\n  color: #222;\n}\n.box {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  background: #fff;\n  border-radius: 12px;\n  overflow: hidden;\n  min-width: 0;\n}\n.mh {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  padding: 11px 16px;\n  background: #f6f6f6;\n  flex-wrap: wrap;\n}\n.mh .hint {\n  color: #666;\n  font-size: 11px;\n}\n.mh .sp {\n  flex: 1;\n}\ntextarea {\n  flex: 1;\n  min-height: 0;\n  border: 0;\n  outline: none;\n  resize: none;\n  padding: 18px;\n  font:\n    12px/1.6 ui-monospace,\n    Menlo,\n    Consolas,\n    monospace;\n  white-space: pre;\n  tab-size: 2;\n  caret-color: #222;\n}\n.toast {\n  position: fixed;\n  left: 50%;\n  bottom: 65px;\n  transform: translateX(-50%);\n  max-width: calc(100vw - 40px);\n  padding: 10px 16px;\n  border-radius: 9px;\n  background: #222;\n  color: #fff;\n  font:\n    12px/1.5 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    sans-serif;\n  opacity: 0;\n  transition: opacity 0.15s;\n  pointer-events: none;\n  z-index: 2147483647;\n}\n.toast.show {\n  opacity: 1;\n}\n.empty-canvas {\n  position: fixed;\n  left: var(--nav);\n  right: 0;\n  top: var(--head);\n  bottom: var(--foot);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-direction: column;\n  gap: 14px;\n  color: #666;\n  font-size: 13px;\n}\n.empty-canvas p {\n  margin: 0;\n}\n.empty-canvas > .icon {\n  width: 30px;\n  height: 30px;\n  color: #aaa;\n}\n.play-controls {\n  position: fixed;\n  bottom: 22px;\n  left: 50%;\n  transform: translateX(-50%);\n  z-index: 2147483647;\n  display: flex;\n  align-items: center;\n  gap: 5px;\n  padding: 5px 8px;\n  background: #ffffffed;\n  border-radius: 10px;\n  box-shadow: 0 4px 18px #0002;\n  opacity: 0;\n  transition: opacity 0.15s;\n}\n.play-controls button {\n  height: 31px;\n  min-width: 31px;\n}\n.play-controls.visible,\n.play-controls:hover,\n.play-controls:focus-within {\n  opacity: 1;\n}\n.play-controls .play-title {\n  max-width: 190px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-size: 12px;\n  color: #555;\n  margin: 0 7px;\n}\n.play-controls .pageno {\n  font-size: 12px;\n}\n.play-exit {\n  position: fixed;\n  top: 16px;\n  right: 16px;\n  z-index: 2147483647;\n  background: #fffffff0;\n  color: #222;\n}\n:host([data-playing]) .head,\n:host([data-playing]) .nav,\n:host([data-playing]) .footer,\n:host([data-playing]) .tbar,\n:host([data-playing]) .sel,\n:host([data-playing]) .guides,\n:host([data-playing]) .selection-members,\n:host([data-playing]) .marquee,\n:host([data-playing]) .empty-canvas {\n  display: none !important;\n}\n:host(:not([data-playing])) .play-controls,\n:host(:not([data-playing])) .play-exit {\n  display: none !important;\n}\n:host([data-nav-hidden]) .nav {\n  display: none;\n}\n:host([data-nav-hidden]) .footer {\n  left: 0;\n}\n:host([data-nav-hidden]) .tbar {\n  left: 50%;\n  max-width: calc(100vw - 24px);\n}\n:host([data-nav-hidden]) .empty-canvas {\n  left: 0;\n}\n@media (max-width: 1050px) {\n  .head {\n    gap: 9px;\n    padding: 0 10px;\n  }\n  .document-title {\n    max-width: 140px;\n  }\n  .save-state {\n    max-width: 95px;\n    font-size: 10px;\n  }\n  .group-gap {\n    margin-left: 6px;\n  }\n  .actions {\n    flex: initial;\n  }\n  .document {\n    flex: 1;\n  }\n  .head button {\n    padding-inline: 7px;\n  }\n  .actions .button-label {\n    display: none;\n  }\n}\n@media (max-width: 760px) {\n  :host {\n    --nav: 170px;\n  }\n  .head {\n    gap: 4px;\n  }\n  .document-title {\n    max-width: 100px;\n    font-size: 12px;\n  }\n  .save-state {\n    max-width: 27px;\n  }\n  .save-state .state-text {\n    display: none;\n  }\n  .head .preview-button span,\n  .head .export-label {\n    display: none;\n  }\n  .head .group-gap {\n    margin-left: 2px;\n  }\n  .head .layout-toggle {\n    margin-inline: 3px;\n  }\n  .head .layout-toggle button { padding-inline: 6px; font-size: 11px; }\n  .page-title {\n    max-width: 110px;\n  }\n  .footer {\n    padding: 0 7px;\n  }\n  .tbar {\n    gap: 1px;\n    padding: 4px;\n  }\n  .tbar button {\n    padding-inline: 5px;\n    min-width: 28px;\n  }\n  .nav-head {\n    padding-inline: 12px;\n  }\n}\n@media (max-width: 540px) {\n  :host {\n    --nav: 0px;\n  }\n  .nav {\n    display: none !important;\n  }\n  .footer {\n    left: 0;\n  }\n  .tbar {\n    left: 50%;\n    max-width: calc(100vw - 16px);\n  }\n  .document-title {\n    max-width: 80px;\n  }\n  .head {\n    padding-inline: 6px;\n  }\n  .head button {\n    padding-inline: 5px;\n    min-width: 28px;\n  }\n  .head .document {\n    gap: 2px;\n  }\n  .head .nav-toggle {\n    display: inline-flex;\n  }\n  .head .selection-tool {\n    display: none;\n  }\n  .head .done-button span,\n  .head .preview-button > .icon:last-child {\n    display: none;\n  }\n  :host([data-editing]) .head .preview-button {\n    display: none;\n  }\n  .head .document { flex: 0; gap: 3px; }\n  .head .document-title { display: none; }\n  .head .save-state { width: 22px; min-width: 22px; max-width: 22px; padding: 0; flex-shrink: 0; }\n  .head .tools > [data-act="undo"], .head .tools > [data-act="redo"] { display: none; }\n  .head .actions { flex: initial; }\n  .head [data-act="export"] > .icon:last-child {\n    display: none;\n  }\n  :host([data-mobile-nav]) .nav {\n    display: flex !important;\n    width: 170px;\n    bottom: 40px;\n    box-shadow: 5px 0 20px #0001;\n  }\n  .head .actions {\n    gap: 1px;\n  }\n  .page-title {\n    max-width: 90px;\n  }\n  .footer .fit span {\n    display: none;\n  }\n  .modal {\n    padding: 10px;\n  }\n  .mh .hint {\n    display: none;\n  }\n}\n@media (prefers-reduced-motion: reduce) {\n  * {\n    transition: none !important;\n    scroll-behavior: auto !important;\n  }\n}\n@media print {\n  :host {\n    display: none !important;\n  }\n}\n\n.more-text-formats {\n  display: flex;\n  gap: 4px;\n  padding: 3px 6px;\n}\n.more-text-formats button {\n  width: 32px;\n  padding: 0;\n  justify-content: center;\n}\n:host([data-readonly]) .tools {\n  display: none;\n}\n\n.play-exit:focus-visible {\n  opacity: 1 !important;\n}\n\n/* Experimental text sizing; diagnostics stay inside the editor shadow root. */\n.text-layout-panel { width: 268px; }\n.text-layout-panel strong { display: block; padding: 8px 10px 0; font-weight: 550; }\n.text-layout-status { margin: 8px 10px 12px; max-width: 232px; color: var(--muted); line-height: 1.6; }\n.text-layout-status[data-overflow="true"] { color: #a84c18; }\n\n/* AI review controls live outside the scaled content. */\n.review-actions { position:fixed; z-index:2147483645; display:flex; align-items:center; padding:3px; gap:0; background:var(--paper); border-radius:8px; box-shadow:0 3px 12px #0002; }\n.review-actions button { height:30px; min-width:62px; font-size:12px; border-radius:6px; }\n.review-accept { background:#202020; color:#fff; }\nbutton.review-accept:hover:not(:disabled) { background:#3c3c3c; }\nbutton[aria-disabled=true] { opacity:.45; cursor:default; }\n.review-scope { color:var(--muted); font-size:12px; padding:0 8px; }\n.review-summary { position:fixed; z-index:2147483646; width:280px; background:var(--paper); border-radius:8px; box-shadow:0 5px 20px #0002; }\n.review-summary-bar { display:flex; padding:4px; gap:4px; }\n.review-trigger { flex:1; justify-content:space-between; font-size:12px; }\n.review-trigger .icon { transform:rotate(180deg); }\n.review-trigger[aria-expanded=true] .icon { transform:none; }\n.review-summary-bar .review-accept { height:30px; font-size:12px; }\n.review-panel { padding:10px 12px 4px; overflow:auto; }\n.review-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; }\n.review-message { color:var(--muted); font-size:12px; line-height:1.5; margin:4px 0 10px; }\n.review-item { display:flex; flex-wrap:wrap; gap:4px; padding:8px 0; border-top:1px solid var(--line); align-items:center; }\n.review-item[data-current] .review-name { font-weight:600; }\n.review-name { flex:1; min-width:0; display:block; overflow:hidden; text-overflow:ellipsis; text-align:left; padding:0 2px; font-size:12px; }\n.review-name:disabled { opacity:1; }\n.review-kind { font-size:11px; color:var(--muted); }\n.review-item-actions { display:flex; gap:2px; margin-left:auto; }\n.review-item-actions button { height:28px; padding:0 6px; font-size:12px; }\n.review-before { position:fixed; z-index:2147483643; overflow:hidden; background:var(--workspace); pointer-events:none; }\n.review-projection { position:absolute; overflow:hidden; pointer-events:none; }\n.review-projection iframe { position:absolute; left:0; top:0; border:0; transform-origin:top left; background:white; pointer-events:none; }\n.review-hint { position:fixed; right:16px; bottom:112px; pointer-events:none; z-index:2147483646; font-size:12px; color:var(--muted); background:var(--paper); padding:6px 10px; border-radius:6px; }\n';
+  var editor_default = ':host {\n  all: initial;\n  --paper: #fff;\n  --workspace: #f2f2f2;\n  --hover: #ededed;\n  --active: #e4e4e4;\n  --ink: #202020;\n  --muted: #646464;\n  --line: #e7e7e7;\n  --selection: #258bff;\n  --guide: #10b981;\n  --radius: 8px;\n  --nav: 170px;\n  --head: 52px;\n  --foot: 40px;\n  font:\n    13px/1.35 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    "PingFang SC",\n    sans-serif;\n  color: var(--ink);\n  color-scheme: light;\n}\n* {\n  box-sizing: border-box;\n}\n[hidden] {\n  display: none !important;\n}\n::selection {\n  background: #d5d5d5;\n  color: #171717;\n}\nbutton,\ninput,\nselect,\ntextarea {\n  font: inherit;\n  color: inherit;\n}\nbutton {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 7px;\n  min-width: 32px;\n  height: 32px;\n  padding: 0 9px;\n  border: 0;\n  border-radius: var(--radius);\n  background: transparent;\n  cursor: pointer;\n  white-space: nowrap;\n  line-height: 1.2;\n}\nbutton:hover:not(:disabled) {\n  background: var(--hover);\n}\nbutton[aria-pressed="true"] {\n  background: var(--active);\n}\nbutton:disabled {\n  opacity: 0.35;\n  cursor: default;\n}\nbutton:focus-visible,\ninput:focus-visible,\nselect:focus-visible,\n[role="button"]:focus-visible {\n  outline: 2px solid var(--selection);\n  outline-offset: 2px;\n}\nbutton.primary {\n  background: #202020;\n  color: #fff;\n}\nbutton.primary:hover:not(:disabled) {\n  background: #3c3c3c;\n}\n.icon {\n  display: block;\n  flex-shrink: 0;\n  pointer-events: none;\n}\n.icon-only {\n  width: 32px;\n  padding: 0;\n}\n.head {\n  position: fixed;\n  inset: 0 0 auto;\n  height: var(--head);\n  z-index: 2147483647;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 20px;\n  padding: 0 16px;\n  background: var(--paper);\n}\n.grp {\n  display: flex;\n  align-items: center;\n  gap: 3px;\n  min-width: 0;\n}\n.document {\n  flex: 1;\n  gap: 9px;\n}\n.document-title {\n  min-width: 0;\n  max-width: 260px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-weight: 550;\n}\n.save-state {\n  min-width: 0;\n  max-width: 155px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  justify-content: flex-start;\n  white-space: nowrap;\n  color: var(--muted);\n  font-size: 11px;\n  padding: 0 5px;\n}\n.save-state .state-text {\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.save-state .icon {\n  width: 14px;\n  height: 14px;\n}\n.tools {\n  flex-shrink: 0;\n}\n.layout-toggle {\n  margin: 0 7px;\n}\n.layout-toggle button {\n  gap: 5px;\n}\n.done-button {\n  background: var(--hover);\n}\n.actions {\n  flex: 1;\n  justify-content: flex-end;\n}\n.group-gap {\n  margin-left: 13px;\n}\n.view-seg {\n  display: flex;\n  align-items: center;\n  gap: 0;\n}\n.view-seg button {\n  border-radius: 7px;\n}\n.view-seg .fullscreen {\n  padding-inline: 6px;\n  min-width: 26px;\n}\n.view-seg .fullscreen .icon {\n  width: 16px;\n  height: 16px;\n}\n.nav {\n  position: fixed;\n  left: 0;\n  top: var(--head);\n  bottom: 0;\n  width: var(--nav);\n  z-index: 2147483645;\n  display: flex;\n  flex-direction: column;\n  background: #f8f8f8;\n}\n.nav-head {\n  height: 47px;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 13px 0 20px;\n  flex-shrink: 0;\n}\n.nav-head strong {\n  font-size: 12px;\n  font-weight: 550;\n  color: var(--muted);\n}\n.thumb-list {\n  flex: 1;\n  min-height: 0;\n  overflow: auto;\n  padding: 6px 12px 24px;\n  scrollbar-width: thin;\n  scrollbar-color: #cecece transparent;\n  overscroll-behavior: contain;\n}\n.thumb {\n  position: relative;\n  margin-bottom: 18px;\n  border-radius: 7px;\n}\n.thumb-main {\n  outline: 0;\n  cursor: pointer;\n  position: relative;\n}\n.frame {\n  position: relative;\n  width: 146px;\n  overflow: hidden;\n  background: white;\n  border-radius: 3px;\n  box-shadow: 0 0 0 1px #dedede;\n}\n.frame iframe {\n  position: absolute;\n  left: 0;\n  top: 0;\n  border: 0;\n  transform-origin: 0 0;\n  pointer-events: none;\n  background: #fff;\n}\n.thumb.active .frame {\n  box-shadow: 0 0 0 1.5px var(--selection);\n}\n.thumb.active .label {\n  color: #171717;\n}\n.thumb-main:hover .frame {\n  box-shadow: 0 0 0 1.5px #8a8a8a;\n}\n.thumb-main:focus-visible .frame {\n  outline: 2px solid var(--selection);\n  outline-offset: 3px;\n}\n.label {\n  padding: 8px 28px 0 2px;\n  color: #666;\n  font-size: 11px;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  line-height: 16px;\n}\n.thumb-more {\n  position: absolute;\n  right: 0;\n  bottom: -4px;\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  opacity: 0;\n  background: #f8f8f8;\n}\n.thumb:hover .thumb-more,\n.thumb:focus-within .thumb-more,\n.thumb.active .thumb-more {\n  opacity: 1;\n}\n.thumb-more .icon {\n  width: 15px;\n  height: 15px;\n}\n.thumb.dragging {\n  opacity: 0.35;\n}\n.thumb.drop-before::before,\n.thumb.drop-after::after {\n  content: "";\n  position: absolute;\n  left: 0;\n  right: 0;\n  height: 2px;\n  background: #333;\n  pointer-events: none;\n}\n.thumb.drop-before::before {\n  top: -10px;\n}\n.thumb.drop-after::after {\n  bottom: -10px;\n}\n.rename-input {\n  width: 100%;\n  height: 25px;\n  padding: 2px 4px;\n  border: 1px solid #999;\n  border-radius: 4px;\n  background: #fff;\n  font-size: 12px;\n}\n.empty-list {\n  font-size: 12px;\n  color: var(--muted);\n  padding: 10px 5px;\n  line-height: 1.7;\n}\n.footer {\n  position: fixed;\n  bottom: 0;\n  left: var(--nav);\n  right: 0;\n  height: var(--foot);\n  z-index: 2147483645;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 12px;\n  background: #fff;\n  gap: 14px;\n}\n.footer button {\n  height: 28px;\n  min-width: 28px;\n  padding: 0 5px;\n}\n.page-controls {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  min-width: 0;\n}\n.pageno {\n  font-size: 12px;\n  color: #555;\n  font-variant-numeric: tabular-nums;\n  white-space: nowrap;\n  text-align: center;\n  min-width: 46px;\n}\n.page-title {\n  max-width: 260px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-size: 12px;\n  color: #666;\n  margin-left: 9px;\n  justify-content: flex-start;\n}\n.page-title:disabled {\n  opacity: 1;\n}\n.zoom {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n}\n.zoom .zv {\n  min-width: 49px;\n  font-size: 12px;\n  font-variant-numeric: tabular-nums;\n}\n.zoom .fit {\n  margin-left: 7px;\n}\n.footer .icon {\n  width: 16px;\n  height: 16px;\n}\n.tbar {\n  --hover: #353535;\n  --active: #4a4a4a;\n  --muted: #d0d0d0;\n  position: fixed;\n  left: calc(var(--nav) + (100vw - var(--nav)) / 2);\n  top: calc(var(--head) + 10px);\n  transform: translateX(-50%);\n  z-index: 2147483646;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 5px 6px;\n  background: #202020;\n  color: #f8f8f8;\n  border-radius: 10px;\n  box-shadow: 0 3px 16px #00000014;\n  max-width: calc(100vw - var(--nav) - 24px);\n}\n.text-tools,\n.image-tools,\n.object-tools {\n  display: flex;\n  align-items: center;\n  gap: 3px;\n}\n.tbar .seg { background: #353535; }\n.tbar .seg button[aria-pressed="true"] { background: #555; color: #fff; box-shadow: none; }\n.image-tools > [data-act="image-replace"] { font-size: 12px; font-weight: 400; gap: 5px; }\n.tbar .color-control .color-swatch { box-shadow: 0 0 0 1px #ffffff90; }\n.tbar .fs {\n  width: 52px;\n  height: 29px;\n  background: #383838;\n  border: 0;\n  border-radius: 5px;\n  padding: 0 4px;\n  text-align: center;\n  font-variant-numeric: tabular-nums;\n  appearance: textfield;\n}\n.fs::-webkit-inner-spin-button {\n  appearance: none;\n}\n.color-control { position: relative; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:7px; cursor:pointer; }\n.color-control:hover { background:var(--hover); }\n.color-control input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }\n.color-control .color-swatch {\n  display: block;\n  width: 19px;\n  height: 19px;\n  border-radius: 50%;\n  background: currentColor;\n  box-shadow: inset 0 0 0 1px #0002;\n}\n.add-text { gap: 0; width: 36px; }\n.add-text .icon:first-child { width: 12px; height: 12px; }\n.add-text .icon:last-child { width: 17px; height: 17px; }\n.menu-panel[data-menu="more"], .menu-panel[data-menu="element"], .menu-panel[data-menu="page"] { width: 190px; min-width: 190px; }\n.seg {\n  display: flex;\n  padding: 2px;\n  border-radius: 7px;\n  background: #f3f3f3;\n}\n.seg button {\n  height: 27px;\n  font-size: 12px;\n  padding: 0 10px;\n}\n.seg button[aria-pressed="true"] {\n  background: #fff;\n  box-shadow: 0 1px 3px #0001;\n}\n.compact-select {\n  border: 0;\n  background: #f4f4f4;\n  height: 29px;\n  padding: 0 7px;\n  border-radius: 5px;\n  font-size: 12px;\n}\n.tbar .icon {\n  width: 17px;\n  height: 17px;\n}\n.sel {\n  position: fixed;\n  display: none;\n  border: 1px solid var(--selection);\n  box-shadow: 0 0 0 1px #ffffffb3;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.sel.typing {\n  border-style: dashed;\n}\n.sel i {\n  position: absolute;\n  width: 8px;\n  height: 8px;\n  margin: -4px 0 0 -4px;\n  background: #fff;\n  border: 1px solid var(--selection);\n  border-radius: 1px;\n  pointer-events: auto;\n  box-shadow: 0 0 0 1px #ffffff80;\n}\n.sel.typing i {\n  display: none;\n}\n.sel.multiple i {\n  display: none;\n}\n.selection-member {\n  position: fixed;\n  border: 1px dashed var(--selection);\n  box-shadow: 0 0 0 1px #ffffffb3;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.marquee {\n  position: fixed;\n  border: 1px solid var(--selection);\n  background: #258bff18;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.selection-count {\n  padding: 0 7px;\n  color: var(--muted);\n  font-size: 12px;\n  white-space: nowrap;\n}\n.guides {\n  position: fixed;\n  left: var(--nav);\n  top: var(--head);\n  width: calc(100vw - var(--nav));\n  height: calc(100vh - var(--head) - var(--foot));\n  overflow: hidden;\n  pointer-events: none;\n  z-index: 2147483643;\n  fill: none;\n}\n.guide-halo {\n  stroke: #ffffffb3;\n  stroke-width: 3px;\n}\n.guide-line {\n  stroke: var(--guide);\n  stroke-width: 1px;\n}\n:host([data-nav-hidden]) .guides {\n  left: 0;\n  width: 100vw;\n}\n.sel i::before {\n  content: "";\n  position: absolute;\n  inset: -5px;\n}\n[data-h="nw"] {\n  left: 0;\n  top: 0;\n  cursor: nwse-resize;\n}\n[data-h="n"] {\n  left: 50%;\n  top: 0;\n  cursor: ns-resize;\n}\n[data-h="ne"] {\n  left: 100%;\n  top: 0;\n  cursor: nesw-resize;\n}\n[data-h="e"] {\n  left: 100%;\n  top: 50%;\n  cursor: ew-resize;\n}\n[data-h="se"] {\n  left: 100%;\n  top: 100%;\n  cursor: nwse-resize;\n}\n[data-h="s"] {\n  left: 50%;\n  top: 100%;\n  cursor: ns-resize;\n}\n[data-h="sw"] {\n  left: 0;\n  top: 100%;\n  cursor: nesw-resize;\n}\n[data-h="w"] {\n  left: 0;\n  top: 50%;\n  cursor: ew-resize;\n}\n.menu-panel {\n  position: fixed;\n  z-index: 2147483647;\n  min-width: 180px;\n  max-width: min(330px, calc(100vw - 20px));\n  max-height: 70vh;\n  overflow: auto;\n  padding: 6px;\n  border-radius: 10px;\n  background: white;\n  box-shadow: 0 6px 28px #00000024;\n  font-size: 12px;\n}\n.menu-panel button {\n  width: 100%;\n  justify-content: flex-start;\n  height: 34px;\n  padding: 0 9px;\n  border-radius: 6px;\n  font-size: 12px;\n}\n.menu-panel .icon {\n  width: 16px;\n  height: 16px;\n}\n.menu-caption {\n  font-size: 11px;\n  color: #6a6a6a;\n  padding: 8px 9px 4px;\n}\n.menu-separator {\n  height: 1px;\n  background: #eee;\n  margin: 5px 7px;\n}\n.status-detail {\n  font-size: 12px;\n  line-height: 1.65;\n  white-space: normal;\n  margin: 6px 8px;\n  color: #555;\n  max-width: 265px;\n}\n.status-panel button {\n  height: auto;\n  min-height: 34px;\n  white-space: normal;\n  text-align: left;\n}\n.modal {\n  position: fixed;\n  inset: 0;\n  z-index: 2147483647;\n  background: #0005;\n  display: flex;\n  padding: 36px;\n  font:\n    13px/1.4 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    sans-serif;\n  color: #222;\n}\n.box {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  background: #fff;\n  border-radius: 12px;\n  overflow: hidden;\n  min-width: 0;\n}\n.mh {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  padding: 11px 16px;\n  background: #f6f6f6;\n  flex-wrap: wrap;\n}\n.mh .hint {\n  color: #666;\n  font-size: 11px;\n}\n.mh .sp {\n  flex: 1;\n}\ntextarea {\n  flex: 1;\n  min-height: 0;\n  border: 0;\n  outline: none;\n  resize: none;\n  padding: 18px;\n  font:\n    12px/1.6 ui-monospace,\n    Menlo,\n    Consolas,\n    monospace;\n  white-space: pre;\n  tab-size: 2;\n  caret-color: #222;\n}\n.toast {\n  position: fixed;\n  left: 50%;\n  bottom: 65px;\n  transform: translateX(-50%);\n  max-width: calc(100vw - 40px);\n  padding: 10px 16px;\n  border-radius: 9px;\n  background: #222;\n  color: #fff;\n  font:\n    12px/1.5 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    sans-serif;\n  opacity: 0;\n  transition: opacity 0.15s;\n  pointer-events: none;\n  z-index: 2147483647;\n}\n.toast.show {\n  opacity: 1;\n}\n.empty-canvas {\n  position: fixed;\n  left: var(--nav);\n  right: 0;\n  top: var(--head);\n  bottom: var(--foot);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-direction: column;\n  gap: 14px;\n  color: #666;\n  font-size: 13px;\n}\n.empty-canvas p {\n  margin: 0;\n}\n.empty-canvas > .icon {\n  width: 30px;\n  height: 30px;\n  color: #aaa;\n}\n.play-controls {\n  position: fixed;\n  bottom: 22px;\n  left: 50%;\n  transform: translateX(-50%);\n  z-index: 2147483647;\n  display: flex;\n  align-items: center;\n  gap: 5px;\n  padding: 5px 8px;\n  background: #ffffffed;\n  border-radius: 10px;\n  box-shadow: 0 4px 18px #0002;\n  opacity: 0;\n  transition: opacity 0.15s;\n}\n.play-controls button {\n  height: 31px;\n  min-width: 31px;\n}\n.play-controls.visible,\n.play-controls:hover,\n.play-controls:focus-within {\n  opacity: 1;\n}\n.play-controls .play-title {\n  max-width: 190px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-size: 12px;\n  color: #555;\n  margin: 0 7px;\n}\n.play-controls .pageno {\n  font-size: 12px;\n}\n.play-exit {\n  position: fixed;\n  top: 16px;\n  right: 16px;\n  z-index: 2147483647;\n  background: #fffffff0;\n  color: #222;\n}\n:host([data-playing]) .head,\n:host([data-playing]) .nav,\n:host([data-playing]) .footer,\n:host([data-playing]) .tbar,\n:host([data-playing]) .sel,\n:host([data-playing]) .guides,\n:host([data-playing]) .selection-members,\n:host([data-playing]) .marquee,\n:host([data-playing]) .empty-canvas {\n  display: none !important;\n}\n:host(:not([data-playing])) .play-controls,\n:host(:not([data-playing])) .play-exit {\n  display: none !important;\n}\n:host([data-nav-hidden]) .nav {\n  display: none;\n}\n:host([data-nav-hidden]) .footer {\n  left: 0;\n}\n:host([data-nav-hidden]) .tbar {\n  left: 50%;\n  max-width: calc(100vw - 24px);\n}\n:host([data-nav-hidden]) .empty-canvas {\n  left: 0;\n}\n@media (max-width: 1050px) {\n  .head {\n    gap: 9px;\n    padding: 0 10px;\n  }\n  .document-title {\n    max-width: 140px;\n  }\n  .save-state {\n    max-width: 95px;\n    font-size: 10px;\n  }\n  .group-gap {\n    margin-left: 6px;\n  }\n  .actions {\n    flex: initial;\n  }\n  .document {\n    flex: 1;\n  }\n  .head button {\n    padding-inline: 7px;\n  }\n  .actions .button-label {\n    display: none;\n  }\n}\n@media (max-width: 760px) {\n  :host {\n    --nav: 170px;\n  }\n  .head {\n    gap: 4px;\n  }\n  .document-title {\n    max-width: 100px;\n    font-size: 12px;\n  }\n  .save-state {\n    max-width: 27px;\n  }\n  .save-state .state-text {\n    display: none;\n  }\n  .head .preview-button span,\n  .head .export-label {\n    display: none;\n  }\n  .head .group-gap {\n    margin-left: 2px;\n  }\n  .head .layout-toggle {\n    margin-inline: 3px;\n  }\n  .head .layout-toggle button { padding-inline: 6px; font-size: 11px; }\n  .page-title {\n    max-width: 110px;\n  }\n  .footer {\n    padding: 0 7px;\n  }\n  .tbar {\n    gap: 1px;\n    padding: 4px;\n  }\n  .tbar button {\n    padding-inline: 5px;\n    min-width: 28px;\n  }\n  .nav-head {\n    padding-inline: 12px;\n  }\n}\n@media (max-width: 540px) {\n  :host {\n    --nav: 0px;\n  }\n  .nav {\n    display: none !important;\n  }\n  .footer {\n    left: 0;\n  }\n  .tbar {\n    left: 50%;\n    max-width: calc(100vw - 16px);\n  }\n  .document-title {\n    max-width: 80px;\n  }\n  .head {\n    padding-inline: 6px;\n  }\n  .head button {\n    padding-inline: 5px;\n    min-width: 28px;\n  }\n  .head .document {\n    gap: 2px;\n  }\n  .head .nav-toggle {\n    display: inline-flex;\n  }\n  .head .selection-tool {\n    display: none;\n  }\n  .head .done-button span,\n  .head .preview-button > .icon:last-child {\n    display: none;\n  }\n  :host([data-editing]) .head .preview-button {\n    display: none;\n  }\n  .head .document { flex: 0; gap: 3px; }\n  .head .document-title { display: none; }\n  .head .save-state { width: 22px; min-width: 22px; max-width: 22px; padding: 0; flex-shrink: 0; }\n  .head .tools > [data-act="undo"], .head .tools > [data-act="redo"] { display: none; }\n  .head .actions { flex: initial; }\n  .head [data-act="export"] > .icon:last-child {\n    display: none;\n  }\n  :host([data-mobile-nav]) .nav {\n    display: flex !important;\n    width: 170px;\n    bottom: 40px;\n    box-shadow: 5px 0 20px #0001;\n  }\n  .head .actions {\n    gap: 1px;\n  }\n  .page-title {\n    max-width: 90px;\n  }\n  .footer .fit span {\n    display: none;\n  }\n  .modal {\n    padding: 10px;\n  }\n  .mh .hint {\n    display: none;\n  }\n}\n@media (prefers-reduced-motion: reduce) {\n  * {\n    transition: none !important;\n    scroll-behavior: auto !important;\n  }\n}\n@media print {\n  :host {\n    display: none !important;\n  }\n}\n\n.more-text-formats {\n  display: flex;\n  gap: 4px;\n  padding: 3px 6px;\n}\n.more-text-formats button {\n  width: 32px;\n  padding: 0;\n  justify-content: center;\n}\n:host([data-readonly]) .tools {\n  display: none;\n}\n\n.play-exit:focus-visible {\n  opacity: 1 !important;\n}\n\n/* Experimental text sizing; diagnostics stay inside the editor shadow root. */\n.text-layout-panel { width: 268px; }\n.text-layout-panel strong { display: block; padding: 8px 10px 0; font-weight: 550; }\n.text-layout-status { margin: 8px 10px 12px; max-width: 232px; color: var(--muted); line-height: 1.6; }\n.text-layout-status[data-overflow="true"] { color: #a84c18; }\n\n/* AI review controls live outside the scaled content. */\n.review-actions { position:fixed; z-index:2147483645; display:flex; align-items:center; padding:3px; gap:0; background:var(--paper); border-radius:8px; box-shadow:0 3px 12px #0002; }\n.review-actions button { height:30px; min-width:62px; font-size:12px; border-radius:6px; }\n.review-accept { background:#202020; color:#fff; }\nbutton.review-accept:hover:not(:disabled) { background:#3c3c3c; }\nbutton[aria-disabled=true] { opacity:.45; cursor:default; }\n.review-scope { color:var(--muted); font-size:12px; padding:0 8px; }\n.review-summary { position:fixed; z-index:2147483646; width:280px; background:var(--paper); border-radius:8px; box-shadow:0 5px 20px #0002; }\n.review-summary-bar { display:flex; padding:4px; gap:4px; }\n.review-trigger { flex:1; justify-content:space-between; font-size:12px; }\n.review-trigger .icon { transform:rotate(180deg); }\n.review-trigger[aria-expanded=true] .icon { transform:none; }\n.review-summary-bar .review-accept { height:30px; font-size:12px; }\n.review-panel { padding:10px 12px 4px; overflow:auto; }\n.review-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; }\n.review-message { color:var(--muted); font-size:12px; line-height:1.5; margin:4px 0 10px; }\n.review-item { display:flex; gap:8px; padding:8px 0; border-top:1px solid var(--line); align-items:center; }\n.review-item[data-current] .review-name { font-weight:600; }\n.review-info { flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:4px; }\n.review-name { width:100%; min-width:0; display:flex; justify-content:flex-start; gap:4px; text-align:left; padding:0; font-size:12px; }\n.review-page { flex-shrink:0; white-space:nowrap; }\n.review-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.review-name:disabled { opacity:1; }\n.review-kind { display:inline-block; padding:1px 5px; border-radius:3px; background:var(--hover); font-size:10px; line-height:16px; color:var(--muted); }\n.review-item-actions { display:flex; flex-shrink:0; gap:2px; margin-left:auto; }\n.review-item-actions button { height:28px; padding:0 6px; font-size:12px; }\n.review-before { position:fixed; z-index:2147483643; overflow:hidden; background:var(--workspace); pointer-events:none; }\n.review-projection { position:absolute; overflow:hidden; pointer-events:none; }\n.review-projection iframe { position:absolute; left:0; top:0; border:0; transform-origin:top left; background:white; pointer-events:none; }\n.review-hint { position:fixed; right:16px; bottom:112px; pointer-events:none; z-index:2147483646; font-size:12px; color:var(--muted); background:var(--paper); padding:6px 10px; border-radius:6px; }\n';
 
   // node_modules/lucide/dist/esm/icons/arrow-down.mjs
   var ArrowDown = [
@@ -751,23 +751,35 @@ property of their respective owners.
           const title = document.createElement("button");
           title.type = "button";
           title.className = "review-name";
-          title.textContent = item.title;
           title.title = item.title;
           title.dataset.reviewCommand = "locate";
           title.dataset.reviewId = item.id;
           if (state.review.scope === "document" || item.kind === "deleted") title.disabled = true;
+          if (state.review.scope !== "document") {
+            const number2 = document.createElement("span");
+            number2.className = "review-page";
+            number2.textContent = `${item.kind === "deleted" ? "原第" : "第"} ${item.kind === "deleted" ? item.originalPage : item.currentPage} 页 ·`;
+            title.append(number2);
+          }
+          const name = document.createElement("span");
+          name.className = "review-title";
+          name.textContent = item.title;
+          title.append(name);
           const kind = document.createElement("span");
           kind.className = "review-kind";
           kind.textContent = { added: "新增", updated: "修改", deleted: "删除" }[item.kind];
           const controls = document.createElement("div");
           controls.className = "review-item-actions";
           actions(controls, item);
-          row.append(title, kind, controls);
+          const info = document.createElement("div");
+          info.className = "review-info";
+          info.append(title, kind);
+          row.append(info, controls);
           list.append(row);
         }
       }
       summary.querySelector(".review-count").textContent = state.review.conflict ? "AI 审阅异常" : state.review.scope === "document" ? "整份文档" : `${state.review.items.length} 页修改`;
-      summary.querySelector(".review-message").textContent = state.review.conflict ? "文件在审阅之外发生变化，基线已保留，请下载副本后排查。" : state.review.scope === "document" ? `整份文档：放弃将恢复全部未接受修改。${state.review.reasons.join("；")}` : state.canReview ? "人工修改并保存某页，会接受该页的 AI 改动。" : "只读：可查看修改前；取得编辑权限后可处理。";
+      summary.querySelector(".review-message").textContent = state.review.conflict ? "文件在审阅之外发生变化，基线已保留，请下载副本后排查。" : state.review.scope === "document" ? `整份文档：放弃将恢复全部未接受修改。${state.review.reasons.join("；")}` : state.canReview ? "可直接处理；人工修改并保存某页，会接受该页的 AI 改动。" : "可直接处理；点击后将自动同步编辑权限。";
       summary.querySelector("[data-review-command=accept-all]").disabled = !enabled();
       position();
       if (!raf && (state.review.items.length || state.review.conflict)) raf = requestAnimationFrame(tick);
@@ -946,16 +958,16 @@ property of their respective owners.
       }
       if (!["undo", "accept", "accept-all"].includes(command)) return;
       if (!enabled()) {
-        toast("只读查看：取得编辑权限后可处理 AI 修改");
+        toast("连接或交接暂不可用，请稍后再试");
         return;
       }
-      const item = state.review.items.find((i) => i.id === id);
+      const item = state.review.items.find((i) => i.id === id), initialPage = pageId();
       endBefore();
       busy = true;
       update(state);
       if (command === "undo" && item?.kind === "deleted") restoreTarget(id);
       try {
-        await persistence().reviewAction(command === "accept-all" ? "accept" : command, command === "accept-all" ? "all" : id, state.review.generation);
+        await persistence().reviewAction(command === "accept-all" ? "accept" : command, command === "accept-all" ? "all" : id, state.review.generation, () => initialPage === pageId() && !view().playing);
       } catch (error) {
         toast(error.message, 6e3);
       } finally {
@@ -1017,7 +1029,7 @@ property of their respective owners.
   </div>
   <div class="menu-panel" data-menu="more" role="menu" hidden>${button("source", "Code", "查看或修改源码", { text: "源码" })}${button("save", "Save", "立即保存 (Ctrl/⌘ S)", { text: "立即保存" })}<div class="menu-separator"></div>${button("help", "TextCursorInput", "快捷键与使用帮助", { text: "快捷键与帮助" })}</div>
   <div class="menu-panel" data-menu="element" role="menu" hidden><div class="more-text-section" hidden><div class="more-text-formats" role="group" aria-label="更多文字格式">${fmt("italic", "Italic", "斜体")}${fmt("underline", "Underline", "下划线")}${fmt("strikeThrough", "Strikethrough", "删除线")}</div>${button("text-layout", "TextCursorInput", "文字适配：检测溢出、调整高度和字号", { text: "文字适配", attrs: 'aria-expanded="false" aria-haspopup="menu"' })}<button data-fmt="removeFormat">${icon("Type")}清除文字格式</button><div class="menu-separator"></div></div>${button("element-duplicate", "Copy", "复制元素 (Ctrl/⌘ D)", { text: "复制元素" })}${button("element-front", "BringToFront", "置于顶层", { text: "置于顶层" })}${button("element-back", "SendToBack", "置于底层", { text: "置于底层" })}${button("element-delete", "Trash2", "删除元素 (Delete)", { text: "删除元素" })}</div>
-  <div class="menu-panel" data-menu="page" role="menu" hidden><p class="menu-caption page-preview-hint">进入编辑后可管理页面</p>${button("page-add", "Plus", "在此后新增页面", { text: "新增页面" })}${button("page-copy", "Copy", "复制页面", { text: "复制页面" })}${button("page-rename", "TextCursorInput", "重命名页面", { text: "重命名" })}<div class="menu-separator"></div>${button("page-up", "ArrowUp", "上移页面", { text: "上移" })}${button("page-down", "ArrowDown", "下移页面", { text: "下移" })}<div class="menu-separator"></div>${button("page-delete", "Trash2", "删除页面", { text: "删除页面" })}</div>
+  <div class="menu-panel" data-menu="page" role="menu" hidden>${button("page-add", "Plus", "在此后新增页面", { text: "新增页面" })}${button("page-copy", "Copy", "复制页面", { text: "复制页面" })}${button("page-rename", "TextCursorInput", "重命名页面", { text: "重命名" })}<div class="menu-separator"></div>${button("page-up", "ArrowUp", "上移页面", { text: "上移" })}${button("page-down", "ArrowDown", "下移页面", { text: "下移" })}<div class="menu-separator"></div>${button("page-delete", "Trash2", "删除页面", { text: "删除页面" })}</div>
   <div class="menu-panel status-panel" data-menu="status" role="menu" hidden><p class="status-detail"></p>${button("retry", "RefreshCw", "重试保存", { text: "重试", attrs: "hidden" })}${button("recover", "RefreshCw", "恢复未保存草稿", { text: "恢复草稿", attrs: "hidden" })}${button("conflict", "Download", "下载当前副本并同步最新文件", { text: "下载副本并同步", attrs: "hidden" })}</div>
   <div class="empty-canvas" hidden>${icon("Presentation")}<p>从第一页开始</p>${button("page-add", "Plus", "新增页面", { text: "新增页面", cls: "primary" })}</div>
   <div class="play-controls"><button data-act="prev" aria-label="上一页">${icon("ChevronLeft")}</button><span class="pageno"></span><button data-act="next" aria-label="下一页">${icon("ChevronRight")}</button><span class="play-title"></span>${button("stop", "X", "退出播放 (Esc)", { cls: "icon-only" })}</div>${button("stop", "X", "退出播放 (Esc)", { cls: "icon-only play-exit" })}
@@ -1103,11 +1115,12 @@ property of their respective owners.
     let token, revision = config?.revision, role = "viewer", blocked = false, frozen = false, connected = false;
     let dirty = false, generation = 0, timer, saving, polling = false, lastContact = 0, leaseMs = 15e3, recovery;
     let draftQueue = Promise.resolve(), refreshing = false, opening = false;
-    let review = { generation: 0, items: [], reasons: [] }, locked = false, pending = false, reviewing = false;
+    let review = { generation: 0, items: [], reasons: [] }, locked = false, pending = false, reviewing = false, reviewAttempt;
     const managed = !!config, drafts = managed && createDrafts(config.path);
-    const canEdit = () => !managed || connected && role === "owner" && !frozen && !blocked && !reviewing && !refreshing;
+    const canEdit = () => !reviewing && !refreshing && (!managed || connected && role === "owner" && !frozen && !blocked);
+    const canAct = () => !reviewing && !refreshing && (!managed || connected && !blocked && !locked && (!pending || pending.mine));
     function show(message, options = {}) {
-      render({ message, revision, canEdit: canEdit(), managed, dirty, review, canReview: canEdit() && !locked && !pending && !reviewing, reviewing, ...options });
+      render({ message, revision, canEdit: canEdit(), managed, dirty, review, canReview: managed && canAct(), canManagePages: canAct(), reviewing, ...options });
     }
     function markDirty() {
       dirty = true;
@@ -1118,12 +1131,12 @@ property of their respective owners.
       timer = setTimeout(() => flush().catch(() => {
       }), 800);
     }
-    async function request(action, body = {}) {
+    async function request(action, body = {}, signal) {
       const response = await fetch(`/__html-design/document/${action}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: config.path, token, ...body }),
-        signal: AbortSignal.timeout(12e3)
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(12e3)]) : AbortSignal.timeout(12e3)
       });
       const result = await response.json();
       if (!response.ok) throw Object.assign(new Error(result.error || "保存失败"), { status: response.status });
@@ -1210,15 +1223,15 @@ property of their respective owners.
       leaseMs = result.leaseMs || leaseMs;
       review = result.review || review;
       locked = !!result.locked;
-      pending = !!result.pending;
+      pending = result.pending || null;
       connected = true;
     }
-    async function refresh() {
+    async function refresh(notice) {
       if (refreshing) return;
       if (dirty || hasPendingSource() || isBusy()) return false;
       refreshing = true;
       try {
-        reload();
+        reload(notice);
       } catch (error) {
         refreshing = false;
         throw error;
@@ -1278,7 +1291,7 @@ property of their respective owners.
         else if (recovery) show("发现未保存草稿", { recover: true, takeover: role !== "owner" && !result.locked });
         else if (result.locked) show("AI 正在修改 · 只读同步");
         else if (result.pending) show("正在交接编辑权限…");
-        else show(role === "owner" ? "已自动保存" : "其他窗口编辑中 · 只读", { takeover: role !== "owner" });
+        else show(role === "owner" ? "已自动保存" : "已同步 · 预览中", { takeover: role !== "owner" });
       } catch (error) {
         if (error.status === 401) {
           connected = false;
@@ -1329,9 +1342,80 @@ property of their respective owners.
         opening = false;
       }
     }
+    async function withLease(run, { kind = "review", valid = () => true, stillCurrent = () => true } = {}) {
+      if (!canAct()) throw new Error("连接或交接暂不可用，请稍后再试");
+      if (prepareReview(kind) === false) throw new Error("请先确认或取消未完成的输入，再处理");
+      let expectedRevision = revision;
+      const controller = new AbortController(), signal = AbortSignal.any([controller.signal, AbortSignal.timeout(3e4)]);
+      reviewAttempt = controller;
+      reviewing = true;
+      let failure, stale = false;
+      const current = () => {
+        if (signal.aborted || !stillCurrent()) throw new Error("处理已停止，请在当前页面重新选择");
+      };
+      const check = (latest) => {
+        current();
+        if (latest.revision !== expectedRevision || !valid()) {
+          stale = latest.revision !== revision;
+          throw new Error("修改或审阅已有更新，请重新选择；当前内容保持不变");
+        }
+        if (locked || pending && !pending.mine) throw new Error("正在交接或 AI 修改中，请稍后重新选择");
+      };
+      show("正在同步并处理…");
+      try {
+        if (managed) {
+          await flush(true);
+          current();
+          if (dirty) throw new Error("当前修改尚未保存，请先完成保存");
+          if (kind !== "review") expectedRevision = revision;
+          let latest = await request("sync", {}, signal);
+          adopt(latest);
+          check(latest);
+          if (role !== "owner") {
+            latest = await request("takeover", { revision: expectedRevision }, signal);
+            adopt(latest);
+            check(latest);
+            while (role !== "owner") {
+              if (!pending?.mine) throw new Error("交接已结束，请重新选择");
+              show("正在同步并处理…");
+              await new Promise((resolve) => setTimeout(resolve, 250));
+              current();
+              latest = await request("sync", {}, signal);
+              adopt(latest);
+              check(latest);
+            }
+          }
+          current();
+          if (pending || locked || role !== "owner" || dirty) throw new Error("当前状态已变化，请重新选择");
+        }
+        if (isBusy() || kind === "review" && hasPendingSource() || !valid()) throw new Error("当前状态已变化，请重新选择");
+        frozen = false;
+        return await run({ expectedRevision, signal });
+      } catch (error) {
+        failure = signal.aborted ? new Error("同步等待已停止，请稍后重试") : error;
+        if (error.status === 401 || !signal.aborted && !error.status && (error.name === "TypeError" || error.name === "TimeoutError")) {
+          connected = false;
+          frozen = true;
+        }
+        throw failure;
+      } finally {
+        reviewAttempt = null;
+        reviewing = false;
+        if (stale) {
+          if (dirty || hasPendingSource() || isBusy()) {
+            blocked = true;
+            frozen = true;
+            if (managed) await backup().catch(() => {
+            });
+          } else await refresh("修改已有更新，旧操作未执行，请重新选择。");
+        }
+        if (!refreshing) show(blocked ? "版本冲突 · 修改已保留，请下载 HTML" : failure ? failure.message : dirty ? "尚未保存" : managed ? "已保存" : "离线 · 尚未下载", { conflict: blocked, retry: blocked || !!failure });
+      }
+    }
     const heartbeat = managed && setInterval(() => token ? sync() : start(), 2e3);
     if (managed) {
       addEventListener("pagehide", () => {
+        reviewAttempt?.abort();
         if (dirty) backup().catch(() => {
         });
         if (token && !dirty) navigator.sendBeacon("/__html-design/document/release", new Blob([JSON.stringify({ path: config.path, token })], { type: "application/json" }));
@@ -1344,25 +1428,19 @@ property of their respective owners.
     return {
       start,
       canEdit,
+      canManagePages: canAct,
       markDirty,
       flush,
       async reviewRead(scope, expectedGeneration) {
         if (!managed) throw new Error("AI 审阅需要本地服务；下载的 HTML 不包含审阅基线");
         return request("review/read", { revision, generation: expectedGeneration, scope });
       },
-      async reviewAction(action, scope, expectedGeneration) {
-        if (!managed || !canEdit() || locked || pending || reviewing) throw new Error("请先取得编辑权限并等待交接结束");
-        if (prepareReview() === false) throw new Error("请先应用或关闭源码，再处理 AI 修改");
-        reviewing = true;
-        show("正在处理 AI 修改…");
-        try {
-          await flush(true);
-          if (dirty) throw new Error("当前修改尚未保存，请先完成保存");
-          const latest = await request("sync");
-          adopt(latest);
-          if (latest.revision !== revision || review.generation !== expectedGeneration) throw new Error("修改或审阅已有更新，请重新选择；当前内容保持不变");
+      async reviewAction(action, scope, expectedGeneration, stillCurrent = () => true) {
+        if (!managed) throw new Error("AI 审阅需要本地服务");
+        const expectedScope = review.scope;
+        return withLease(async ({ expectedRevision, signal }) => {
           const writeGeneration = generation;
-          const result = await request(`review/${action}`, { revision, generation: expectedGeneration, scope, requestId: crypto.randomUUID() });
+          const result = await request(`review/${action}`, { revision: expectedRevision, generation: expectedGeneration, scope, requestId: crypto.randomUUID() }, signal);
           adopt(result);
           if (result.revision !== revision) {
             if (dirty || generation !== writeGeneration || hasPendingSource() || isBusy()) {
@@ -1378,10 +1456,14 @@ property of their respective owners.
             await refresh();
           } else show("已接受 AI 修改");
           return result;
-        } finally {
-          reviewing = false;
-          if (!refreshing) show(blocked ? "版本冲突 · 修改已保留，请下载 HTML" : dirty ? "尚未保存" : "已保存", { conflict: blocked, retry: blocked });
-        }
+        }, { stillCurrent, valid: () => review.generation === expectedGeneration && review.scope === expectedScope && (scope === "all" || review.items.some((i) => i.id === scope)) });
+      },
+      async pageAction(apply, valid, rename = false) {
+        return withLease(async () => {
+          apply();
+          await flush(true);
+          if (managed && dirty) throw new Error("修改已保留，请重试保存或下载副本");
+        }, { kind: rename ? "rename" : "page", valid });
       },
       async save() {
         if (!managed) {
@@ -1818,10 +1900,12 @@ property of their respective owners.
     select,
     endText,
     writable,
+    submit,
     openMenu,
     closeMenus
   }) {
     const listUI = ui.querySelector(".thumb-list"), thumbs = /* @__PURE__ */ new Map(), sizes = /* @__PURE__ */ new WeakMap();
+    let renameDraft = null;
     let menuBoard, suppressClick = false, lastSize = { w: 1280, h: 720 }, nextPage = Math.max(
       Number(stage.dataset.pageSeq) || 0,
       ...boards().map(
@@ -2037,9 +2121,8 @@ property of their respective owners.
     function target() {
       return menuBoard?.isConnected ? menuBoard : S.current;
     }
-    function add() {
-      if (!writable()) return;
-      const ref = target(), sz = ref ? sizeOf(ref) : lastSize, b = document.createElement("section");
+    function add(ref) {
+      const sz = ref ? sizeOf(ref) : lastSize, b = document.createElement("section");
       b.dataset.artboard = allocatePage();
       b.dataset.title = "未命名页面";
       b.dataset.mode = "flow";
@@ -2061,9 +2144,8 @@ property of their respective owners.
       );
       menuBoard = null;
     }
-    function copy() {
-      const b = target();
-      if (!b || !writable()) return;
+    function copy(b) {
+      if (!b) return;
       const c = b.cloneNode(true), id = allocatePage(), old = b.dataset.artboard;
       c.dataset.artboard = id;
       c.dataset.title = `${b.dataset.title || old} 副本`;
@@ -2087,9 +2169,8 @@ property of their respective owners.
       );
       menuBoard = null;
     }
-    function remove() {
-      const b = target();
-      if (!b || !writable()) return;
+    function remove(b) {
+      if (!b) return;
       lastSize = sizeOf(b);
       const parent = b.parentNode, next = b.nextSibling, all = boards(), i = all.indexOf(b), preferred = all[i + 1] || all[i - 1];
       transaction(
@@ -2100,7 +2181,7 @@ property of their respective owners.
       menuBoard = null;
     }
     function move(b, before) {
-      if (!b || !writable() || b === before || b.nextElementSibling === before)
+      if (!b || b === before || b.nextElementSibling === before)
         return;
       const parent = b.parentNode, next = b.nextSibling;
       transaction(
@@ -2110,13 +2191,21 @@ property of their respective owners.
       );
       menuBoard = null;
     }
+    function execute(nodes, apply, valid = () => true, rename2 = false) {
+      if (!writable()) return Promise.reject(new Error("当前暂不可操作，请等待同步或 AI 修改结束"));
+      const ids = nodes.map((n) => n?.dataset.artboard || null), find = (id) => id ? boards().find((b) => b.dataset.artboard === id) : null;
+      return submit(() => apply(...ids.map(find)), () => valid() && ids.every((id) => !id || !!find(id)), rename2);
+    }
+    const action = (fn, b = target()) => execute([b], (node) => fn(node)).catch(() => {
+    });
     function moveStep(dir) {
       const b = target(), a = boards(), i = a.indexOf(b), j = i + dir;
       if (i < 0 || j < 0 || j >= a.length) return;
-      move(b, dir < 0 ? a[j] : a[j + 1] || null);
+      execute([b, dir < 0 ? a[j] : a[j + 1] || null], move).catch(() => {
+      });
     }
     function rename(b = target()) {
-      if (!b || !writable()) return;
+      if (!b || !writable() || renameDraft) return;
       closeMenus();
       goTo(b);
       const t = thumbs.get(b);
@@ -2126,40 +2215,57 @@ property of their respective owners.
       input.value = b.dataset.title || "";
       input.setAttribute("aria-label", "页面名称");
       const before = b.dataset.title || "", label = t.label;
+      const draft = { input };
+      renameDraft = draft;
       label.hidden = true;
       t.append(input);
       input.focus();
       input.select();
-      let done = false;
-      function finish(apply) {
-        if (done) return;
+      let done = false, committing = false;
+      function cleanup() {
         done = true;
-        const after = input.value.trim() || "未命名页面";
+        if (renameDraft === draft) renameDraft = null;
         input.remove();
         label.hidden = false;
-        if (apply && after !== before)
-          transaction(
-            () => {
-              b.dataset.title = after;
-            },
-            () => {
-              b.dataset.title = before;
-            },
-            b
-          );
-        else build();
-        t.querySelector(".thumb-main").focus();
+        t.querySelector(".thumb-main")?.focus();
+      }
+      async function finish(apply) {
+        if (done) return;
+        if (!apply) {
+          cleanup();
+          return;
+        }
+        if (committing) return;
+        const after = input.value.trim() || "未命名页面";
+        if (after === before) {
+          cleanup();
+          return;
+        }
+        committing = true;
+        input.readOnly = true;
+        try {
+          await execute([b], (target2) => {
+            transaction(() => {
+              target2.dataset.title = after;
+            }, () => {
+              target2.dataset.title = before;
+            }, target2);
+            cleanup();
+          }, () => !done, true);
+        } catch {
+          if (!done) {
+            committing = false;
+            input.readOnly = false;
+            input.focus();
+          }
+        }
       }
       input.onblur = () => finish(true);
       input.onkeydown = (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          finish(true);
-        }
-        if (e.key === "Escape") {
+        if (e.key === "Enter" || e.key === "Escape") {
           e.preventDefault();
           e.stopPropagation();
-          finish(false);
+          finish(e.key === "Enter");
         }
       };
     }
@@ -2190,6 +2296,7 @@ property of their respective owners.
         raf = requestAnimationFrame(scroll);
       }
       S.drag = {
+        kind: "page",
         move(ev) {
           lastY = ev.clientY;
           if (!moved && Math.hypot(ev.clientX - x, ev.clientY - y) < 6) return;
@@ -2209,7 +2316,11 @@ property of their respective owners.
             setTimeout(() => {
               suppressClick = false;
             }, 0);
-            if (ev?.type !== "pointercancel") move(b, before);
+            if (ev?.type !== "pointercancel") {
+              S.drag = null;
+              execute([b, before], move).catch(() => {
+              });
+            }
           }
         },
         cancel() {
@@ -2227,8 +2338,9 @@ property of their respective owners.
         (b2) => b2.dataset.artboard === active.dataset.pageId
       ), index = boards().indexOf(b), mod = e.ctrlKey || e.metaKey;
       menuBoard = b;
-      if (mod && e.key.toLowerCase() === "d") copy();
-      else if (["Delete", "Backspace"].includes(e.key)) remove();
+      if (e.key === "F2") rename(b);
+      else if (mod && e.key.toLowerCase() === "d") action(copy);
+      else if (["Delete", "Backspace"].includes(e.key)) action(remove);
       else if (e.altKey && e.key === "ArrowUp") moveStep(-1);
       else if (e.altKey && e.key === "ArrowDown") moveStep(1);
       else if (["ArrowUp", "ArrowDown"].includes(e.key)) {
@@ -2255,12 +2367,13 @@ property of their respective owners.
       paint,
       build,
       markActive,
-      add,
-      copy,
-      remove,
+      add: () => action(add),
+      copy: () => action(copy),
+      remove: () => action(remove),
       moveStep,
       rename,
       key,
+      hasPendingRename: () => !!renameDraft,
       clearTarget() {
         menuBoard = null;
       }
@@ -6855,7 +6968,7 @@ property of their respective owners.
         syncBar();
       }
       function syncBar() {
-        const b = activeBoard(), permitted = !!persistence?.canEdit() && !S.playing, writable = permitted && S.editing;
+        const b = activeBoard(), permitted = !!persistence?.canEdit() && !S.playing, writable = permitted && S.editing, manageable = !!persistence?.canManagePages() && !S.playing;
         head.classList.toggle("on", S.editing);
         $(".tools").hidden = !S.editing;
         $("[data-act=edit]").hidden = S.editing;
@@ -6875,9 +6988,6 @@ property of their respective owners.
           "add-text",
           "add-image",
           "src-apply",
-          "page-copy",
-          "page-delete",
-          "page-rename",
           "image-replace",
           "image-fit",
           "image-cover"
@@ -6887,10 +6997,13 @@ property of their respective owners.
           })
         );
         ui.querySelectorAll("[data-act=page-add]").forEach((n) => {
-          n.disabled = !writable;
+          n.disabled = !manageable;
         });
+        ["page-copy", "page-delete", "page-rename"].forEach((act) => ui.querySelectorAll(`[data-act=${act}]`).forEach((n) => {
+          n.disabled = !manageable || !b;
+        }));
         ["page-up", "page-down"].forEach((act, i) => {
-          $(`[data-act=${act}]`).disabled = !writable || !b || (i === 0 ? boards().indexOf(b) <= 0 : boards().indexOf(b) >= boards().length - 1);
+          $(`[data-act=${act}]`).disabled = !manageable || !b || (i === 0 ? boards().indexOf(b) <= 0 : boards().indexOf(b) >= boards().length - 1);
         });
         ["preview", "scroll-play", "fullscreen", "pdf", "pptx", "print"].forEach(
           (act) => ui.querySelectorAll(`[data-act=${act}]`).forEach((n) => {
@@ -7969,12 +8082,6 @@ property of their respective owners.
         "undo",
         "redo",
         "src-apply",
-        "page-add",
-        "page-copy",
-        "page-delete",
-        "page-rename",
-        "page-up",
-        "page-down",
         "image-replace",
         "image-fit",
         "image-cover",
@@ -8182,7 +8289,18 @@ property of their respective owners.
         goTo,
         select,
         endText,
-        writable: () => !!persistence?.canEdit() && S.editing && !S.playing,
+        writable: () => !!persistence?.canManagePages() && !S.playing,
+        async submit(apply2, valid, rename) {
+          const wasEditing = S.editing;
+          try {
+            return await persistence.pageAction(apply2, valid, rename);
+          } catch (error) {
+            toast(error.message, 6e3);
+            throw error;
+          } finally {
+            if (wasEditing && persistence.canEdit() && !S.playing) setEditing(true);
+          }
+        },
         openMenu,
         closeMenus
       });
@@ -8295,7 +8413,7 @@ property of their respective owners.
         fileName
       });
       addEventListener("beforeunload", (e) => {
-        if (S.changed || sourcePending()) {
+        if (S.changed || sourcePending() || pages.hasPendingRename()) {
           e.preventDefault();
           e.returnValue = "";
         }
@@ -8308,7 +8426,7 @@ property of their respective owners.
       } catch {
       }
       const viewKey = "html-design-view:" + location.pathname;
-      function reloadLatest() {
+      function reloadLatest(notice) {
         try {
           sessionStorage.setItem(
             viewKey,
@@ -8316,7 +8434,8 @@ property of their respective owners.
               page: reviewRestorePage || S.current?.dataset.artboard,
               zoom: S.zoom,
               fit: S.fit,
-              editRequested
+              editRequested,
+              notice: typeof notice === "string" ? notice : void 0
             })
           );
         } catch {
@@ -8331,12 +8450,14 @@ property of their respective owners.
           S.changed = value;
         },
         isBusy: () => !!S.drag || sourcePending(),
-        hasPendingSource: sourcePending,
+        hasPendingSource: () => sourcePending() || pages.hasPendingRename(),
         pause() {
-          if (sourcePending()) return false;
+          if (sourcePending() || pages.hasPendingRename()) return false;
           if (S.drag) {
-            S.drag.up();
+            const drag = S.drag;
             S.drag = null;
+            if (drag.kind === "page") drag.cancel();
+            else drag.up();
           }
           setEditing(false);
           return true;
@@ -8348,12 +8469,14 @@ property of their respective owners.
           select(null);
           syncBar();
         },
-        prepareReview() {
-          if (sourcePending()) return false;
+        prepareReview(kind) {
+          if (sourcePending() || pages.hasPendingRename() && kind !== "rename") return false;
           editRequested = false;
           if (S.drag) {
-            S.drag.up();
+            const drag = S.drag;
             S.drag = null;
+            if (drag.kind === "page") drag.cancel();
+            else drag.up();
           }
           setEditing(false);
           return true;
@@ -8433,6 +8556,7 @@ property of their respective owners.
           S.fit = view.fit;
           view.fit ? zoomFit() : applyZoom(view.zoom);
           markActive();
+          if (view.notice) toast(view.notice, 6e3);
         }
       } catch {
       }

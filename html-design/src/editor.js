@@ -317,7 +317,8 @@ import {
     function syncBar() {
       const b = activeBoard(),
         permitted = !!persistence?.canEdit() && !S.playing,
-        writable = permitted && S.editing;
+        writable = permitted && S.editing,
+        manageable = !!persistence?.canManagePages() && !S.playing;
       head.classList.toggle("on", S.editing);
       $(".tools").hidden = !S.editing;
       $("[data-act=edit]").hidden = S.editing;
@@ -340,9 +341,6 @@ import {
         "add-text",
         "add-image",
         "src-apply",
-        "page-copy",
-        "page-delete",
-        "page-rename",
         "image-replace",
         "image-fit",
         "image-cover",
@@ -352,11 +350,12 @@ import {
         }),
       );
       ui.querySelectorAll("[data-act=page-add]").forEach((n) => {
-        n.disabled = !writable;
+        n.disabled = !manageable;
       });
+      ["page-copy", "page-delete", "page-rename"].forEach(act => ui.querySelectorAll(`[data-act=${act}]`).forEach(n => { n.disabled = !manageable || !b; }));
       ["page-up", "page-down"].forEach((act, i) => {
         $(`[data-act=${act}]`).disabled =
-          !writable ||
+          !manageable ||
           !b ||
           (i === 0
             ? boards().indexOf(b) <= 0
@@ -1613,12 +1612,6 @@ import {
       "undo",
       "redo",
       "src-apply",
-      "page-add",
-      "page-copy",
-      "page-delete",
-      "page-rename",
-      "page-up",
-      "page-down",
       "image-replace",
       "image-fit",
       "image-cover",
@@ -1859,7 +1852,13 @@ import {
       goTo,
       select,
       endText,
-      writable: () => !!persistence?.canEdit() && S.editing && !S.playing,
+      writable: () => !!persistence?.canManagePages() && !S.playing,
+      async submit(apply, valid, rename) {
+        const wasEditing = S.editing;
+        try { return await persistence.pageAction(apply, valid, rename); }
+        catch (error) { toast(error.message, 6000); throw error; }
+        finally { if (wasEditing && persistence.canEdit() && !S.playing) setEditing(true); }
+      },
       openMenu,
       closeMenus,
     });
@@ -1997,7 +1996,7 @@ import {
       fileName,
     });
     addEventListener("beforeunload", (e) => {
-      if (S.changed || sourcePending()) {
+      if (S.changed || sourcePending() || pages.hasPendingRename()) {
         e.preventDefault();
         e.returnValue = "";
       }
@@ -2011,7 +2010,7 @@ import {
       );
     } catch {}
     const viewKey = "html-design-view:" + location.pathname;
-    function reloadLatest() {
+    function reloadLatest(notice) {
       try {
         sessionStorage.setItem(
           viewKey,
@@ -2020,6 +2019,7 @@ import {
             zoom: S.zoom,
             fit: S.fit,
             editRequested,
+            notice: typeof notice === "string" ? notice : undefined,
           }),
         );
       } catch {}
@@ -2033,22 +2033,22 @@ import {
         S.changed = value;
       },
       isBusy: () => !!S.drag || sourcePending(),
-      hasPendingSource: sourcePending,
+      hasPendingSource: () => sourcePending() || pages.hasPendingRename(),
       pause() {
-        if (sourcePending()) return false;
+        if (sourcePending() || pages.hasPendingRename()) return false;
         if (S.drag) {
-          S.drag.up();
-          S.drag = null;
+          const drag = S.drag; S.drag = null;
+          if (drag.kind === "page") drag.cancel(); else drag.up();
         }
         setEditing(false);
         return true;
       },
       reload: reloadLatest,
       historyBoundary() { S.undo = []; S.redo = []; select(null); syncBar(); },
-      prepareReview() {
-        if (sourcePending()) return false;
+      prepareReview(kind) {
+        if (sourcePending() || (pages.hasPendingRename() && kind !== "rename")) return false;
         editRequested = false;
-        if (S.drag) { S.drag.up(); S.drag = null; }
+        if (S.drag) { const drag = S.drag; S.drag = null; if (drag.kind === "page") drag.cancel(); else drag.up(); }
         setEditing(false);
         return true;
       },
@@ -2129,6 +2129,7 @@ import {
         S.fit = view.fit;
         view.fit ? zoomFit() : applyZoom(view.zoom);
         markActive();
+        if (view.notice) toast(view.notice, 6000);
       }
     } catch {}
     ui.querySelectorAll("[data-menu] button").forEach((n) =>

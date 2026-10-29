@@ -86,12 +86,12 @@ test('D01/D04/F04: viewer can read sanitized before; scripts/navigation/forms ca
   const f = await fixture(t, 'safe', malicious);
   await f.ai(h => h.replace(malicious, '').replace('Original one', 'Safe after'));
   await f.load();
-  const viewer = await f.ctx.newPage(); await viewer.goto(`${origin}/demos/safe.html`); await viewer.locator('.state-text').filter({ hasText: /只读/ }).waitFor();
+  const viewer = await f.ctx.newPage(); await viewer.goto(`${origin}/demos/safe.html`); await viewer.locator('.state-text').filter({ hasText: /预览中/ }).waitFor();
   await viewer.locator('.review-trigger').click();
-  assert.ok(await viewer.locator('[data-review-command=accept-all]').isDisabled());
+  assert.ok(await viewer.locator('[data-review-command=accept-all]').isEnabled());
   let viewerWrites = 0; viewer.on('request', r => { if (/document\/review\/(undo|accept)$/.test(r.url())) viewerWrites++; });
   await viewer.locator('.review-actions [data-review-command=undo]').focus();
-  await viewer.keyboard.press('Enter'); await viewer.keyboard.press('Space'); await viewer.locator('.review-actions [data-review-command=undo]').evaluate(n => n.click()); assert.equal(viewerWrites, 0);
+  assert.equal(viewerWrites, 0, 'focus alone must never write or take editing permission');
   const frame = viewer.frameLocator('iframe[title="AI 修改前，只读预览"]');
   await frame.locator('[data-el=p1-title]').waitFor();
   assert.equal(await frame.locator('script,iframe,object,form,meta[http-equiv=refresh],[onclick],[autofocus]').count(), 0);
@@ -159,7 +159,7 @@ test('B01/F05: latest unsaved human text is yielded into the actual before basel
 test('F05: delayed pre-takeover heartbeat cannot cancel one-click editing intent while the old save is gated', async t => {
   const f = await fixture(t, 'handoff'); await f.load();
   await f.page.locator('[data-act=edit]').click(); await f.page.locator('[data-el=p1-title]').dblclick();
-  const b = await f.ctx.newPage(); await b.goto(`${origin}/demos/handoff.html`); await b.locator('.state-text').filter({ hasText: /只读/ }).waitFor();
+  const b = await f.ctx.newPage(); await b.goto(`${origin}/demos/handoff.html`); await b.locator('.state-text').filter({ hasText: /预览中/ }).waitFor();
   let releaseSave, saveStarted, releaseSync, syncStarted, repeated;
   const saveGate = new Promise(r => releaseSave = r), saving = new Promise(r => saveStarted = r), syncGate = new Promise(r => releaseSync = r), synced = new Promise(r => syncStarted = r), repeat = new Promise(r => repeated = r);
   let held = false, takeovers = 0;
@@ -424,4 +424,223 @@ test('I04/I08: added pages have no fictitious before; touch owners can discard d
   await p.locator('.review-actions [data-review-command=undo]').focus(); assert.equal(reads, 0); assert.ok(await p.locator('.review-before').isHidden());
   await p.locator('.review-actions [data-review-command=undo]').tap();
   await p.locator('[data-artboard=p3]').waitFor({ state: 'detached' }); assert.equal(await p.locator('[data-artboard]').count(), 2); assert.equal(reads, 0);
+});
+
+async function within(promise, ms=10000) { let timer; try { return await Promise.race([promise,new Promise((_,reject)=>timer=setTimeout(()=>reject(new Error('test handoff gate timed out')),ms))]); } finally {clearTimeout(timer);} }
+async function viewerFor(f, name) {
+  await f.page.locator('.state-text').filter({hasText:/^已保存$/}).waitFor(); const page = await f.ctx.newPage(); await page.goto(`${origin}/demos/${name}.html`);
+  await page.locator('.state-text').filter({hasText:/预览中/}).waitFor(); return page;
+}
+test('K01/K07/K09: one viewer Accept safely yields, ignores a stale heartbeat and duplicate activation without entering editing', async t => {
+  const f = await fixture(t,'direct-accept'); await f.load(); await f.ai(h => h.replace('Original one','AI direct'));
+  await f.page.locator('[data-el=p1-title]').filter({hasText:'AI direct'}).waitFor();
+  const b = await viewerFor(f,'direct-accept'), bytes = await readFile(f.file,'utf8');
+  let syncSeen, syncRelease, yieldSeen, yieldRelease, takeovers=0, writes=0, held=false;
+  const seen = new Promise(r => syncSeen=r), syncGate = new Promise(r => syncRelease=r), yielded = new Promise(r => yieldSeen=r), yieldGate = new Promise(r => yieldRelease=r);
+  await b.route('**/__html-design/document/sync',async route => { if(held) return route.continue(); held=true; const result=await route.fetch(); syncSeen(); await syncGate; await route.fulfill({response:result}); });
+  await f.page.route('**/__html-design/document/yield',async route => { yieldSeen(); await yieldGate; await route.continue(); });
+  b.on('request',r => { if(r.url().endsWith('/takeover')) takeovers++; if(/\/review\/(accept|undo)$/.test(r.url())) writes++; });
+  try {
+    await b.locator('.review-actions [data-review-command=undo]').focus(); await b.locator('.review-before').waitFor({state:'visible'}); assert.equal(takeovers,0); assert.equal(writes,0);
+    await within(seen); await b.locator('.review-actions [data-review-command=accept]').click(); await within(yielded);
+    assert.ok(await b.locator('[data-act=edit]').isDisabled()); assert.ok(await b.locator('.review-actions [data-review-command=accept]').isDisabled());
+    await b.locator('.review-actions [data-review-command=accept]').evaluate(n => { n.click(); n.click(); });
+    syncRelease(); await b.waitForTimeout(250); assert.equal(takeovers,1); assert.equal(writes,0);
+    yieldRelease(); await b.locator('.review-actions').waitFor({state:'hidden'});
+    assert.equal(takeovers,1); assert.equal(writes,1); assert.equal(await readFile(f.file,'utf8'),bytes); assert.equal(await b.locator('html[data-editing]').count(),0);
+  } finally {syncRelease();yieldRelease();}
+});
+test('K02/K03: viewer Space activates Undo once and keeps preview mode, zoom and usable history boundary',async t => {
+  const f=await fixture(t,'direct-undo'); await f.load(); await f.ai(h=>h.replace('Original one','AI undo direct'));
+  const b=await viewerFor(f,'direct-undo'); await b.locator('[data-act=zoom-reset]').click();
+  await b.locator('.review-actions [data-review-command=undo]').focus(); await b.keyboard.press('Space');
+  await b.locator('[data-el=p1-title]').filter({hasText:'Original one'}).waitFor();
+  assert.equal(await b.locator('html[data-editing]').count(),0); assert.equal(await b.locator('.zv').textContent(),'100%');
+  await b.locator('[data-act=edit]').click(); await b.locator('html[data-editing]').waitFor(); assert.ok(await b.locator('[data-act=undo]').isDisabled());
+  await b.locator('[data-el=p1-title]').dblclick(); await b.locator('[contenteditable=true]').fill('Manual after direct undo');
+  await b.waitForFunction(()=>document.querySelector('html-design-editor').shadowRoot.querySelector('.state-text').textContent==='已保存');
+  assert.match(await readFile(f.file,'utf8'),/Manual after direct undo/);
+});
+for(const command of ['all','row-accept','row-undo','deleted']) test(`K03: viewer ${command} uses the same one-click safe handoff`,async t=>{
+  const name=`direct-${command}`, f=await fixture(t,name); await f.load();
+  await f.ai(h=>command==='deleted'?h.replace(pageHTML('p2','Original two'),''):h.replace('Original one','AI first').replace('Original two','AI second'));
+  const b=await viewerFor(f,name); await b.locator('.review-trigger').click(); const bytes=await readFile(f.file,'utf8');
+  const button=command==='all'?b.locator('[data-review-command=accept-all]'):b.locator('.review-row[data-review-row=p2] [data-review-command='+ (command==='row-accept'?'accept':'undo') +']');
+  await button.focus(); await b.keyboard.press('Enter');
+  if(command==='all') { await b.locator('.review-actions').waitFor({state:'hidden'}); assert.equal(await readFile(f.file,'utf8'),bytes); }
+  else if(command==='row-accept') { await b.locator('.review-summary').waitFor({state:'hidden'}); assert.equal(await readFile(f.file,'utf8'),bytes); }
+  else { await b.locator('[data-el=p2-title]').filter({hasText:'Original two'}).waitFor({state:'attached'}); if(command==='deleted') assert.equal(await b.locator('.pageno').first().textContent(),'2 / 2'); }
+  assert.equal(await b.locator('html[data-editing]').count(),0);
+});
+test('K04/K06: another owner flushes latest unsaved text; old viewer Undo stops rather than replaying',async t=>{
+  const f=await fixture(t,'direct-human'); await f.load(); await f.ai(h=>h.replace('Original one','AI before human'));
+  await f.page.locator('[data-el=p1-title]').filter({hasText:'AI before human'}).waitFor(); const b=await viewerFor(f,'direct-human');
+  await f.page.locator('[data-act=edit]').click(); await f.page.locator('[data-el=p1-title]').dblclick();
+  let release, seen; const gate=new Promise(r=>release=r), saving=new Promise(r=>seen=r); let writes=0;
+  await f.page.route('**/__html-design/document/save',async route=>{seen();await gate;await route.continue();});
+  b.on('request',r=>{if(/\/review\/(undo|accept)$/.test(r.url())) writes++;});
+  try {
+    await f.page.locator('[contenteditable=true]').fill('Newest owner human text'); await within(saving);
+    await b.locator('.review-actions [data-review-command=undo]').click(); await b.locator('.state-text').filter({hasText:'正在同步并处理…'}).waitFor();
+    release(); await b.locator('[data-el=p1-title]').filter({hasText:'Newest owner human text'}).waitFor();
+    assert.equal(writes,0); assert.match(await readFile(f.file,'utf8'),/Newest owner human text/); assert.equal(await b.locator('html[data-editing]').count(),0);
+  }finally{release();}
+});
+test('K05/K08/K09: source-blocked owner causes bounded waiting, no late write, and retry remains usable',async t=>{
+  const f=await fixture(t,'direct-timeout'); await f.load(); await f.ai(h=>h.replace('Original one','AI waiting'));
+  await f.page.locator('[data-el=p1-title]').filter({hasText:'AI waiting'}).waitFor(); const b=await viewerFor(f,'direct-timeout');
+  await f.page.locator('[data-act=edit]').click(); await f.page.locator('html[data-editing]').waitFor(); await f.page.locator('[data-act=more]').click(); await f.page.locator('[data-act=source]').click();
+  const textarea=f.page.locator('textarea'); assert.ok(await textarea.isVisible()); assert.ok(await textarea.isEditable()); await textarea.press('ControlOrMeta+End'); await f.page.keyboard.insertText('\n<!--unapplied-->'); assert.ok((await textarea.inputValue()).includes('<!--unapplied-->'));
+  let writes=0; b.on('request',r=>{if(/\/review\/(undo|accept)$/.test(r.url())) writes++;});
+  await b.locator('.review-actions [data-review-command=accept]').click();
+  await b.locator('.toast').filter({hasText:/等待已停止/}).waitFor({timeout:35000}); assert.equal(writes,0);
+  await b.waitForFunction(()=>!document.querySelector('html-design-editor').shadowRoot.querySelector('.review-actions [data-review-command=accept]').disabled, null, {timeout:5000});
+  assert.ok(await b.locator('.review-actions [data-review-command=accept]').isEnabled());
+  await f.page.locator('[data-act=src-close]').click(); await f.page.waitForTimeout(2200); assert.equal(writes,0,'an expired intention never resumes after the owner unblocks');
+  await b.locator('.review-actions [data-review-command=accept]').click(); await b.locator('.review-actions').waitFor({state:'hidden'}); assert.equal(writes,1);
+});
+test('K06/K08: changing page during a handoff cancels the intention; a failed network request can retry',async t=>{
+  const f=await fixture(t,'direct-cancel'); await f.load(); await f.ai(h=>h.replace('Original one','AI cancel'));
+  const b=await viewerFor(f,'direct-cancel'); let release, seen, writes=0; const gate=new Promise(r=>release=r), waiting=new Promise(r=>seen=r);
+  await f.page.route('**/__html-design/document/yield',async route=>{seen();await gate;await route.continue();});
+  b.on('request',r=>{if(/\/review\/(undo|accept)$/.test(r.url()))writes++;});
+  try{
+    await b.locator('.review-actions [data-review-command=undo]').click(); await within(waiting); await b.locator('[data-act=next]').first().click(); release();
+    await b.locator('.toast').filter({hasText:/当前页面重新选择/}).waitFor(); assert.equal(writes,0);
+    await b.locator('[data-act=prev]').first().click();
+    // Target only the user's mutation: the periodic sync must not consume this fault.
+    let failed=false, attemptedToken, completed=0; const beforeFailure=await readFile(f.file,'utf8');
+    b.on('response',r=>{if(/\/review\/(undo|accept)$/.test(r.url())&&r.ok())completed++;});
+    await b.route('**/__html-design/document/review/accept',async route=>{if(!failed){failed=true;attemptedToken=route.request().postDataJSON().token;return route.abort('connectionrefused');}await route.continue();});
+    await b.locator('.review-actions [data-review-command=accept]').click(); await b.locator('.toast').filter({hasText:/fetch|网络|Failed/}).waitFor();
+    assert.equal(writes,1,'one failed network attempt'); assert.equal(completed,0,'no successful review mutation');
+    const untouched=await f.call('sync',{token:attemptedToken}); assert.equal(untouched.review.items.length,1); assert.equal(untouched.review.items[0].id,'p1'); assert.equal(await readFile(f.file,'utf8'),beforeFailure);
+    await b.waitForFunction(()=>!document.querySelector('html-design-editor').shadowRoot.querySelector('.review-actions [data-review-command=accept]').disabled,null,{timeout:5000});
+    await b.locator('.review-actions [data-review-command=accept]').click(); await b.locator('.review-actions').waitFor({state:'hidden'}); assert.equal(writes,2); assert.equal(completed,1);
+  }finally{release();}
+});
+
+test('L01/L02/L03/L04: page information and status labels remain separate from actions at desktop and 390px',async t=>{
+  const f=await fixture(t,'numbered-labels');
+  await writeFile(f.file,(await readFile(f.file,'utf8')).replace('data-artboard="p1"','data-artboard="p8"').replace('data-title="p1"','data-title="Long page name that should truncate while its ordinal stays visible"').replace('data-el="p1-title"','data-el="p8-title"').replace('data-artboard="p2"','data-artboard="p12"'));
+  await f.load(); await f.ai(h=>h.replace('Original one','New first').replace(/<section data-artboard="p12"[^]*?<\/section>/,'').replace('</main>',pageHTML('p50','New page')+'</main>'));
+  await f.show();
+  assert.match(await f.row('p8').locator('.review-name').textContent(),/^第 1 页 ·/);
+  assert.match(await f.row('p12').locator('.review-name').textContent(),/^原第 2 页 ·/);
+  assert.match(await f.row('p50').locator('.review-name').textContent(),/^第 2 页 ·/);
+  const bytes=await readFile(f.file,'utf8');
+  await mkdir('.html-design/evidence',{recursive:true});
+  for(const width of [1280,390]){
+    await f.page.setViewportSize({width,height:844});
+    const label=f.row('p8').locator('.review-kind');
+    assert.equal(await label.evaluate(n=>n.tagName),'SPAN'); assert.equal(await label.getAttribute('tabindex'),null);
+    assert.equal(await label.locator('..').getAttribute('class'),'review-info'); assert.equal(await f.row('p8').locator('.review-item-actions .review-kind').count(),0);
+    await label.click(); assert.equal(await readFile(f.file,'utf8'),bytes);
+    const number=await f.row('p8').locator('.review-page').boundingBox(), info=await f.row('p8').locator('.review-info').boundingBox(), actions=await f.row('p8').locator('.review-item-actions').boundingBox();
+    assert.ok(number.width>40 && info.x+info.width<=actions.x && actions.x+actions.width<=width-8);
+    await f.page.screenshot({path:`.html-design/evidence/direct-label-${width===390?'mobile':'desktop'}.png`});
+  }
+  await f.row('p8').locator('[data-review-command=accept]').click(); await f.page.waitForFunction(()=>document.querySelector('html-design-editor').shadowRoot.querySelectorAll('.review-row').length===2);
+  await f.row('p12').locator('[data-review-command=undo]').click(); await f.page.locator('[data-artboard=p12][data-editor-current]').waitFor();
+  await f.show(); assert.match(await f.row('p50').locator('.review-name').textContent(),/^第 3 页 ·/);
+  await f.ai(h=>h.replace('background:#eee','background:#ddd')); await f.page.locator('.review-actions[data-review-scope=document]').waitFor(); await f.show();
+  assert.equal(await f.row('document').locator('.review-name').textContent(),'整份文档'); assert.equal(await f.row('document').locator('.review-page').count(),0);
+});
+
+async function pageMenu(page,id){await page.locator(`.thumb[data-page-id="${id}"] .thumb-more`).click();}
+async function saved(page){await page.locator('.state-text').filter({hasText:/^已保存$/}).waitFor();}
+test('M01/M04: preview page management uses transactions, stable IDs, rename confirmation and empty-state add',async t=>{
+  const f=await fixture(t,'page-preview'); await f.load();
+  assert.ok(await f.page.locator('.nav-head [data-act=page-add]').isVisible());
+  await mkdir('.html-design/evidence',{recursive:true});
+  for(const width of [1280,390]) {
+    await f.page.setViewportSize({width,height:844});
+    if(width===390) await f.page.locator('[data-act=nav]').click();
+    await pageMenu(f.page,'p1'); assert.ok(await f.page.locator('[data-act=page-copy]').isEnabled());
+    await f.page.screenshot({path:`.html-design/evidence/direct-pages-${width===390?'mobile':'desktop'}.png`});
+    await f.page.keyboard.press('Escape');
+  }
+  await f.page.setViewportSize({width:1280,height:844});
+  await f.page.locator('.nav-head [data-act=page-add]').click(); await f.page.locator('[data-artboard=p3]').waitFor(); await saved(f.page);
+  await pageMenu(f.page,'p3'); await f.page.locator('[data-act=page-copy]').click(); await f.page.locator('[data-artboard=p4]').waitFor(); await saved(f.page);
+  await f.page.locator('.page-title').click(); await f.page.locator('.rename-input').fill('Preview renamed'); await f.page.locator('.rename-input').press('Enter'); await f.page.locator('[data-artboard=p4][data-title="Preview renamed"]').waitFor(); await saved(f.page);
+  await pageMenu(f.page,'p4'); await f.page.locator('[data-act=page-up]').click(); await saved(f.page);
+  assert.deepEqual(await f.page.locator('[data-stage]>[data-artboard]').evaluateAll(ns=>ns.map(n=>n.dataset.artboard)),['p1','p4','p3','p2']);
+  await f.page.locator('.thumb[data-page-id=p4] .thumb-main').focus(); await f.page.keyboard.press('Alt+ArrowDown'); await saved(f.page);
+  await f.page.locator('.thumb[data-page-id=p4] .thumb-main').press('F2'); await f.page.locator('.rename-input').fill('Do not apply'); await f.page.locator('.rename-input').press('Escape'); assert.equal(await f.page.locator('[data-artboard=p4]').getAttribute('data-title'),'Preview renamed');
+  await pageMenu(f.page,'p4'); await f.page.locator('[data-act=page-delete]').click(); await f.page.locator('[data-artboard=p4]').waitFor({state:'detached'}); await saved(f.page);
+  assert.equal(await f.page.locator('html[data-editing]').count(),0);
+  await f.page.locator('[data-act=edit]').click(); await f.page.locator('html[data-editing]').waitFor(); await f.page.keyboard.press('Meta+z'); await f.page.locator('[data-artboard=p4]').waitFor(); await f.page.locator('[data-act=done]').click(); await saved(f.page);
+  // Every preview operation remains a normal undoable transaction, including deletion of the last page.
+  for(const id of ['p1','p2','p3','p4']){await pageMenu(f.page,id);await f.page.locator('[data-act=page-delete]').click();await f.page.locator(`[data-artboard=${id}]`).waitFor({state:'detached'});await saved(f.page);}
+  await f.page.locator('.empty-canvas [data-act=page-add]').click();await f.page.locator('[data-artboard=p5]').waitFor();await saved(f.page);
+  assert.equal(await f.page.locator('html[data-editing]').count(),0);assert.equal(await f.page.locator('[data-stage]').getAttribute('data-page-seq'),'5');
+  await f.page.reload();await saved(f.page);assert.equal(await f.page.locator('[data-artboard]').count(),1);
+});
+for(const command of ['page-copy','page-delete','rename','page-down'])test(`M02: viewer preview ${command} acquires lease only on execution`,async t=>{
+  const name='page-viewer-'+command,f=await fixture(t,name);await f.load();const b=await viewerFor(f,name);let takes=0;
+  b.on('request',r=>{if(r.url().endsWith('/takeover'))takes++;});
+  await pageMenu(b,'p1');
+  if(command==='rename'){
+    await b.locator('[data-menu=page] [data-act=page-rename]').click();await b.locator('.rename-input').fill('Viewer name');assert.equal(takes,0);
+    await b.locator('.rename-input').press('Enter');await b.locator('[data-artboard=p1][data-title="Viewer name"]').waitFor();
+  }else{
+    await b.locator(`[data-act=${command}]`).click();
+    if(command==='page-copy')await b.locator('[data-artboard=p3]').waitFor();
+    if(command==='page-delete')await b.locator('[data-artboard=p1]').waitFor({state:'detached'});
+    if(command==='page-down')await b.waitForFunction(()=>document.querySelector('[data-stage]').firstElementChild?.dataset.artboard==='p2');
+  }
+  await saved(b);assert.equal(takes,1);assert.equal(await b.locator('html[data-editing]').count(),0);
+});
+
+const order = page => page.locator('[data-stage]>[data-artboard]').evaluateAll(ns=>ns.map(n=>n.dataset.artboard));
+async function dragThumb(page,id,to,{drop=true}={}){const a=await page.locator(`.thumb[data-page-id=${id}] .frame`).boundingBox(),b=await page.locator(`.thumb[data-page-id=${to}]`).boundingBox();await page.mouse.move(a.x+30,a.y+25);await page.mouse.down();await page.mouse.move(b.x+30,b.y+b.height-4,{steps:8});if(drop)await page.mouse.up();}
+test('M05: viewer drag is visual until drop; cancellation does not acquire or write, and commit waits for lease',async t=>{
+  const f=await fixture(t,'page-drag');await f.load();const b=await viewerFor(f,'page-drag');let takes=0,saves=0;
+  b.on('request',r=>{if(r.url().endsWith('/takeover'))takes++;if(r.url().endsWith('/save'))saves++;});
+  await dragThumb(b,'p1','p2',{drop:false});await b.keyboard.press('Escape');await b.mouse.up();assert.deepEqual(await order(b),['p1','p2']);assert.equal(takes,0);assert.equal(saves,0);
+  await dragThumb(b,'p1','p2',{drop:false});await b.evaluate(()=>dispatchEvent(new PointerEvent('pointercancel',{bubbles:true})));await b.mouse.up();assert.deepEqual(await order(b),['p1','p2']);assert.equal(takes,0);
+  let release,seen;const gate=new Promise(r=>release=r),waiting=new Promise(r=>seen=r);
+  await f.page.route('**/__html-design/document/yield',async route=>{seen();await gate;await route.continue();});
+  try{await dragThumb(b,'p1','p2');await within(waiting);assert.deepEqual(await order(b),['p1','p2']);assert.equal(saves,0);assert.equal(takes,1);release();await b.waitForFunction(()=>document.querySelector('[data-stage]').firstElementChild?.dataset.artboard==='p2');await saved(b);assert.equal(saves,1);assert.equal(await b.locator('.dragging,.drop-before,.drop-after').count(),0);assert.equal(await b.locator('html[data-editing]').count(),0);
+    await dragThumb(b,'p2','p1',{drop:false});
+    const current=await readFile(f.file,'utf8');
+    await writeFile(f.file,current.replace(/(<section data-artboard="p2"[^]*?<\/section>)(<section data-artboard="p1"[^]*?<\/section>)/,'$2$1'));
+    await b.mouse.up();await b.locator('.toast').filter({hasText:/已有更新/}).waitFor();
+    await b.waitForFunction(()=>document.querySelector('[data-stage]').firstElementChild?.dataset.artboard==='p1');
+    assert.equal(saves,1,'external reordering invalidates the old drop without a second save');
+  }finally{release();}
+});
+test('M03/M05: AI pending/lease cancels a preview drag and disables every page write entry',async t=>{
+  const f=await fixture(t,'page-ai');await f.load();await dragThumb(f.page,'p1','p2',{drop:false});
+  const ai=await f.call('ai/begin');let ready;
+  for(let i=0;i<50;i++){ready=await f.call('ai/status',{token:ai.token});if(ready.ready)break;await f.page.waitForTimeout(100);}
+  assert.ok(ready.ready);await f.page.waitForFunction(()=>document.querySelector('html-design-editor').shadowRoot.querySelector('[data-act=page-add]').disabled);
+  await f.page.mouse.up();assert.deepEqual(await order(f.page),['p1','p2']);assert.equal(await f.page.locator('.dragging,.drop-before,.drop-after').count(),0);
+  await pageMenu(f.page,'p1');for(const command of ['page-add','page-copy','page-delete','page-up','page-down'])assert.ok(await f.page.locator(`[data-menu=page] [data-act=${command}]`).isDisabled());
+  await f.page.locator('.thumb[data-page-id=p1] .thumb-main').focus();await f.page.keyboard.press('ControlOrMeta+d');assert.equal(await f.page.locator('[data-artboard]').count(),2);
+  await f.call('ai/cancel',{token:ai.token});await f.page.waitForFunction(()=>!document.querySelector('html-design-editor').shadowRoot.querySelector('[data-act=page-add]').disabled);
+});
+test('M06: unconfirmed rename survives another window handoff and stops a stale confirmed name',async t=>{
+  const f=await fixture(t,'page-name-draft');await f.load();await f.page.locator('.page-title').click();await f.page.locator('.rename-input').fill('Unconfirmed name');
+  const b=await viewerFor(f,'page-name-draft');await pageMenu(b,'p1');await b.locator('[data-act=page-copy]').click();await f.page.waitForTimeout(2400);
+  assert.equal(await f.page.locator('.rename-input').inputValue(),'Unconfirmed name');assert.equal(await b.locator('[data-artboard]').count(),2);assert.doesNotMatch(await readFile(f.file,'utf8'),/data-title="Unconfirmed name"/);
+  await f.page.locator('.rename-input').press('Escape');await b.locator('[data-artboard=p3]').waitFor();await saved(b);
+  await f.page.locator('.thumb[data-page-id=p1] .label').dblclick();await f.page.locator('.rename-input').fill('Name must survive conflict');
+  await writeFile(f.file,(await readFile(f.file,'utf8')).replace('Original one','External newest text'));
+  await f.page.waitForTimeout(2300);assert.equal(await f.page.locator('.rename-input').inputValue(),'Name must survive conflict');
+  await f.page.locator('.rename-input').press('Enter');await f.page.locator('.toast').filter({hasText:/已有更新/}).waitFor();assert.equal(await f.page.locator('.rename-input').inputValue(),'Name must survive conflict');assert.doesNotMatch(await readFile(f.file,'utf8'),/data-title="Name must survive conflict"/);
+  await f.page.locator('.rename-input').press('Escape');await f.page.locator('[data-el=p1-title]').filter({hasText:'External newest text'}).waitFor();
+});
+test('M07: local typing flushes then copies once; another owner flush invalidates a viewer page intention',async t=>{
+  const f=await fixture(t,'page-human');await f.load();await f.page.locator('[data-act=edit]').click();await f.page.locator('[data-el=p1-title]').dblclick();await f.page.locator('[contenteditable=true]').fill('Local newest');
+  await pageMenu(f.page,'p1');await f.page.locator('[data-act=page-copy]').click();await f.page.locator('[data-artboard=p3]').waitFor();await saved(f.page);assert.match(await f.page.locator('[data-artboard=p3]').textContent(),/Local newest/);
+  const b=await viewerFor(f,'page-human');let release,seen;const gate=new Promise(r=>release=r),waiting=new Promise(r=>seen=r);
+  await f.page.locator('.thumb[data-page-id=p1] .thumb-main').click();if(!await f.page.locator('html[data-editing]').count())await f.page.locator('[data-act=edit]').click();await f.page.locator('[data-el=p1-title]').dblclick();
+  await f.page.route('**/__html-design/document/save',async route=>{seen();await gate;await route.continue();});
+  try{await f.page.locator('[contenteditable=true]').fill('Other owner latest');await within(waiting);await pageMenu(b,'p1');await b.locator('[data-act=page-delete]').click();release();await b.locator('[data-el=p1-title]').filter({hasText:'Other owner latest'}).waitFor();assert.equal(await b.locator('[data-artboard]').count(),3);assert.match(await readFile(f.file,'utf8'),/Other owner latest/);}finally{release();}
+});
+test('M08: offline preview page actions never contact collaboration service',async t=>{
+  const f=await fixture(t,'page-offline');let writes=0;f.page.on('request',r=>{if(r.url().includes('/__html-design/document/'))writes++;});await f.page.goto('file://'+f.file);await f.page.locator('.state-text').filter({hasText:/离线/}).waitFor();
+  await f.page.locator('.nav-head [data-act=page-add]').click();await f.page.locator('[data-artboard=p3]').waitFor();await pageMenu(f.page,'p3');await f.page.locator('[data-act=page-copy]').click();await f.page.locator('[data-artboard=p4]').waitFor();assert.equal(writes,0);assert.equal(await f.page.locator('html[data-editing]').count(),0);assert.doesNotMatch(await readFile(f.file,'utf8'),/data-artboard="p3"/);
 });
