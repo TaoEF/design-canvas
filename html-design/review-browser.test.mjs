@@ -623,7 +623,8 @@ test('M05: viewer drag is visual until drop; cancellation does not acquire or wr
   await dragThumb(b,'p1','p2',{drop:false});await b.evaluate(()=>dispatchEvent(new PointerEvent('pointercancel',{bubbles:true})));await b.mouse.up();assert.deepEqual(await order(b),['p1','p2']);assert.equal(takes,0);
   let release,seen;const gate=new Promise(r=>release=r),waiting=new Promise(r=>seen=r);
   await f.page.route('**/__html-design/document/yield',async route=>{seen();await gate;await route.continue();});
-  try{await dragThumb(b,'p1','p2');await within(waiting);assert.deepEqual(await order(b),['p1','p2']);assert.equal(saves,0);assert.equal(takes,1);release();await b.waitForFunction(()=>document.querySelector('[data-stage]').firstElementChild?.dataset.artboard==='p2');await saved(b);assert.equal(saves,1);assert.equal(await b.locator('.dragging,.drop-before,.drop-after').count(),0);assert.equal(await b.locator('html[data-editing]').count(),0);
+  // Run the lease owner's heartbeat in front, then return to the requester after yield is released.
+  try{await dragThumb(b,'p1','p2');await f.page.bringToFront();await within(waiting);assert.deepEqual(await order(b),['p1','p2']);assert.equal(saves,0);assert.equal(takes,1);release();await b.bringToFront();await b.waitForFunction(()=>document.querySelector('[data-stage]').firstElementChild?.dataset.artboard==='p2');await saved(b);assert.equal(saves,1);assert.equal(await b.locator('.dragging,.drop-before,.drop-after').count(),0);assert.equal(await b.locator('html[data-editing]').count(),0);
     await dragThumb(b,'p2','p1',{drop:false});
     const current=await readFile(f.file,'utf8');
     await writeFile(f.file,current.replace(/(<section data-artboard="p2"[^]*?<\/section>)(<section data-artboard="p1"[^]*?<\/section>)/,'$2$1'));
