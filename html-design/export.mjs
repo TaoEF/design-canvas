@@ -28,8 +28,12 @@ body>*:not([data-stage]){display:none!important}
 export async function exportDocument({ html, baseUrl, title = 'design', format }, options = {}) {
   if (!['pdf', 'pptx'].includes(format)) throw new Error('不支持的导出格式');
   if (typeof html !== 'string' || !html.trim()) throw new Error('没有可导出的页面内容');
+  options.signal?.throwIfAborted();
   const browser = await chromium.launch(browserOptions());
+  const abort = () => { void browser.close().catch(() => {}); };
+  options.signal?.addEventListener('abort', abort, { once: true });
   try {
+    options.signal?.throwIfAborted();
     const context = await browser.newContext({
       viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2,
       acceptDownloads: false,
@@ -137,6 +141,7 @@ export async function exportDocument({ html, baseUrl, title = 'design', format }
     }
     return { bytes, pages: sizes.length };
   } finally {
+    options.signal?.removeEventListener('abort', abort);
     await browser.close();
   }
 }

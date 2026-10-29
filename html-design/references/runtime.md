@@ -49,8 +49,12 @@ node html-design/collaborate.mjs begin designs/proposal.html
 
 非默认端口的 `commit` / `cancel` 也须沿用相同 origin；不能拿一个服务的会话提交到另一个服务。先完成研究和构建，再申请短期 AI 接管；只修改返回的工作副本，提交或取消后结束接管。完整参数见 [协作说明](collaboration.md) 和 [文字测量](text-measurement.md)。纯内联 HTML 与系统字体的文字测量不必启动资源服务，但仍需在完整源码根目录安装依赖与浏览器。
 
+## 仅做文件导出
+
+从已保存 HTML 生成文件不必启动常驻预览服务：在完整源码根目录运行 `node html-design/export-cli.mjs pptx input.html --output result.pptx`，或将格式改为 `pdf`。CLI 默认临时服务以输入目录为资源根，输入不必放在源码根内；这是只读导出，不提供协作连接或写回。已有服务提供原资源时可用 `--base-url`。完整参数及文件保护见 [文件导出](export-cli.md)。
+
 ## 离线边界
 
 内嵌编辑器无需在线脚本 CDN，可离线普通编辑、撤销、下载 HTML 和浏览器打印。外链图片、字体、CSS 仍依赖网络或原资源位置；需要离线交付时应将所需资源内联或一并提供，不能仅凭内嵌编辑器宣称所有资源自包含。
 
-自动回写、跨窗口写权限协调、AI begin/commit 和私有 Undo/Accept，以及直接下载 PDF/PPTX 依赖运行中的本地服务。私有审阅基线留在源码根目录的 `.html-design/reviews/`，不会随下载 HTML 携带；离线下载不能撤回服务端 AI 提交。
+自动回写、跨窗口写权限协调、AI begin/commit 和私有 Undo/Accept，以及编辑器内直接下载 PDF/PPTX 依赖运行中的常驻本地服务；文件 CLI 只需安装好的源码依赖和浏览器，按需启动临时只读资源服务。私有审阅基线留在源码根目录的 `.html-design/reviews/`，不会随下载 HTML 携带；离线下载不能撤回服务端 AI 提交。

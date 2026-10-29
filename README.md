@@ -88,6 +88,17 @@ PPTX 的页面必须具有相同宽高比。复杂 CSS 背景、滤镜、文字�
 
 HTML 内嵌编辑器可离线查看、普通编辑、撤销和下载 HTML；外链图片、字体、CSS 仍需其资源可用，只有一并内联的资源才随文件携带。自动回写、协作与私有审阅、直接下载 PDF/PPTX 需要上述本地服务；导出不依赖外部转换网站。
 
+### 文件命令行导出
+
+无需打开编辑器或启动常驻服务，在完整源码根目录运行：
+
+```sh
+node html-design/export-cli.mjs pptx input.html --output result.pptx
+node html-design/export-cli.mjs pdf input.html --output result.pdf
+```
+
+CLI 读取已保存 HTML 快照，输出一份含 `revision`、页数、字节数和绝对路径的 JSON；不会自动接管或改写活跃稿，也不覆盖已有输出。默认临时只读服务以输入目录解析相对资源；可用 `--root` 选资源根，或 `--base-url` 使用原稿的本机资源 URL。参数、中文路径与清理边界见 [文件导出说明](html-design/references/export-cli.md)。
+
 ## 文字测量与适配
 
 将 `@chenglou/pretext@1.0.0` 内嵌到编辑器中，提供文字测量和适配。启动本地服务后打开 `/demos/flex-text-layout.html`，点击「编辑」，选中文字，再点元素工具条「更多 → 文字适配」。面板报告所需高度、当前高度和溢出状态；「高度随内容」保留字号并调整文本框，「缩小字号适配」保留文本框、按原比例缩小文字（最小字号 6px）。两项操作都支持一次撤销。

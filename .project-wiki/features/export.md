@@ -6,6 +6,7 @@ owners:
   - html-design/export.mjs
   - html-design/pptx.mjs
   - html-design/src/export.js
+  - html-design/export-cli.mjs
 updated: 2026-10-29
 sources:
   - path: html-design/export.mjs
@@ -15,6 +16,12 @@ sources:
   - path: html-design/src/export.js
     status: current
   - path: html-design/export.test.mjs
+    status: current
+  - path: html-design/export-cli.mjs
+    status: current
+  - path: html-design/export-cli.test.mjs
+    status: current
+  - path: html-design/references/export-cli.md
     status: current
 related:
   - architecture.html-design
@@ -27,7 +34,7 @@ confidence: high
 
 ## Summary
 
-导出点击时的当前 DOM 快照，含未保存编辑。PDF 按画板逐页渲染；PPTX 将支持的文字、图片和形状映射为独立对象。
+编辑器导出点击时的当前 DOM 快照，含未保存编辑；文件 CLI 导出一次读取的已保存 HTML，二者来源不能混淆。PDF 按画板逐页渲染；PPTX 将支持的文字、图片和形状映射为独立对象。
 
 
 ## Source Of Truth
@@ -51,6 +58,8 @@ PPTX 每个文字元素对应一个可编辑文本框，开启 `wrap="square"`�
 PptxGenJS 4 没有公开 addGroup API；生成后以真实 XML 树移动原叶子节点，JSZip 只替换对应 slide XML，图片/超链接关系和原叶子顺序、格式、坐标不变。组边界来自原生对象变换框（包含溢出后代），`off/ext` 与 `chOff/chExt` 初始相同，避免初始偏移或缩放；新组 ID 高于已有对象 ID。对象数或归属顺序不能核对时明确失败，不输出损坏文件。文字超链接写到 PptxGenJS rich run options，确保生成实际 relationship ID，而不是悬空引用。此分组只作用于导出文件，不新增浏览器编辑器内分组功能。
 
 ## Workflows
+
+`node html-design/export-cli.mjs <pptx|pdf> input.html --output result.xxx` 复用同一 exportDocument，无需打开编辑器或常驻服务。输入最多32MiB，摘要返回实际字节 SHA-256 revision 和绝对输入/输出路径；不写源文件，不自动交接活跃稿。默认随机 loopback 临时只读服务按 realpath 限定输入目录/显式 root，拒绝根外 symlink、隐藏路径与非GET/HEAD；--base-url 只接收 loopback HTTP(S) IP 原稿 URL，使用已有服务且不关闭它。输出独占创建，不覆盖源/已有输出，失败只清理本次拥有的部分文件；finally 关闭临时服务，SIGINT/SIGTERM 通过可选 signal 关闭现有浏览器。具体调用见 references/export-cli.md。
 
 本地预览中选择导出；macOS 可使用已安装 Chrome，其他环境安装 Playwright Chromium，或设置 HTML_DESIGN_CHROME。离线 HTML 保留下载和浏览器打印能力。
 
