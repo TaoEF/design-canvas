@@ -1,4 +1,4 @@
-# HTML Design 项目知识库
+# HTML-PPT-Canvas 项目知识库
 
 先读 [schema.md](schema.md)，再按任务选择实体并核对源代码。
 

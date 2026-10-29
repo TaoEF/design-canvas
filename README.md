@@ -1,17 +1,37 @@
-# HTML Design
+# HTML-PPT-Canvas
 
 可编辑的单文件 HTML 画板，支持本地自动保存、AI 协作和 PDF / 可编辑 PPTX 导出。
 
-## 启动
+## 安装 Skill
 
-需要 Node.js 20 或更新版本。在项目根目录运行：
+先安装 Node.js 22.20 或更新版本（[skills CLI 官方要求](https://github.com/vercel-labs/skills#install-a-skill)），在希望使用技能的项目中运行：
 
 ```sh
-npm install
+npx skills add TaoEF/HTML-PPT-Canvas --skill html-ppt-canvas -a codex
+```
+
+默认安装到当前项目；加 `-g` 可全局安装。然后在 Codex 中调用，例如：
+
+```text
+$html-ppt-canvas 为新产品做一份 6 页发布演示，保存为可编辑 HTML。
+```
+
+技能调用名为 `html-ppt-canvas`，源码路径仍保留 `html-design/`；CLI 可在没有标准目录技能时通过递归搜索发现仓库的 `html-design/SKILL.md`（[发现规则](https://github.com/vercel-labs/skills/blob/main/docs/creating-skills.md#skill-discovery)）。安装技能提供指令与内嵌编辑器资源，不会安装 Node.js、本项目依赖或启动服务。
+
+## 本地运行
+
+项目运行需要 Node.js 20+；这与上面的安装 CLI 版本要求不同。优先复用已有匹配源码目录；没有时克隆到一个尚不存在的新目录，再从完整源码根目录运行：
+
+```sh
+git clone https://github.com/TaoEF/HTML-PPT-Canvas.git
+cd HTML-PPT-Canvas
+npm ci
 npm start
 ```
 
-打开 `http://127.0.0.1:8876/demos/toy-history.html`。macOS 上自动使用已安装的 Google Chrome；其他环境先运行 `npx playwright install chromium`，或通过 `HTML_DESIGN_CHROME` 指定浏览器可执行文件。
+打开 `http://127.0.0.1:8876/demos/toy-history.html`。macOS 自动使用标准路径已安装的 Google Chrome；其他环境先运行 `npx playwright install chromium`，或通过 `HTML_DESIGN_CHROME` 指定浏览器可执行文件。自定义端口可用 `PORT=8878 npm start`，协作与测量命令相应设置 `HTML_DESIGN_ORIGIN=http://127.0.0.1:8878`。
+
+安装的 skill 目录不是完整源码根目录；不要在其中直接执行这些项目命令。新设计放在实际服务根目录内，通过服务 URL 打开才能使用自动回写与协作。启动前检查已有服务，避免多个服务同时写同一目录。完整步骤见 [运行环境](html-design/references/runtime.md)。
 
 ## 编辑与播放
 
@@ -66,7 +86,7 @@ node html-design/review-demo.mjs
 
 PPTX 的页面必须具有相同宽高比。复杂 CSS 背景、滤镜、文字排版和圆角效果可能简化；字体在其他电脑上需要有对应字体。SVG 和 canvas 转为独立图片对象，普通文字和 `<img>` 不会整页合并为截图。
 
-HTML 本身仍然自包含，可离线查看、编辑和下载 HTML。直接下载 PDF/PPTX 需要上述本地服务，不依赖外部转换网站。
+HTML 内嵌编辑器可离线查看、普通编辑、撤销和下载 HTML；外链图片、字体、CSS 仍需其资源可用，只有一并内联的资源才随文件携带。自动回写、协作与私有审阅、直接下载 PDF/PPTX 需要上述本地服务；导出不依赖外部转换网站。
 
 ## 文字测量与适配
 
@@ -98,7 +118,7 @@ npm test
 
 AI 从 [AGENTS.md](AGENTS.md) 进入 [开发流程](.harness/index.md)，长期知识保存在 [项目 Wiki](.project-wiki/index.md)。未经核实的材料先进入 [raw/](raw/README.md)。
 
-[GitHub 仓库](https://github.com/TaoEF/design-canvas) · [开发与发布看板](https://github.com/users/TaoEF/projects/4) · [发布管理约定](GITHUB-PROJECT-MANAGEMENT.md)
+[GitHub 仓库](https://github.com/TaoEF/HTML-PPT-Canvas) · [HTML-PPT-Canvas Development](https://github.com/users/TaoEF/projects/4) · [发布管理约定](GITHUB-PROJECT-MANAGEMENT.md)
 
 ```sh
 npm run project:check

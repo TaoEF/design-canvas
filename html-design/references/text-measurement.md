@@ -3,7 +3,10 @@
 Read-only commands for choosing text-box widths and checking saved HTML. They use
 the installed local browser and bundled Pretext. No API key, remote conversion
 service, HTTP endpoint, or editor interaction is required. Use the project's
-normal dependency/browser installation. Run commands from the project root.
+[runtime setup](runtime.md) for dependencies and the browser. Run commands from
+the complete source root, not the installed skill directory. Reuse current DOM
+measurements when they already answer the question; use candidate prediction
+for text not yet rendered, rather than measuring the same facts twice.
 
 ## Stable contract (v1)
 

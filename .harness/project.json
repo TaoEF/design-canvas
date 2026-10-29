@@ -1,13 +1,13 @@
 {
-  "name": "Design Canvas / HTML Design",
+  "name": "HTML-PPT-Canvas",
   "capabilities": [
     "ai-wiki",
     "github"
   ],
   "github": {
-    "repository": "TaoEF/design-canvas",
-    "url": "https://github.com/TaoEF/design-canvas",
-    "visibility": "private",
+    "repository": "TaoEF/HTML-PPT-Canvas",
+    "url": "https://github.com/TaoEF/HTML-PPT-Canvas",
+    "visibility": "public",
     "defaultBranch": "main",
     "integrationBranch": "main",
     "projectOwner": "TaoEF",

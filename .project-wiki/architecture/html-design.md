@@ -6,7 +6,7 @@ owners:
   - html-design/src/
   - html-design/server.mjs
   - html-design/build.mjs
-updated: 2026-10-28
+updated: 2026-10-29
 sources:
   - path: PRODUCT.md
     status: current
@@ -18,6 +18,10 @@ sources:
     status: current
   - path: package.json
     status: current
+  - path: html-design/SKILL.md
+    status: current
+  - path: html-design/references/runtime.md
+    status: current
 related:
   - module.editor
   - contract.document-collaboration
@@ -26,11 +30,11 @@ related:
 confidence: high
 ---
 
-# HTML Design 架构
+# HTML-PPT-Canvas 架构
 
 ## Summary
 
-人与 AI 协作的自包含 HTML 画板。离线可编辑并下载 HTML；本地 Node 服务提供写回、编辑权协调和 PDF/PPTX 导出。当前是桌面浏览器优先的本地工具。
+人与 AI 协作的 HTML 画板，显示品牌为 HTML-PPT-Canvas，技能标识为 html-ppt-canvas；物理 html-design/ 路径、DOM 属性、CLI 路径与 Wiki ID 保持兼容。内嵌编辑器可离线普通编辑并下载 HTML，外链资源仍需可用；本地 Node 服务提供写回、编辑权协调、AI 审阅和 PDF/PPTX 导出。当前是桌面浏览器优先的本地工具。
 
 
 ## Source Of Truth
@@ -45,7 +49,9 @@ confidence: high
 
 ## Workflows
 
-运行 `npm start` 后打开示例；源码改动运行 `npm run build`，文档内嵌脚本通过协作交接单独升级。当前集成分支和 GitHub 对象见 `.harness/project.json`。
+安装技能使用标准 skills CLI（Node22.20+），不安装 Node、本项目依赖或服务。已安装 skill 目录只提供技能资源，不是完整源码根；优先复用匹配源码，否则克隆公开 TaoEF/HTML-PPT-Canvas 仓库到新目录，再在含根 package.json/package-lock.json 的目录 `npm ci`（运行时Node20+）。完整安装、浏览器和端口步骤见 `html-design/references/runtime.md`。
+
+运行 `npm start` 后打开示例。新设计须位于实际服务根目录内；非默认端口须给 CLI 设置相同 HTML_DESIGN_ORIGIN，不能双服务写同根。源码改动运行 `npm run build`，文档内嵌脚本通过协作交接单独升级。当前集成分支和 GitHub 对象见 `.harness/project.json`。
 
 
 ## Failure Modes
@@ -60,4 +66,4 @@ confidence: high
 
 ## Open Questions
 
-测试服、正式服、分发格式及首个正式版本尚未定义；不得从 GitHub 初次导入推断已发布。
+公开源码与标准 Skill 安装入口不代表已部署测试服或正式服；首个正式版本及兼容性支持矩阵尚未定义。
