@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { chromium } from 'playwright';
 import { browserOptions } from './export.mjs';
+import { createRequire } from 'node:module';
 import { appendQaIssue } from './src/qa-result.js';
 
 export function validateTextRequest(input) {
@@ -32,7 +33,7 @@ export async function measureDocumentText({ mode, input, html = '<!doctype html>
   let blockedNavigation = false;
   try {
     signal?.throwIfAborted();
-    const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1, acceptDownloads: false, javaScriptEnabled: false });
+    const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1, acceptDownloads: false, javaScriptEnabled: mode === 'qa' });
     const page = await context.newPage(), resourceErrors = [];
     page.setDefaultTimeout(10000);
     page.on('requestfailed', r => {
@@ -54,6 +55,7 @@ export async function measureDocumentText({ mode, input, html = '<!doctype html>
     await page.goto(url, { waitUntil: 'load', timeout: 30000 });
     if (blockedNavigation || page.url() !== url) throw new Error('Document navigation is not supported during text measurement.');
     await page.emulateMedia({ media: 'screen', reducedMotion: 'reduce' });
+    if (mode === 'qa') await page.evaluate(await readFile(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8'));
     await page.evaluate(await readFile(new URL('./text-measure.js', import.meta.url), 'utf8'));
     let timer, result;
     try {

@@ -22,6 +22,10 @@ sources:
     status: current
   - path: html-design/src/qa.js
     status: current
+  - path: html-design/src/contrast.js
+    status: current
+  - path: html-design/contrast.test.mjs
+    status: current
   - path: html-design/src/qa-result.js
     status: current
   - path: html-design/saved-file.mjs
@@ -61,7 +65,13 @@ measure 输入纯文本、字体、行高与候选内容宽度；check 扫描保
 
 `qa.mjs check` 在同一次浏览器准备和文字 check 上增补实际 Range/字素行诊断、可见对象越界和图片解码检查。与 export-cli 共用 saved-file.mjs 的普通文件/32MiB/单快照读取及临时只读资源边界；不读未保存 DOM，不申请编辑权或写回。schemaVersion1、英文规则码/有界事实、SHA-256 来源、CSS px、覆盖/截断/豁免计数与0/2/1退出码见 references/qa.md。旧 text.mjs measure/check 字段和退出码保持。
 
-实际软折行才参与末行孤汉字（含结束标点）、单标点孤行与禁则行首/行尾检测，显式br/保留换行独立分段。复杂变换、竖排/多栏（column-count或column-width，包括适用后代）、混合字号/基线或不可靠Range明确不支持，不用预测替代事实。data-qa-ignore仅豁免具体观察规则；ID、资源失败、隐藏/不支持覆盖与扫描超限不可豁免为通过。QA标识最多256 UTF-16单元，过长目标/裁切祖先ID返回null和ID_INVALID，不截短成定位符。每条诊断追加前同时限制500条与128KiB issue JSON字节，裁切证据最多32层；省略项标为truncated/incomplete，合法ID保持原值。QA来源路径4096单元、错误文案512单元，连同元数据输出小于160KiB；旧text接口不套用这些新增边界。没有整体审美评分、自动修复、commit门禁或定位UI；#19已衔接旋转元素实际BCR的页边界检查；旋转文字逐行仍为LINE_UNSUPPORTED覆盖，不猜测禁则。#6后续需衔接裁切边界。
+实际软折行才参与末行孤汉字（含结束标点）、单标点孤行与禁则行首/行尾检测，显式br/保留换行独立分段。复杂变换、竖排/多栏（column-count或column-width，包括适用后代）、混合字号/基线或不可靠Range明确不支持，不用预测替代事实。data-qa-ignore仅豁免具体观察规则；ID、资源失败、隐藏/不支持覆盖与扫描超限不可豁免为通过。QA标识最多256 UTF-16单元，过长目标/裁切祖先ID返回null和ID_INVALID，不截短成定位符。每条诊断追加前同时限制500条与128KiB issue JSON字节，裁切证据最多32层；省略项标为truncated/incomplete，合法ID保持原值。QA来源路径4096单元、错误文案512单元，连同元数据输出小于160KiB；旧text接口不套用这些新增边界。没有整体审美评分、自动修复、commit门禁或定位UI；#19已衔接旋转元素实际BCR的页边界检查；旋转文字逐行仍为LINE_UNSUPPORTED覆盖，不猜测禁则。#6已按真实裁切/内部图片几何校验，只有受支持实际clip才豁免预期内部越界。
+
+## 保存快照的文字对比度
+
+#33在同一次QA浏览器准备中独立运行固定本地axe-core4.10.3的color-contrast规则，不受TEXT_UNSUPPORTED/LINE_UNSUPPORTED阻断。普通文字AA4.5，大字AA3；判定用未缩放设计尺寸与引擎未舍入分类。白字白底1:1保留incomplete/possible-same-color，白字黄底按实际比值报告。复杂图片/渐变/混合/遮挡、SVG/生成文字或无引擎报告均明确未确认，不自建颜色猜测。独立contrast覆盖区分checked/low/unverified/hidden/inapplicable/unmarked和截断；真实文字item可共享所属data-el定位，ID/证据仍受现有上限约束。
+
+仅QA的隔离context允许JavaScript调度可信axe（false下其异步调度不会完成）；响应头CSP仍强制script-src none/object-src none/frame-src none，并保留导航拦截，稿件inline/external/module/event-handler/javascript URL/内嵌frame不运行，内容meta CSP不能放宽响应头。旧measure/check继续javaScriptEnabled:false。引擎来自npm ci的生产依赖，失败/超时不能返回clean。contrast库存上限500文字item/100000字符/2000元素，issues共享500条/128KiB与30秒扫描预算。只有确定TEXT_LOW_CONTRAST可显式豁免并计数，未知覆盖不可豁免；字段与原因见references/qa.md。
 
 ## Workflows
 

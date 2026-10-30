@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@chenglou/pretext": "1.0.0",
+    "axe-core": "4.10.3",
     "jszip": "^3.10.1",
     "parse5": "8.0.0",
     "pdf-lib": "1.17.1",
