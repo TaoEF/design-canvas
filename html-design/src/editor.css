@@ -646,7 +646,8 @@ button.primary:hover:not(:disabled) {
   white-space: normal;
   text-align: left;
 }
-.modal {
+.modal,
+.help-dialog {
   position: fixed;
   inset: 0;
   z-index: 2147483647;
@@ -955,7 +956,8 @@ textarea {
   .footer .fit span {
     display: none;
   }
-  .modal {
+  .modal,
+.help-dialog {
     padding: 10px;
   }
   .mh .hint {
@@ -1034,3 +1036,22 @@ button[aria-disabled=true] { opacity:.45; cursor:default; }
 .crop-panel{position:fixed;z-index:70;width:286px;max-width:calc(100vw - 16px);padding:14px;background:#fff;color:#222;border:1px solid #ddd;border-radius:12px;box-shadow:0 6px 24px #0002;font:13px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;box-sizing:border-box}
 .crop-heading,.crop-controls,.crop-actions{display:flex;align-items:center;gap:8px}.crop-heading{justify-content:space-between;margin-bottom:12px}.crop-heading span{font-size:12px;color:#777}.crop-controls input[type=range]{width:100%;min-width:40px;accent-color:#222}.crop-controls input[type=number]{width:52px;padding:5px;border:1px solid #ddd;border-radius:5px;font:inherit}.crop-actions{justify-content:flex-end;margin-top:12px}.crop-actions button{padding:6px 14px;border:0;border-radius:6px;background:#eee;color:#222;font:inherit;cursor:pointer}.crop-actions .primary{background:#222;color:#fff}
 .crop-controls label,.crop-controls>span{white-space:nowrap;flex:0 0 auto}.crop-controls input[type=range]{width:0;flex:1 1 auto}.crop-actions button:hover{filter:brightness(.95)}.crop-actions button:focus-visible,.crop-controls input:focus-visible{outline:2px solid #1683ff;outline-offset:2px}
+
+.help-dialog { align-items:center; justify-content:center; padding:24px; }
+.help-box { flex:initial; width:min(680px,100%); max-height:100%; }
+.help-box h2 { font-size:16px; margin:0; }
+.help-content { overflow:auto; min-height:0; padding:20px 24px; }
+.help-content:focus-visible { outline:2px solid var(--selection); outline-offset:-3px; }
+.help-note { color:#595959; margin:0 0 22px; line-height:1.7; }
+.help-note:last-child { margin:24px 0 0; }
+.help-section + .help-section { margin-top:24px; }
+.help-section h3 { font-size:13px; margin:0 0 8px; }
+.help-section dl { margin:0; }
+.help-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:16px; align-items:baseline; padding:7px 0; }
+.help-row dd { margin:0; }
+.help-row kbd { font:inherit; font-size:12px; color:#444; background:#f3f3f3; border-radius:4px; padding:3px 6px; white-space:nowrap; }
+@media (max-width:540px) {
+  .help-dialog { padding:12px; }
+  .help-content { padding:18px; }
+  .help-row { grid-template-columns:1fr; gap:5px; }
+}

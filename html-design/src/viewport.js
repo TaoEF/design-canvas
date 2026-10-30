@@ -254,6 +254,7 @@ export function createViewport({
   addEventListener(
     "keydown",
     (e) => {
+      if (e.isComposing || e.keyCode===229 || S.composing || ui.querySelector('[aria-modal="true"]:not([hidden])')) return;
       if (S.playing) {
         const key = e.key.toLowerCase(),
           mod = e.ctrlKey || e.metaKey;

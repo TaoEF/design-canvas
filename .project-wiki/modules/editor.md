@@ -21,6 +21,10 @@ sources:
     status: current
   - path: html-design/groups.test.mjs
     status: current
+  - path: html-design/src/shortcuts.js
+    status: current
+  - path: html-design/shortcuts.test.mjs
+    status: current
   - path: html-design/selection.test.mjs
     status: current
   - path: html-design/src/guides.js
@@ -140,3 +144,7 @@ crop.js 负责有限 cover/pan/resize 数学和裁切会话。有效操作才将
 裁切标记本身不证明几何可靠。共用cropGeometry读取真实clip、content-box、内图尺寸/方向/均匀scale/object-position/translate与实际中心；QA只在契约成立时豁免内部预期越界，否则报GEOMETRY_UNSUPPORTED并保持不完整覆盖；PPTX拒绝该不可靠裁切而不凭标记伪造srcRect。PDF仍按实际DOM显示。
 
 Issue #6 唯一审查修复：已裁切框从Fit重入时，只有有效手势才将内部object-fit切回cover；数值/连续缩放回起点、夹住及未操作完成保留原Fit快照，局部和主Undo/Redo都恢复模式与几何。共享裁切契约只接受居中100%的contain重置；手写contain+zoom/偏心以及内图hidden/collapse明确不可靠，不能被标记豁免成QA clean或在PPTX重新暴露隐藏内容。
+
+## 键盘上下文与帮助
+
+Ctrl/⌘ G、Shift G与菜单共用组合/取消动作及写权限守卫；Ctrl/⌘ A选择当前页或当前组内逻辑根。输入/contenteditable/select、IME composition、源码/帮助、菜单、裁切与缩略图优先保留各自语义，预览不接管浏览器全选。裁切Undo/Redo仍走局部历史，Esc先结束文字或局部操作再退出组合；AI/readonly不能通过键盘绕过权限。`shortcuts.js`仅提供平台显示标签，不另建命令框架。更多→快捷键与帮助为持久对话框，Tab约束在关闭按钮与可滚动说明区，Esc返回可见更多按钮；viewport不在模态或IME组词时启动空格平移。

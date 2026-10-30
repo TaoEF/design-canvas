@@ -40,6 +40,7 @@ import {
       sel: null,
       selection: [],
       group: null,
+      composing: false,
       drag: null,
       text: null,
       range: null,
@@ -102,6 +103,7 @@ import {
       head = $(".head"),
       selBox = $(".sel"),
       tbar = $(".tbar");
+    const helpDialog = $(".help-dialog");
     const modal = $(".modal"),
       ta = $("textarea"),
       fileIn = $(".file"),
@@ -1227,7 +1229,7 @@ import {
         return;
       }
       const multi = S.selection.length > 1 || isGroup(el);
-      ui.querySelectorAll("[data-act=group]").forEach(n => { n.hidden = S.selection.length < 2; n.disabled = !!groupProblem(S.selection); n.title = groupProblem(S.selection) || "组合"; });
+      ui.querySelectorAll("[data-act=group]").forEach(n => { n.hidden = S.selection.length < 2; n.disabled = !!groupProblem(S.selection); n.title = groupProblem(S.selection) || n.getAttribute("aria-label"); });
       ui.querySelectorAll("[data-act=ungroup],[data-act=group-enter]").forEach(n => { n.hidden = !isGroup(el) || S.selection.length !== 1; });
       ui.querySelectorAll("[data-act=group-exit]").forEach(n => { n.hidden = !S.group; });
       const supported = transformable(S.selection);
@@ -1296,15 +1298,38 @@ import {
       } else if (['Enter', ' '].includes(e.key)) { e.preventDefault(); ACTS.rotation($('[data-act=rotation]')); }
     });
 
+    function openHelp() {
+      endText(); closeMenus();
+      if (S.drag?.cancel) { S.drag.cancel(); S.drag=null; }
+      helpDialog.hidden=false;
+      $('[data-act=help-close]').focus();
+    }
+    function closeHelp() {
+      helpDialog.hidden=true;
+      $('[data-act=more]').focus();
+    }
+    addEventListener('compositionstart', () => { S.composing=true; }, true);
+    addEventListener('compositionend', () => { S.composing=false; }, true);
+
     /* ---------- 事件 1：快捷键（最先注册） ---------- */
     addEventListener(
       "keydown",
       (e) => {
+        if (e.isComposing || e.keyCode===229 || S.composing) { if(S.editing || fromUI(e))e.stopImmediatePropagation(); return; }
+        if (!helpDialog.hidden) {
+          if(e.key==='Escape') { e.preventDefault(); closeHelp(); }
+          else if(e.key==='Tab') {
+            const controls=[$('[data-act=help-close]'),$('.help-content')], first=controls[0], last=controls.at(-1);
+            if(e.shiftKey && (ui.activeElement===first || !helpDialog.contains(ui.activeElement))) { e.preventDefault(); last.focus(); }
+            else if(!e.shiftKey && (ui.activeElement===last || !helpDialog.contains(ui.activeElement))) { e.preventDefault(); first.focus(); }
+          }
+          e.stopImmediatePropagation(); return;
+        }
         if (reviewUI?.key(e)) return;
         if (fromUI(e) && ui.activeElement?.matches('.rotate-handle') && ['ArrowLeft','ArrowRight','Enter',' '].includes(e.key)) return;
         if (S.playing) return;
-        if (crop.active && (e.ctrlKey || e.metaKey) && ['z','y'].includes(e.key.toLowerCase())) { e.preventDefault(); e.stopImmediatePropagation(); ui.activeElement?.blur(); crop.history(e.key.toLowerCase() === 'y' || e.shiftKey ? 1 : -1); return; }
-        if (crop.active && e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); ui.activeElement?.blur(); crop.finish(); return; }
+        if (crop.active && (e.ctrlKey || e.metaKey) && ['z','y'].includes(e.key.toLowerCase())) { e.preventDefault(); e.stopImmediatePropagation(); if(canMutate())ui.activeElement?.blur(); runAction(e.key.toLowerCase() === 'y' || e.shiftKey ? 'redo' : 'undo'); return; }
+        if (crop.active && e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); if(canMutate())ui.activeElement?.blur(); runAction('crop-done'); return; }
         if (fromUI(e) && pages.key(e)) return;
         if (
           fromUI(e) &&
@@ -1320,7 +1345,7 @@ import {
             ui.activeElement?.matches("[aria-expanded=true]"))
         )
           return;
-        if (crop.active && e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); crop.finish(true); return; }
+        if (crop.active && e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); runAction('crop-cancel'); return; }
         if (e.key === "Escape" && S.drag?.cancel) {
           S.drag.cancel();
           S.drag = null;
@@ -1328,21 +1353,24 @@ import {
           return;
         }
         const controlKey = e.ctrlKey || e.metaKey,
+          localShortcut = controlKey && ['g','a'].includes(e.key.toLowerCase()),
           zoomKey =
             controlKey && ["=", "+", "-", "_", "0", "1"].includes(e.key);
         if (
-          fromUI(e) &&
           e
             .composedPath()
             .some(
               (n) =>
                 n instanceof Element &&
-                n.matches("input,textarea,[contenteditable=true]"),
+                n.matches("input,textarea,select,[contenteditable]:not([contenteditable=false])"),
             ) &&
           !zoomKey &&
+          !(e.key==="Escape" && S.text && e.composedPath().includes(S.text.el)) &&
           !(controlKey && e.key.toLowerCase() === "s")
         )
           return;
+        if (!modal.hidden && !zoomKey && !(controlKey && e.key.toLowerCase()==='s') && e.key!=='Escape') return;
+        if (localShortcut && (crop.active || !modal.hidden || ui.querySelector('[data-menu]:not([hidden])') || ui.activeElement?.closest('.thumb'))) return;
         const typing = !!S.text,
           mod = e.metaKey || e.ctrlKey,
           k = (e.key || "").toLowerCase(),
@@ -1359,7 +1387,8 @@ import {
           )
         )
           return;
-        const can = S.editing && !typing && el;
+        const writable = canMutate();
+        const can = writable && !typing && el;
         if (k === "escape") {
           if (ui.querySelector("[data-menu]:not([hidden])")) closeMenus();
           else if (!modal.hidden) {
@@ -1372,9 +1401,10 @@ import {
             setEditing(false);
             persistence?.flush().catch(() => {});
           } else closeMenus();
-        } else if (mod && k === "z" && S.editing && !typing)
-          history(e.shiftKey ? 1 : -1);
-        else if (mod && k === "y" && S.editing && !typing) history(1);
+        } else if (mod && !e.altKey && k==='g' && writable && !typing) runAction(e.shiftKey?'ungroup':'group');
+        else if (mod && !e.altKey && k==='a' && writable && !typing) runAction('select-all');
+        else if (mod && k === "z" && writable && !typing) runAction(e.shiftKey ? 'redo' : 'undo');
+        else if (mod && k === "y" && writable && !typing) runAction('redo');
         else if (mod && k === "s") {
           if (sourcePending()) applySource();
           save();
@@ -1396,8 +1426,8 @@ import {
         else if (mod && e.shiftKey && k.startsWith("arrow") && can) {
           const next = directionTarget(S.selection, S.current, e.key, S.group);
           if (next) select([...S.selection, next]);
-        } else if (mod && k === "d" && can) duplicate(el);
-        else if ((k === "delete" || k === "backspace") && can) removeEl(el);
+        } else if (mod && k === "d" && can) runAction("element-duplicate");
+        else if ((k === "delete" || k === "backspace") && can) runAction("element-delete");
         else if (k === "enter" && can && S.selection.length === 1)
           isGroup(el) ? enterGroup(el) : cropImage(el) ? crop.start(el) : startText(el);
         else if (k.startsWith("arrow") && can && !mod)
@@ -1449,6 +1479,7 @@ import {
     );
 
     addEventListener("blur", () => {
+      S.composing=false;
       if (S.drag) {
         if (S.drag.cancel) S.drag.cancel();
         else S.drag.up();
@@ -1769,6 +1800,7 @@ import {
       },
       "text-height": () => adaptText("height"),
       "text-fit": () => adaptText("fit"),
+      "select-all": () => select(S.current ? selectable(S.current,S.group) : []),
       group: groupSelection,
       ungroup: ungroupSelection,
       "group-enter": () => enterGroup(S.sel),
@@ -1810,11 +1842,8 @@ import {
         modal.hidden = true;
         focusedBeforeModal?.focus();
       },
-      help: () =>
-        toast(
-          "空白处拖动框选；Shift 或 Ctrl/⌘＋点击增减选择，Shift＋框选追加，Ctrl/⌘＋Shift＋方向键按方向扩选。多选后可一起拖动、微调、复制和删除；Ctrl/⌘ A 保留原行为。Alt/Option 暂停吸附，Esc 逐级取消。文字角点缩放字号，边点调整文本框；空格＋拖动平移，Ctrl/⌘ ＋ − 0 1 缩放；Ctrl/⌘ Z 撤销，Ctrl/⌘ Shift Z 重做，Ctrl/⌘ D 复制。",
-          10000,
-        ),
+      help: openHelp,
+      "help-close": closeHelp,
     };
     const mutations = new Set([
       "flow",
@@ -1831,13 +1860,22 @@ import {
       "text-height",
       "text-fit",
       "text-align",
-      "group", "ungroup", "group-enter", "group-exit",
+      "group", "ungroup", "group-enter", "group-exit", "select-all",
       "element-duplicate",
       "element-delete",
       "element-front",
       "element-back",
       'rotation-reset',
     ]);
+    function canMutate() { return S.editing && !S.playing && !!persistence?.canEdit(); }
+    function runAction(act, btn) {
+      if (mutations.has(act) && !canMutate()) return false;
+      if (act==='group' && groupProblem(selectionRoots(S.selection))) return false;
+      if (act==='ungroup' && (S.selection.length!==1 || !isGroup(S.sel))) return false;
+      if (crop.active && !["crop-done", "crop-cancel", "undo", "redo", "image-crop", "zoom-in", "zoom-out", "zoom-reset", "zoom-fit"].includes(act)) crop.finish();
+      ACTS[act]?.(btn);
+      return true;
+    }
     ui.addEventListener("click", (e) => {
       const btn = e.target.closest("button");
       if (!btn || btn.disabled) return;
@@ -1852,13 +1890,7 @@ import {
         !["preview", "export", "more", "status", "element-more", "text-layout", "rotation"].includes(act)
       )
         closeMenus();
-      if (
-        mutations.has(act) &&
-        (!persistence?.canEdit() || !S.editing || S.playing)
-      )
-        return;
-      if (crop.active && !["crop-done", "crop-cancel", "undo", "redo", "image-crop", "zoom-in", "zoom-out", "zoom-reset", "zoom-fit"].includes(act)) crop.finish();
-      ACTS[act]?.(btn);
+      runAction(act, btn);
     });
     ui.addEventListener("keydown", (e) => {
       if (e.target.matches('.rotation-angle')) return;

@@ -55,7 +55,7 @@ async function marquee(p, a, b, modifier) {
   if (modifier) await p.keyboard.up(modifier);
 }
 
-test("modifier clicks and directional shortcuts extend selection; Ctrl/Meta A and text editing remain native", async () => {
+test("modifier clicks and directional shortcuts extend selection; canvas Select All and native text editing stay distinct", async () => {
   const p = await open();
   try {
     await zoom(p, 1);
@@ -67,7 +67,7 @@ test("modifier clicks and directional shortcuts extend selection; Ctrl/Meta A an
     assert.equal(await p.locator(".selection-member").count(), 2);
     await p.keyboard.press("Control+a");
     await p.keyboard.press("Meta+a");
-    assert.equal(await p.locator(".selection-member").count(), 2);
+    assert.equal(await p.locator(".selection-member").count(), 3);
     await p.keyboard.press("Escape");
     await p.locator("[data-el=a]").click();
     await p.keyboard.press("Control+Shift+ArrowRight");
