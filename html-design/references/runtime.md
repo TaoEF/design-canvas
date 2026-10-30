@@ -59,4 +59,4 @@ node html-design/collaborate.mjs begin designs/proposal.html
 
 自动回写、跨窗口写权限协调、AI begin/commit 和私有 Undo/Accept，以及编辑器内直接下载 PDF/PPTX 依赖运行中的常驻本地服务；文件 CLI 只需安装好的源码依赖和浏览器，按需启动临时只读资源服务。私有审阅基线留在源码根目录的 `.html-design/reviews/`，不会随下载 HTML 携带；离线下载不能撤回服务端 AI 提交。
 
-保存快照的第一阶段布局诊断可用 `node html-design/qa.mjs check input.html`；它会临时服务输入目录内的资源，不必启动完整编辑服务。AI 工作副本可用原稿 loopback `--base-url`。见 [QA 契约与覆盖边界](qa.md)。
+保存快照的布局与文字对比度诊断可用 `node html-design/qa.mjs check input.html`；它会临时服务输入目录内的资源，不必启动完整编辑服务。AI 工作副本可用原稿 loopback `--base-url`。对比度引擎 axe-core 为源码运行时的锁定本地依赖，由 `npm ci` 安装，不走 CDN；安装 skill 目录本身不是完整 QA 运行时。见 [QA 契约与覆盖边界](qa.md)。

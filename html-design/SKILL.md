@@ -160,7 +160,7 @@ AI 经协作 `commit` 后，待审阅页底显示「放弃｜接受」：悬停�
 
 ## 9. 生成后自检
 
-文字密集或文本框尺寸不确定时，按需使用 [文字测量](references/text-measurement.md) 比较尚未渲染的候选，或检查保存快照；已有当前 DOM 事实时直接依据它局部调整，避免重复测量。保存快照还可按需运行 [布局 QA](references/qa.md)，查看溢出/越界、坏图和实际软折行的避首尾问题及覆盖边界。检查不替代最终浏览器视觉检查，也不提供自动整体设计评价。
+文字密集或文本框尺寸不确定时，按需使用 [文字测量](references/text-measurement.md) 比较尚未渲染的候选，或检查保存快照；已有当前 DOM 事实时直接依据它局部调整，避免重复测量。保存快照还可按需运行 [布局 QA](references/qa.md)，查看溢出/越界、坏图、实际软折行的避首尾及文字对比度；对比度独立于布局支持，需同时查看未确认/同色提示与覆盖边界。检查不替代最终浏览器视觉检查，也不提供自动整体设计评价。
 
 - [ ] 有 `<meta charset="utf-8">`、`<main data-stage>`，`<script data-editor>` 放在 body 最后
 - [ ] 每页是 `section[data-artboard][data-title][data-mode="flow"]`，编号唯一
@@ -178,7 +178,7 @@ AI 经协作 `commit` 后，待审阅页底显示「放弃｜接受」：悬停�
 
 ## 已知限制
 
-当前已提供文字适配、只读文字检查与第一阶段布局 QA（含可靠实际软折行的避首尾检测）；整体 DesignQA、编辑器反馈 UI 和 AI commit 自动 QA 反馈仍在 [Issue #7 规划](https://github.com/TaoEF/dom-slides/issues/7)。图片已支持按需迁移的框/图裁切、拖图取景、缩放、框边角调整与可撤销会话；布局、变换及导出限制见[操作参考](references/editor-controls.md)。Recharts 图表引擎、调色板与图片色彩语义分析尚未交付。
+当前已提供文字适配、只读文字检查与布局与文字对比度 QA（含可靠实际软折行的避首尾检测；复杂背景明确未确认）；整体 DesignQA、编辑器反馈 UI 和 AI commit 自动 QA 反馈仍在 [Issue #7 规划](https://github.com/TaoEF/dom-slides/issues/7)。图片已支持按需迁移的框/图裁切、拖图取景、缩放、框边角调整与可撤销会话；布局、变换及导出限制见[操作参考](references/editor-controls.md)。Recharts 图表引擎、调色板与图片色彩语义分析尚未交付。
 
 - 插入的图片会以 base64 写进 HTML，图片多的话文件会变大。
 - 在“源码”里应用修改时，新加的 `<script>` 不会马上运行，要保存后重新打开。

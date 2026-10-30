@@ -3,6 +3,7 @@ import { cropGeometry } from './crop-geometry.js';
 // Read-only facts from the prepared document; no prediction or repair is applied.
 import { QA_OUTPUT, usableQaId, appendQaIssue } from './qa-result.js';
 import { elementGeometry } from './geometry.js';
+import { checkContrast } from './contrast.js';
 const LIMITS = { elements: 2000, texts: 500, graphemes: 100000, perText: 20000, issues: 500 };
 const round = v => Math.round(v * 1000) / 1000;
 const START = /^[、。，．！？：；）〕］｝〉》」』】〗〙〛’”％‰…]/u;
@@ -197,6 +198,8 @@ export async function checkVisualDocument({ boards, candidates, textResult }) {
       }
     }
   }
+  const contrastIncomplete = await checkContrast({ boards, coverage, emit, output });
+  incomplete ||= contrastIncomplete;
   if (truncated) emit('SCAN_LIMIT', null, null, { limits: LIMITS });
   truncated ||= output.truncated;
   return { schemaVersion: 1, status: issues.length || incomplete || truncated ? 'issues' : 'ok', units: 'css-px',
