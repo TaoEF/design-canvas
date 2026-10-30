@@ -17,6 +17,10 @@ sources:
     status: current
   - path: html-design/src/selection.js
     status: current
+  - path: html-design/src/groups.js
+    status: current
+  - path: html-design/groups.test.mjs
+    status: current
   - path: html-design/selection.test.mjs
     status: current
   - path: html-design/src/guides.js
@@ -90,6 +94,14 @@ confidence: high
 `guides.js` 在现有边缘/中心对齐上增加水平、垂直等距居中与相邻间距延续。候选使用实际 BCR 的画布坐标，相关对象须有共同正交投影和非负间隙，只取局部相邻对象；画板不作为重复间隔对象。第三个可见对象侵入任一候选间隔时拒绝该候选，包括跨过参考对象边缘的重叠对象，不能过滤掉阻挡物后向远处寻找参考间隔。排除选中对象、自身祖先/后代、其他页及隐藏/透明祖先内的对象，多选使用整体外框。每轴取最小修正量，平局保持原边缘/中心吸附，其他轴修正后失去投影相交时回退原对齐。普通对齐落点同时满足真实等距时仍显示间距反馈；仅检查最终落点，不扩大吸附范围或标注近似但不相等的间距。
 
 吸附范围仍为6屏幕px、Alt/Option绕过；每轴最多一组间距标记，数值为设计像素、仅显示四舍五入整数，不反向量化几何。间距线使用现有翠绿SVG叠加层，数值采用与旋转角度一致的深色圆角底和白字、固定屏幕字体/端点，随缩放刷新，位于Shadow DOM而非正式stage。结束、Escape、pointercancel、切页/失权沿原拖动生命周期清理，单次拖动仍单步Undo。此能力不修改Flex/Grid gap、模式或容器结构，不提供一键分布；旋转对象继续按浏览器轴对齐BCR参与对齐/等距，旋转编辑使用下面的独立局部几何。
+
+## DOM语义群组
+
+当前可编辑对象仍需显式data-el；DOM提供真实布局与文字信息，不自动发现任意未标记元素。groups.js集中解析data-group="1"/data-el/display:contents群组、实际成员根与外框、当前组内逻辑选择。包装无自身盒且不写变换，成员CSS是真值；移动/旋转展开为多根，角点缩放以共同锚点写成员均匀CSS scale并补偿中心，保留原transform/scale/origin，不另存坐标模型。组不提供边点非等比拉伸。
+
+至少两个同页同父、DOM顺序连续的根可组合；保留节点身份和中间空白文本。同步layoutProbe核对当前页原节点的实际盒、computed/pseudo样式、重新建立的文字Range及采样绘制顺序，失败原子恢复并还原未提交的元素序号，不入历史/dirty。移动DOM后旧Range端点会被浏览器调整，不能复用旧Range作为验证真值。普通Grid/Flex不改变成员布局参与关系；不连续对象、特殊内容模型容器及无法保持的结构CSS拒绝。当前渲染等价不承诺未来CSS/媒体查询或内容脚本变更的兼容。
+
+整体单击、逐层双击进入，框选/方向选择/右键统一逻辑边界。Escape先处理drag/crop/menu/modal/text，再退出一层组；切页、源码替换、结束编辑和AI交接清理上下文。组合/取消各一次结构Undo，取消保留变换后CSS，复制重键、删除和清空组合均保留可逆节点身份。保存保留语义DOM，运行时选择上下文不落盘。PPTX复用DOM祖先groupPath，无自身盒的语义组由QA检查结构与实际成员，不伪报隐藏空盒。
 
 ## 旋转与局部几何
 

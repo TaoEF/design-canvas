@@ -1,3 +1,4 @@
+import { isGroup, groupStructureProblem } from './groups.js';
 import { cropGeometry } from './crop-geometry.js';
 // Read-only facts from the prepared document; no prediction or repair is applied.
 import { QA_OUTPUT, usableQaId, appendQaIssue } from './qa-result.js';
@@ -116,6 +117,11 @@ export async function checkVisualDocument({ boards, candidates, textResult }) {
   }
   for (const { board, el } of elements) {
     if (el.hasAttribute('data-el') && (!usableQaId(el.dataset.el) || idCounts.get(el.dataset.el) !== 1)) { incomplete = true; emit('ID_INVALID', board, el, { kind: 'element', length: el.dataset.el.length }, 'error'); }
+    if (isGroup(el)) {
+      const reason=groupStructureProblem(el);
+      if (reason) { incomplete=true; coverage.elements.unsupported++; emit('GEOMETRY_UNSUPPORTED',board,el,{reason}); }
+      continue;
+    }
     if (!visible(el, board)) { incomplete = true; coverage.elements.hidden++; emit('HIDDEN_CONTENT', board, el); continue; }
     const r = el.getBoundingClientRect(), b = board.getBoundingClientRect();
     const cropMarked = el.matches('img[data-crop-image]') && el.parentElement?.matches('[data-crop-frame="1"]');

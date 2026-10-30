@@ -16,3 +16,5 @@
 | 2026-10-29 | Issue #12 同步已实现的审阅、预览页面管理、文字适配与导出边界，新增标准 Skill 安装和完整源码运行环境说明；显示品牌/公开仓库统一 HTML-PPT-Canvas，技能标识 html-ppt-canvas，保留 html-design 技术路径兼容。 |
 
 | 2026-10-29 | Issue #13 按最终命名统一当前产品品牌、公开仓库和技能调用为 dom-slides；更新安装与运行入口，保留 html-design 技术路径、内部标识及历史记录。 |
+
+| 2026-10-30 | Issue #25 增加display:contents语义群组、逐级进入和组变换，CSS/真实成员几何为真值；同步探针保护Grid/Flex与结构CSS，QA检查成员，PPTX复用原生DOM群组。当前对象仍需data-el，自动发现未实现。 |

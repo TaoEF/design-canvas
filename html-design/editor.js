@@ -274,6 +274,73 @@ All trademarks and registered trademarks mentioned herein are the
 property of their respective owners.
  */
 (() => {
+  // html-design/src/groups.js
+  var isGroup = (node) => !!node?.matches?.('[data-group="1"][data-el]');
+  function groupRoots(nodes) {
+    const roots = [...new Set(nodes)].filter((n) => n?.isConnected);
+    const expanded = roots.flatMap((n) => isGroup(n) ? groupRoots([...n.children]) : [n]);
+    return expanded.filter((n) => !expanded.some((other) => other !== n && other.contains(n)));
+  }
+  function objectRect(node) {
+    if (!isGroup(node)) return node.getBoundingClientRect();
+    const rects = groupRoots([node]).filter((n) => n.getClientRects().length && getComputedStyle(n).visibility === "visible").map((n) => n.getBoundingClientRect());
+    if (!rects.length) return new DOMRect();
+    const x = Math.min(...rects.map((r) => r.left)), y = Math.min(...rects.map((r) => r.top));
+    return new DOMRect(x, y, Math.max(...rects.map((r) => r.right)) - x, Math.max(...rects.map((r) => r.bottom)) - y);
+  }
+  function logicalTarget(node, context = null) {
+    let target = node?.closest?.("[data-el]");
+    if (!target || target === context) return null;
+    for (let n = target.parentElement; n && n !== context; n = n.parentElement) if (isGroup(n)) target = n;
+    return target;
+  }
+  function groupProblem(nodes) {
+    if (nodes.length < 2) return "请选择至少两个同一容器内的对象";
+    const parent = nodes[0].parentElement, board = nodes[0].closest("[data-artboard]");
+    if (!board || nodes.some((n) => n.parentElement !== parent || n.closest("[data-artboard]") !== board)) return "只能组合同页、同一父容器内的对象";
+    if (!parent.matches("div,section,article,aside,main,header,footer,nav,figure,figcaption,a")) return "这种容器暂不支持组合";
+    const children = [...parent.children], indices = nodes.map((n) => children.indexOf(n)).sort((a, b) => a - b);
+    if (indices.at(-1) - indices[0] + 1 !== nodes.length) return "请选择顺序相邻的对象，以保留原有绘制顺序";
+    const slice = [...parent.childNodes].slice([...parent.childNodes].indexOf(children[indices[0]]), [...parent.childNodes].indexOf(children[indices.at(-1)]) + 1);
+    if (slice.some((n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim())) return "对象之间含有独立文字，暂不能安全组合";
+    return null;
+  }
+  var boxes = (node) => [...node.getClientRects()].map((r) => [r.x, r.y, r.width, r.height]);
+  var style = (node, pseudo) => {
+    const cs = getComputedStyle(node, pseudo);
+    return [...cs].map((name) => cs.getPropertyValue(name));
+  };
+  function layoutProbe(board, ignored = []) {
+    const nodes = [board, ...board.querySelectorAll("*")].filter((n) => !ignored.includes(n));
+    const facts = nodes.map((node) => ({ node, boxes: boxes(node), style: style(node), pseudo: ["::before", "::after"].map((p) => style(node, p)) }));
+    const walker = document.createTreeWalker(board, NodeFilter.SHOW_TEXT), texts = [];
+    while (walker.nextNode()) {
+      if (!walker.currentNode.textContent.trim() || walker.currentNode.parentElement.closest("style,script")) continue;
+      const range = document.createRange();
+      range.selectNodeContents(walker.currentNode);
+      texts.push({ node: walker.currentNode, boxes: boxes(range) });
+    }
+    const points = facts.flatMap(({ boxes: boxes2 }) => boxes2.flatMap(([x, y, w, h]) => w && h ? [[x + w / 2, y + h / 2], [x + 0.5, y + 0.5], [x + w - 0.5, y + h - 0.5]] : []));
+    const paint = ([x, y]) => document.elementsFromPoint(x, y).filter((n) => nodes.includes(n));
+    const layers = points.map(paint);
+    const sameBoxes = (a, b) => a.length === b.length && a.every((r, i) => r.every((v, j) => Math.abs(v - b[i][j]) < 0.05));
+    return () => facts.every((f) => f.node.isConnected && sameBoxes(f.boxes, boxes(f.node)) && JSON.stringify(f.style) === JSON.stringify(style(f.node)) && JSON.stringify(f.pseudo) === JSON.stringify(["::before", "::after"].map((p) => style(f.node, p)))) && texts.every((t) => {
+      const range = document.createRange();
+      range.selectNodeContents(t.node);
+      return sameBoxes(t.boxes, boxes(range));
+    }) && points.every((p, i) => {
+      const now = paint(p);
+      return now.length === layers[i].length && now.every((n, j) => n === layers[i][j]);
+    });
+  }
+  function groupStructureProblem(group) {
+    if (!isGroup(group)) return null;
+    const cs = getComputedStyle(group);
+    if (cs.display !== "contents" || cs.transform !== "none" || cs.rotate !== "none" || cs.scale !== "none" || cs.translate !== "none" || Number(cs.zoom) !== 1 || cs.filter !== "none" || cs.opacity !== "1" || cs.perspective !== "none" || ["::before", "::after"].some((p) => !["none", "normal", '""'].includes(getComputedStyle(group, p).content)) || [...group.childNodes].some((n) => n.nodeType === Node.ELEMENT_NODE ? !n.hasAttribute("data-el") : n.nodeType === Node.TEXT_NODE && n.textContent.trim()) || !group.children.length)
+      return "组合的CSS或结构不受支持，已保留原样";
+    return [...group.children].map(groupStructureProblem).find(Boolean) || null;
+  }
+
   // html-design/src/crop-geometry.js
   function cropGeometry(frame, geometry) {
     const img = frame?.querySelector(":scope > img[data-crop-image]");
@@ -439,7 +506,7 @@ property of their respective owners.
       if (session.frame) return;
       const img = session.img, g = elementGeometry(img), c = getComputedStyle(img), map = img.computedStyleMap?.();
       if (!map || !g.supported || map.get("width")?.toString() === "auto" && c.position === "absolute" && c.left !== "auto" && c.right !== "auto" || !CSS.supports("overflow-clip-margin", "content-box") || img.closest("picture") || c.filter !== "none" || c.clipPath !== "none" || c.maskImage !== "none" || c.content !== "normal") throw new Error("此图片的 CSS 暂不支持安全裁切，已保留原样");
-      const peers = [...img.closest("[data-artboard]").querySelectorAll("[data-el]")], boxes = peers.map((n) => n.getBoundingClientRect());
+      const peers = [...img.closest("[data-artboard]").querySelectorAll("[data-el]")], boxes2 = peers.map((n) => n.getBoundingClientRect());
       const before = attrs(img), frame = document.createElement("span");
       for (const k of props) frame.style.setProperty(k, map.get(k)?.toString() || c.getPropertyValue(k), "important");
       if (c.display === "inline") frame.style.setProperty("display", "inline-block", "important");
@@ -460,7 +527,7 @@ property of their respective owners.
       img.style.setProperty("--crop-x", "50%");
       img.style.setProperty("--crop-y", "50%");
       const after = peers.map((n) => n === img ? frame.getBoundingClientRect() : n.getBoundingClientRect());
-      const valid = after.every((r, i) => ["x", "y", "width", "height"].every((k) => Math.abs(r[k] - boxes[i][k]) < 0.6)) && cropGeometry(frame, elementGeometry).supported;
+      const valid = after.every((r, i) => ["x", "y", "width", "height"].every((k) => Math.abs(r[k] - boxes2[i][k]) < 0.6)) && cropGeometry(frame, elementGeometry).supported;
       if (!valid) {
         frame.before(img);
         frame.remove();
@@ -679,7 +746,7 @@ property of their respective owners.
   }
 
   // html-design/src/editor.css
-  var editor_default = ':host {\n  all: initial;\n  --paper: #fff;\n  --workspace: #f2f2f2;\n  --hover: #ededed;\n  --active: #e4e4e4;\n  --ink: #202020;\n  --muted: #646464;\n  --line: #e7e7e7;\n  --selection: #258bff;\n  --guide: #10b981;\n  --radius: 8px;\n  --nav: 170px;\n  --head: 52px;\n  --foot: 40px;\n  font:\n    13px/1.35 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    "PingFang SC",\n    sans-serif;\n  color: var(--ink);\n  color-scheme: light;\n}\n* {\n  box-sizing: border-box;\n}\n[hidden] {\n  display: none !important;\n}\n::selection {\n  background: #d5d5d5;\n  color: #171717;\n}\nbutton,\ninput,\nselect,\ntextarea {\n  font: inherit;\n  color: inherit;\n}\nbutton {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 7px;\n  min-width: 32px;\n  height: 32px;\n  padding: 0 9px;\n  border: 0;\n  border-radius: var(--radius);\n  background: transparent;\n  cursor: pointer;\n  white-space: nowrap;\n  line-height: 1.2;\n}\nbutton:hover:not(:disabled) {\n  background: var(--hover);\n}\nbutton[aria-pressed="true"] {\n  background: var(--active);\n}\nbutton:disabled {\n  opacity: 0.35;\n  cursor: default;\n}\nbutton:focus-visible,\ninput:focus-visible,\nselect:focus-visible,\n[role="button"]:focus-visible {\n  outline: 2px solid var(--selection);\n  outline-offset: 2px;\n}\nbutton.primary {\n  background: #202020;\n  color: #fff;\n}\nbutton.primary:hover:not(:disabled) {\n  background: #3c3c3c;\n}\n.icon {\n  display: block;\n  flex-shrink: 0;\n  pointer-events: none;\n}\n.icon-only {\n  width: 32px;\n  padding: 0;\n}\n.head {\n  position: fixed;\n  inset: 0 0 auto;\n  height: var(--head);\n  z-index: 2147483647;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 20px;\n  padding: 0 16px;\n  background: var(--paper);\n}\n.grp {\n  display: flex;\n  align-items: center;\n  gap: 3px;\n  min-width: 0;\n}\n.document {\n  flex: 1;\n  gap: 9px;\n}\n.document-title {\n  min-width: 0;\n  max-width: 260px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-weight: 550;\n}\n.save-state {\n  min-width: 0;\n  max-width: 155px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  justify-content: flex-start;\n  white-space: nowrap;\n  color: var(--muted);\n  font-size: 11px;\n  padding: 0 5px;\n}\n.save-state .state-text {\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.save-state .icon {\n  width: 14px;\n  height: 14px;\n}\n.tools {\n  flex-shrink: 0;\n}\n.layout-toggle {\n  margin: 0 7px;\n}\n.layout-toggle button {\n  gap: 5px;\n}\n.done-button {\n  background: var(--hover);\n}\n.actions {\n  flex: 1;\n  justify-content: flex-end;\n}\n.group-gap {\n  margin-left: 13px;\n}\n.view-seg {\n  display: flex;\n  align-items: center;\n  gap: 0;\n}\n.view-seg button {\n  border-radius: 7px;\n}\n.view-seg .fullscreen {\n  padding-inline: 6px;\n  min-width: 26px;\n}\n.view-seg .fullscreen .icon {\n  width: 16px;\n  height: 16px;\n}\n.nav {\n  position: fixed;\n  left: 0;\n  top: var(--head);\n  bottom: 0;\n  width: var(--nav);\n  z-index: 2147483645;\n  display: flex;\n  flex-direction: column;\n  background: #f8f8f8;\n}\n.nav-head {\n  height: 47px;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 13px 0 20px;\n  flex-shrink: 0;\n}\n.nav-head strong {\n  font-size: 12px;\n  font-weight: 550;\n  color: var(--muted);\n}\n.thumb-list {\n  flex: 1;\n  min-height: 0;\n  overflow: auto;\n  padding: 6px 12px 24px;\n  scrollbar-width: thin;\n  scrollbar-color: #cecece transparent;\n  overscroll-behavior: contain;\n}\n.thumb {\n  position: relative;\n  margin-bottom: 18px;\n  border-radius: 7px;\n}\n.thumb-main {\n  outline: 0;\n  cursor: pointer;\n  position: relative;\n}\n.frame {\n  position: relative;\n  width: 146px;\n  overflow: hidden;\n  background: white;\n  border-radius: 3px;\n  box-shadow: 0 0 0 1px #dedede;\n}\n.frame iframe {\n  position: absolute;\n  left: 0;\n  top: 0;\n  border: 0;\n  transform-origin: 0 0;\n  pointer-events: none;\n  background: #fff;\n}\n.thumb.active .frame {\n  box-shadow: 0 0 0 1.5px var(--selection);\n}\n.thumb.active .label {\n  color: #171717;\n}\n.thumb-main:hover .frame {\n  box-shadow: 0 0 0 1.5px #8a8a8a;\n}\n.thumb-main:focus-visible .frame {\n  outline: 2px solid var(--selection);\n  outline-offset: 3px;\n}\n.label {\n  padding: 8px 28px 0 2px;\n  color: #666;\n  font-size: 11px;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  line-height: 16px;\n}\n.thumb-more {\n  position: absolute;\n  right: 0;\n  bottom: -4px;\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  opacity: 0;\n  background: #f8f8f8;\n}\n.thumb:hover .thumb-more,\n.thumb:focus-within .thumb-more,\n.thumb.active .thumb-more {\n  opacity: 1;\n}\n.thumb-more .icon {\n  width: 15px;\n  height: 15px;\n}\n.thumb.dragging {\n  opacity: 0.35;\n}\n.thumb.drop-before::before,\n.thumb.drop-after::after {\n  content: "";\n  position: absolute;\n  left: 0;\n  right: 0;\n  height: 2px;\n  background: #333;\n  pointer-events: none;\n}\n.thumb.drop-before::before {\n  top: -10px;\n}\n.thumb.drop-after::after {\n  bottom: -10px;\n}\n.rename-input {\n  width: 100%;\n  height: 25px;\n  padding: 2px 4px;\n  border: 1px solid #999;\n  border-radius: 4px;\n  background: #fff;\n  font-size: 12px;\n}\n.empty-list {\n  font-size: 12px;\n  color: var(--muted);\n  padding: 10px 5px;\n  line-height: 1.7;\n}\n.footer {\n  position: fixed;\n  bottom: 0;\n  left: var(--nav);\n  right: 0;\n  height: var(--foot);\n  z-index: 2147483645;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 12px;\n  background: #fff;\n  gap: 14px;\n}\n.footer button {\n  height: 28px;\n  min-width: 28px;\n  padding: 0 5px;\n}\n.page-controls {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  min-width: 0;\n}\n.pageno {\n  font-size: 12px;\n  color: #555;\n  font-variant-numeric: tabular-nums;\n  white-space: nowrap;\n  text-align: center;\n  min-width: 46px;\n}\n.page-title {\n  max-width: 260px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-size: 12px;\n  color: #666;\n  margin-left: 9px;\n  justify-content: flex-start;\n}\n.page-title:disabled {\n  opacity: 1;\n}\n.zoom {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n}\n.zoom .zv {\n  min-width: 49px;\n  font-size: 12px;\n  font-variant-numeric: tabular-nums;\n}\n.zoom .fit {\n  margin-left: 7px;\n}\n.footer .icon {\n  width: 16px;\n  height: 16px;\n}\n.tbar {\n  --hover: #353535;\n  --active: #4a4a4a;\n  --muted: #d0d0d0;\n  position: fixed;\n  left: calc(var(--nav) + (100vw - var(--nav)) / 2);\n  top: calc(var(--head) + 10px);\n  transform: translateX(-50%);\n  z-index: 2147483646;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 5px 6px;\n  background: #202020;\n  color: #f8f8f8;\n  border-radius: 10px;\n  box-shadow: 0 3px 16px #00000014;\n  max-width: calc(100vw - var(--nav) - 24px);\n}\n.text-tools,\n.image-tools,\n.object-tools {\n  display: flex;\n  align-items: center;\n  gap: 3px;\n}\n.tbar .seg { background: #353535; }\n.tbar .seg button[aria-pressed="true"] { background: #555; color: #fff; box-shadow: none; }\n.image-tools > [data-act="image-replace"] { font-size: 12px; font-weight: 400; gap: 5px; }\n.tbar .color-control .color-swatch { box-shadow: 0 0 0 1px #ffffff90; }\n.tbar .fs {\n  width: 52px;\n  height: 29px;\n  background: #383838;\n  border: 0;\n  border-radius: 5px;\n  padding: 0 4px;\n  text-align: center;\n  font-variant-numeric: tabular-nums;\n  appearance: textfield;\n}\n.fs::-webkit-inner-spin-button {\n  appearance: none;\n}\n.color-control { position: relative; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:7px; cursor:pointer; }\n.color-control:hover { background:var(--hover); }\n.color-control input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }\n.color-control .color-swatch {\n  display: block;\n  width: 19px;\n  height: 19px;\n  border-radius: 50%;\n  background: currentColor;\n  box-shadow: inset 0 0 0 1px #0002;\n}\n.add-text { gap: 0; width: 36px; }\n.add-text .icon:first-child { width: 12px; height: 12px; }\n.add-text .icon:last-child { width: 17px; height: 17px; }\n.menu-panel[data-menu="more"], .menu-panel[data-menu="element"], .menu-panel[data-menu="page"] { width: 190px; min-width: 190px; }\n.seg {\n  display: flex;\n  padding: 2px;\n  border-radius: 7px;\n  background: #f3f3f3;\n}\n.seg button {\n  height: 27px;\n  font-size: 12px;\n  padding: 0 10px;\n}\n.seg button[aria-pressed="true"] {\n  background: #fff;\n  box-shadow: 0 1px 3px #0001;\n}\n.compact-select {\n  border: 0;\n  background: #f4f4f4;\n  height: 29px;\n  padding: 0 7px;\n  border-radius: 5px;\n  font-size: 12px;\n}\n.tbar .icon {\n  width: 17px;\n  height: 17px;\n}\n.sel {\n  position: fixed;\n  display: none;\n  border: 1px solid var(--selection);\n  box-shadow: 0 0 0 1px #ffffffb3;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.sel.typing {\n  border-style: dashed;\n}\n.sel i {\n  position: absolute;\n  width: 8px;\n  height: 8px;\n  margin: -4px 0 0 -4px;\n  background: #fff;\n  border: 1px solid var(--selection);\n  border-radius: 1px;\n  pointer-events: auto;\n  box-shadow: 0 0 0 1px #ffffff80;\n}\n.sel.typing i {\n  display: none;\n}\n.sel.multiple i {\n  display: none;\n}\n.sel.unsupported i { display:none; }\n.rotate-handle {\n  position:fixed; width:24px; min-width:24px; height:24px; padding:4px; margin:-12px;\n  border:1px solid var(--selection); border-radius:50%; background:var(--paper);\n  color:var(--selection); z-index:2147483645; cursor:grab;\n  box-shadow:0 0 0 1px #ffffff80;\n}\n.rotate-handle .icon { width:14px; height:14px; }\n.rotate-handle:active { cursor:grabbing; }\n.rotation-feedback {\n  position:fixed; padding:3px 6px; border-radius:5px; background:#202020;\n  color:#fff; font-size:11px; font-variant-numeric:tabular-nums;\n  pointer-events:none; z-index:2147483645;\n}\n.rotation-panel label { display:flex; align-items:center; gap:6px; margin:4px 6px 8px; }\n.rotation-angle { width:80px; height:28px; border:1px solid var(--line); border-radius:5px; padding:3px 6px; }\n.rotation-multiple { margin:4px 6px; font-size:12px; color:var(--muted); line-height:1.5; }\n.selection-member {\n  position: fixed;\n  border: 1px dashed var(--selection);\n  box-shadow: 0 0 0 1px #ffffffb3;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.marquee {\n  position: fixed;\n  border: 1px solid var(--selection);\n  background: #258bff18;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.selection-count {\n  padding: 0 7px;\n  color: var(--muted);\n  font-size: 12px;\n  white-space: nowrap;\n}\n.guides {\n  position: fixed;\n  left: var(--nav);\n  top: var(--head);\n  width: calc(100vw - var(--nav));\n  height: calc(100vh - var(--head) - var(--foot));\n  overflow: hidden;\n  pointer-events: none;\n  z-index: 2147483643;\n  fill: none;\n}\n.guide-halo {\n  stroke: #ffffffb3;\n  stroke-width: 3px;\n}\n.guide-line {\n  stroke: var(--guide);\n  stroke-width: 1px;\n}\n.guide-distance-bg { fill: #202020; }\n.guide-distance {\n  fill: #fff;\n  stroke: none;\n  font-family: inherit;\n  font-size: 11px;\n  font-variant-numeric: tabular-nums;\n}\n:host([data-nav-hidden]) .guides {\n  left: 0;\n  width: 100vw;\n}\n.sel i::before {\n  content: "";\n  position: absolute;\n  inset: -5px;\n}\n[data-h="nw"] {\n  left: 0;\n  top: 0;\n  cursor: nwse-resize;\n}\n[data-h="n"] {\n  left: 50%;\n  top: 0;\n  cursor: ns-resize;\n}\n[data-h="ne"] {\n  left: 100%;\n  top: 0;\n  cursor: nesw-resize;\n}\n[data-h="e"] {\n  left: 100%;\n  top: 50%;\n  cursor: ew-resize;\n}\n[data-h="se"] {\n  left: 100%;\n  top: 100%;\n  cursor: nwse-resize;\n}\n[data-h="s"] {\n  left: 50%;\n  top: 100%;\n  cursor: ns-resize;\n}\n[data-h="sw"] {\n  left: 0;\n  top: 100%;\n  cursor: nesw-resize;\n}\n[data-h="w"] {\n  left: 0;\n  top: 50%;\n  cursor: ew-resize;\n}\n.menu-panel {\n  position: fixed;\n  z-index: 2147483647;\n  min-width: 180px;\n  max-width: min(330px, calc(100vw - 20px));\n  max-height: 70vh;\n  overflow: auto;\n  padding: 6px;\n  border-radius: 10px;\n  background: white;\n  box-shadow: 0 6px 28px #00000024;\n  font-size: 12px;\n}\n.menu-panel button {\n  width: 100%;\n  justify-content: flex-start;\n  height: 34px;\n  padding: 0 9px;\n  border-radius: 6px;\n  font-size: 12px;\n}\n.menu-panel .icon {\n  width: 16px;\n  height: 16px;\n}\n.menu-caption {\n  font-size: 11px;\n  color: #6a6a6a;\n  padding: 8px 9px 4px;\n}\n.menu-separator {\n  height: 1px;\n  background: #eee;\n  margin: 5px 7px;\n}\n.status-detail {\n  font-size: 12px;\n  line-height: 1.65;\n  white-space: normal;\n  margin: 6px 8px;\n  color: #555;\n  max-width: 265px;\n}\n.status-panel button {\n  height: auto;\n  min-height: 34px;\n  white-space: normal;\n  text-align: left;\n}\n.modal {\n  position: fixed;\n  inset: 0;\n  z-index: 2147483647;\n  background: #0005;\n  display: flex;\n  padding: 36px;\n  font:\n    13px/1.4 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    sans-serif;\n  color: #222;\n}\n.box {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  background: #fff;\n  border-radius: 12px;\n  overflow: hidden;\n  min-width: 0;\n}\n.mh {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  padding: 11px 16px;\n  background: #f6f6f6;\n  flex-wrap: wrap;\n}\n.mh .hint {\n  color: #666;\n  font-size: 11px;\n}\n.mh .sp {\n  flex: 1;\n}\ntextarea {\n  flex: 1;\n  min-height: 0;\n  border: 0;\n  outline: none;\n  resize: none;\n  padding: 18px;\n  font:\n    12px/1.6 ui-monospace,\n    Menlo,\n    Consolas,\n    monospace;\n  white-space: pre;\n  tab-size: 2;\n  caret-color: #222;\n}\n.toast {\n  position: fixed;\n  left: 50%;\n  bottom: 65px;\n  transform: translateX(-50%);\n  max-width: calc(100vw - 40px);\n  padding: 10px 16px;\n  border-radius: 9px;\n  background: #222;\n  color: #fff;\n  font:\n    12px/1.5 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    sans-serif;\n  opacity: 0;\n  transition: opacity 0.15s;\n  pointer-events: none;\n  z-index: 2147483647;\n}\n.toast.show {\n  opacity: 1;\n}\n.empty-canvas {\n  position: fixed;\n  left: var(--nav);\n  right: 0;\n  top: var(--head);\n  bottom: var(--foot);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-direction: column;\n  gap: 14px;\n  color: #666;\n  font-size: 13px;\n}\n.empty-canvas p {\n  margin: 0;\n}\n.empty-canvas > .icon {\n  width: 30px;\n  height: 30px;\n  color: #aaa;\n}\n.play-controls {\n  position: fixed;\n  bottom: 22px;\n  left: 50%;\n  transform: translateX(-50%);\n  z-index: 2147483647;\n  display: flex;\n  align-items: center;\n  gap: 5px;\n  padding: 5px 8px;\n  background: #ffffffed;\n  border-radius: 10px;\n  box-shadow: 0 4px 18px #0002;\n  opacity: 0;\n  transition: opacity 0.15s;\n}\n.play-controls button {\n  height: 31px;\n  min-width: 31px;\n}\n.play-controls.visible,\n.play-controls:hover,\n.play-controls:focus-within {\n  opacity: 1;\n}\n.play-controls .play-title {\n  max-width: 190px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-size: 12px;\n  color: #555;\n  margin: 0 7px;\n}\n.play-controls .pageno {\n  font-size: 12px;\n}\n.play-exit {\n  position: fixed;\n  top: 16px;\n  right: 16px;\n  z-index: 2147483647;\n  background: #fffffff0;\n  color: #222;\n}\n:host([data-playing]) .head,\n:host([data-playing]) .nav,\n:host([data-playing]) .footer,\n:host([data-playing]) .tbar,\n:host([data-playing]) .sel,\n:host([data-playing]) .guides,\n:host([data-playing]) .selection-members,\n:host([data-playing]) .marquee,\n:host([data-playing]) .empty-canvas {\n  display: none !important;\n}\n:host(:not([data-playing])) .play-controls,\n:host(:not([data-playing])) .play-exit {\n  display: none !important;\n}\n:host([data-nav-hidden]) .nav {\n  display: none;\n}\n:host([data-nav-hidden]) .footer {\n  left: 0;\n}\n:host([data-nav-hidden]) .tbar {\n  left: 50%;\n  max-width: calc(100vw - 24px);\n}\n:host([data-nav-hidden]) .empty-canvas {\n  left: 0;\n}\n@media (max-width: 1050px) {\n  .head {\n    gap: 9px;\n    padding: 0 10px;\n  }\n  .document-title {\n    max-width: 140px;\n  }\n  .save-state {\n    max-width: 95px;\n    font-size: 10px;\n  }\n  .group-gap {\n    margin-left: 6px;\n  }\n  .actions {\n    flex: initial;\n  }\n  .document {\n    flex: 1;\n  }\n  .head button {\n    padding-inline: 7px;\n  }\n  .actions .button-label {\n    display: none;\n  }\n}\n@media (max-width: 760px) {\n  :host {\n    --nav: 170px;\n  }\n  .head {\n    gap: 4px;\n  }\n  .document-title {\n    max-width: 100px;\n    font-size: 12px;\n  }\n  .save-state {\n    max-width: 27px;\n  }\n  .save-state .state-text {\n    display: none;\n  }\n  .head .preview-button span,\n  .head .export-label {\n    display: none;\n  }\n  .head .group-gap {\n    margin-left: 2px;\n  }\n  .head .layout-toggle {\n    margin-inline: 3px;\n  }\n  .head .layout-toggle button { padding-inline: 6px; font-size: 11px; }\n  .page-title {\n    max-width: 110px;\n  }\n  .footer {\n    padding: 0 7px;\n  }\n  .tbar {\n    gap: 1px;\n    padding: 4px;\n  }\n  .tbar button {\n    padding-inline: 5px;\n    min-width: 28px;\n  }\n  .nav-head {\n    padding-inline: 12px;\n  }\n}\n@media (max-width: 540px) {\n  :host {\n    --nav: 0px;\n  }\n  .nav {\n    display: none !important;\n  }\n  .footer {\n    left: 0;\n  }\n  .tbar {\n    left: 50%;\n    max-width: calc(100vw - 16px);\n  }\n  .document-title {\n    max-width: 80px;\n  }\n  .head {\n    padding-inline: 6px;\n  }\n  .head button {\n    padding-inline: 5px;\n    min-width: 28px;\n  }\n  .head .document {\n    gap: 2px;\n  }\n  .head .nav-toggle {\n    display: inline-flex;\n  }\n  .head .selection-tool {\n    display: none;\n  }\n  .head .done-button span,\n  .head .preview-button > .icon:last-child {\n    display: none;\n  }\n  :host([data-editing]) .head .preview-button {\n    display: none;\n  }\n  .head .document { flex: 0; gap: 3px; }\n  .head .document-title { display: none; }\n  .head .save-state { width: 22px; min-width: 22px; max-width: 22px; padding: 0; flex-shrink: 0; }\n  .head .tools > [data-act="undo"], .head .tools > [data-act="redo"] { display: none; }\n  .head .actions { flex: initial; }\n  .head [data-act="export"] > .icon:last-child {\n    display: none;\n  }\n  :host([data-mobile-nav]) .nav {\n    display: flex !important;\n    width: 170px;\n    bottom: 40px;\n    box-shadow: 5px 0 20px #0001;\n  }\n  .head .actions {\n    gap: 1px;\n  }\n  .page-title {\n    max-width: 90px;\n  }\n  .footer .fit span {\n    display: none;\n  }\n  .modal {\n    padding: 10px;\n  }\n  .mh .hint {\n    display: none;\n  }\n}\n@media (prefers-reduced-motion: reduce) {\n  * {\n    transition: none !important;\n    scroll-behavior: auto !important;\n  }\n}\n@media print {\n  :host {\n    display: none !important;\n  }\n}\n\n.more-text-formats {\n  display: flex;\n  gap: 4px;\n  padding: 3px 6px;\n}\n.more-text-formats button {\n  width: 32px;\n  padding: 0;\n  justify-content: center;\n}\n:host([data-readonly]) .tools {\n  display: none;\n}\n\n.play-exit:focus-visible {\n  opacity: 1 !important;\n}\n\n/* Experimental text sizing; diagnostics stay inside the editor shadow root. */\n.text-layout-panel { width: 268px; }\n.text-layout-panel strong { display: block; padding: 8px 10px 0; font-weight: 550; }\n.text-layout-status { margin: 8px 10px 12px; max-width: 232px; color: var(--muted); line-height: 1.6; }\n.text-layout-status[data-overflow="true"] { color: #a84c18; }\n\n/* AI review controls live outside the scaled content. */\n.review-actions { position:fixed; z-index:2147483645; display:flex; align-items:center; padding:3px; gap:0; background:var(--paper); border-radius:8px; box-shadow:0 3px 12px #0002; }\n.review-actions button { height:30px; min-width:62px; font-size:12px; border-radius:6px; }\n.review-accept { background:#202020; color:#fff; }\nbutton.review-accept:hover:not(:disabled) { background:#3c3c3c; }\nbutton[aria-disabled=true] { opacity:.45; cursor:default; }\n.review-scope { color:var(--muted); font-size:12px; padding:0 8px; }\n.review-summary { position:fixed; z-index:2147483646; width:280px; background:var(--paper); border-radius:8px; box-shadow:0 5px 20px #0002; }\n.review-summary-bar { display:flex; padding:4px; gap:4px; }\n.review-trigger { flex:1; justify-content:space-between; font-size:12px; }\n.review-trigger .icon { transform:rotate(180deg); }\n.review-trigger[aria-expanded=true] .icon { transform:none; }\n.review-summary-bar .review-accept { height:30px; font-size:12px; }\n.review-panel { padding:10px 12px 4px; overflow:auto; }\n.review-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; }\n.review-message { color:var(--muted); font-size:12px; line-height:1.5; margin:4px 0 10px; }\n.review-item { display:flex; gap:8px; padding:8px 0; border-top:1px solid var(--line); align-items:center; }\n.review-item[data-current] .review-name { font-weight:600; }\n.review-info { flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:4px; }\n.review-name { width:100%; min-width:0; display:flex; justify-content:flex-start; gap:4px; text-align:left; padding:0; font-size:12px; }\n.review-page { flex-shrink:0; white-space:nowrap; }\n.review-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.review-name:disabled { opacity:1; }\n.review-kind { display:inline-block; padding:1px 5px; border-radius:3px; background:var(--hover); font-size:10px; line-height:16px; color:var(--muted); }\n.review-item-actions { display:flex; flex-shrink:0; gap:2px; margin-left:auto; }\n.review-item-actions button { height:28px; padding:0 6px; font-size:12px; }\n.review-before { position:fixed; z-index:2147483643; overflow:hidden; background:var(--workspace); pointer-events:none; }\n.review-projection { position:absolute; overflow:hidden; pointer-events:none; }\n.review-projection iframe { position:absolute; left:0; top:0; border:0; transform-origin:top left; background:white; pointer-events:none; }\n.review-hint { position:fixed; right:16px; bottom:112px; pointer-events:none; z-index:2147483646; font-size:12px; color:var(--muted); background:var(--paper); padding:6px 10px; border-radius:6px; }\n\n/* Crop controls share the existing compact, neutral editor surface. */\n.crop-source{position:fixed;border:1px dashed #16a878;pointer-events:none;z-index:34;box-sizing:border-box;opacity:.75}\n.crop-panel{position:fixed;z-index:70;width:286px;max-width:calc(100vw - 16px);padding:14px;background:#fff;color:#222;border:1px solid #ddd;border-radius:12px;box-shadow:0 6px 24px #0002;font:13px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;box-sizing:border-box}\n.crop-heading,.crop-controls,.crop-actions{display:flex;align-items:center;gap:8px}.crop-heading{justify-content:space-between;margin-bottom:12px}.crop-heading span{font-size:12px;color:#777}.crop-controls input[type=range]{width:100%;min-width:40px;accent-color:#222}.crop-controls input[type=number]{width:52px;padding:5px;border:1px solid #ddd;border-radius:5px;font:inherit}.crop-actions{justify-content:flex-end;margin-top:12px}.crop-actions button{padding:6px 14px;border:0;border-radius:6px;background:#eee;color:#222;font:inherit;cursor:pointer}.crop-actions .primary{background:#222;color:#fff}\n.crop-controls label,.crop-controls>span{white-space:nowrap;flex:0 0 auto}.crop-controls input[type=range]{width:0;flex:1 1 auto}.crop-actions button:hover{filter:brightness(.95)}.crop-actions button:focus-visible,.crop-controls input:focus-visible{outline:2px solid #1683ff;outline-offset:2px}\n';
+  var editor_default = ':host {\n  all: initial;\n  --paper: #fff;\n  --workspace: #f2f2f2;\n  --hover: #ededed;\n  --active: #e4e4e4;\n  --ink: #202020;\n  --muted: #646464;\n  --line: #e7e7e7;\n  --selection: #258bff;\n  --guide: #10b981;\n  --radius: 8px;\n  --nav: 170px;\n  --head: 52px;\n  --foot: 40px;\n  font:\n    13px/1.35 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    "PingFang SC",\n    sans-serif;\n  color: var(--ink);\n  color-scheme: light;\n}\n* {\n  box-sizing: border-box;\n}\n[hidden] {\n  display: none !important;\n}\n::selection {\n  background: #d5d5d5;\n  color: #171717;\n}\nbutton,\ninput,\nselect,\ntextarea {\n  font: inherit;\n  color: inherit;\n}\nbutton {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 7px;\n  min-width: 32px;\n  height: 32px;\n  padding: 0 9px;\n  border: 0;\n  border-radius: var(--radius);\n  background: transparent;\n  cursor: pointer;\n  white-space: nowrap;\n  line-height: 1.2;\n}\nbutton:hover:not(:disabled) {\n  background: var(--hover);\n}\nbutton[aria-pressed="true"] {\n  background: var(--active);\n}\nbutton:disabled {\n  opacity: 0.35;\n  cursor: default;\n}\nbutton:focus-visible,\ninput:focus-visible,\nselect:focus-visible,\n[role="button"]:focus-visible {\n  outline: 2px solid var(--selection);\n  outline-offset: 2px;\n}\nbutton.primary {\n  background: #202020;\n  color: #fff;\n}\nbutton.primary:hover:not(:disabled) {\n  background: #3c3c3c;\n}\n.icon {\n  display: block;\n  flex-shrink: 0;\n  pointer-events: none;\n}\n.icon-only {\n  width: 32px;\n  padding: 0;\n}\n.head {\n  position: fixed;\n  inset: 0 0 auto;\n  height: var(--head);\n  z-index: 2147483647;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 20px;\n  padding: 0 16px;\n  background: var(--paper);\n}\n.grp {\n  display: flex;\n  align-items: center;\n  gap: 3px;\n  min-width: 0;\n}\n.document {\n  flex: 1;\n  gap: 9px;\n}\n.document-title {\n  min-width: 0;\n  max-width: 260px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-weight: 550;\n}\n.save-state {\n  min-width: 0;\n  max-width: 155px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  justify-content: flex-start;\n  white-space: nowrap;\n  color: var(--muted);\n  font-size: 11px;\n  padding: 0 5px;\n}\n.save-state .state-text {\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.save-state .icon {\n  width: 14px;\n  height: 14px;\n}\n.tools {\n  flex-shrink: 0;\n}\n.layout-toggle {\n  margin: 0 7px;\n}\n.layout-toggle button {\n  gap: 5px;\n}\n.done-button {\n  background: var(--hover);\n}\n.actions {\n  flex: 1;\n  justify-content: flex-end;\n}\n.group-gap {\n  margin-left: 13px;\n}\n.view-seg {\n  display: flex;\n  align-items: center;\n  gap: 0;\n}\n.view-seg button {\n  border-radius: 7px;\n}\n.view-seg .fullscreen {\n  padding-inline: 6px;\n  min-width: 26px;\n}\n.view-seg .fullscreen .icon {\n  width: 16px;\n  height: 16px;\n}\n.nav {\n  position: fixed;\n  left: 0;\n  top: var(--head);\n  bottom: 0;\n  width: var(--nav);\n  z-index: 2147483645;\n  display: flex;\n  flex-direction: column;\n  background: #f8f8f8;\n}\n.nav-head {\n  height: 47px;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 13px 0 20px;\n  flex-shrink: 0;\n}\n.nav-head strong {\n  font-size: 12px;\n  font-weight: 550;\n  color: var(--muted);\n}\n.thumb-list {\n  flex: 1;\n  min-height: 0;\n  overflow: auto;\n  padding: 6px 12px 24px;\n  scrollbar-width: thin;\n  scrollbar-color: #cecece transparent;\n  overscroll-behavior: contain;\n}\n.thumb {\n  position: relative;\n  margin-bottom: 18px;\n  border-radius: 7px;\n}\n.thumb-main {\n  outline: 0;\n  cursor: pointer;\n  position: relative;\n}\n.frame {\n  position: relative;\n  width: 146px;\n  overflow: hidden;\n  background: white;\n  border-radius: 3px;\n  box-shadow: 0 0 0 1px #dedede;\n}\n.frame iframe {\n  position: absolute;\n  left: 0;\n  top: 0;\n  border: 0;\n  transform-origin: 0 0;\n  pointer-events: none;\n  background: #fff;\n}\n.thumb.active .frame {\n  box-shadow: 0 0 0 1.5px var(--selection);\n}\n.thumb.active .label {\n  color: #171717;\n}\n.thumb-main:hover .frame {\n  box-shadow: 0 0 0 1.5px #8a8a8a;\n}\n.thumb-main:focus-visible .frame {\n  outline: 2px solid var(--selection);\n  outline-offset: 3px;\n}\n.label {\n  padding: 8px 28px 0 2px;\n  color: #666;\n  font-size: 11px;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  line-height: 16px;\n}\n.thumb-more {\n  position: absolute;\n  right: 0;\n  bottom: -4px;\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  opacity: 0;\n  background: #f8f8f8;\n}\n.thumb:hover .thumb-more,\n.thumb:focus-within .thumb-more,\n.thumb.active .thumb-more {\n  opacity: 1;\n}\n.thumb-more .icon {\n  width: 15px;\n  height: 15px;\n}\n.thumb.dragging {\n  opacity: 0.35;\n}\n.thumb.drop-before::before,\n.thumb.drop-after::after {\n  content: "";\n  position: absolute;\n  left: 0;\n  right: 0;\n  height: 2px;\n  background: #333;\n  pointer-events: none;\n}\n.thumb.drop-before::before {\n  top: -10px;\n}\n.thumb.drop-after::after {\n  bottom: -10px;\n}\n.rename-input {\n  width: 100%;\n  height: 25px;\n  padding: 2px 4px;\n  border: 1px solid #999;\n  border-radius: 4px;\n  background: #fff;\n  font-size: 12px;\n}\n.empty-list {\n  font-size: 12px;\n  color: var(--muted);\n  padding: 10px 5px;\n  line-height: 1.7;\n}\n.footer {\n  position: fixed;\n  bottom: 0;\n  left: var(--nav);\n  right: 0;\n  height: var(--foot);\n  z-index: 2147483645;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 12px;\n  background: #fff;\n  gap: 14px;\n}\n.footer button {\n  height: 28px;\n  min-width: 28px;\n  padding: 0 5px;\n}\n.page-controls {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  min-width: 0;\n}\n.pageno {\n  font-size: 12px;\n  color: #555;\n  font-variant-numeric: tabular-nums;\n  white-space: nowrap;\n  text-align: center;\n  min-width: 46px;\n}\n.page-title {\n  max-width: 260px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-size: 12px;\n  color: #666;\n  margin-left: 9px;\n  justify-content: flex-start;\n}\n.page-title:disabled {\n  opacity: 1;\n}\n.zoom {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n}\n.zoom .zv {\n  min-width: 49px;\n  font-size: 12px;\n  font-variant-numeric: tabular-nums;\n}\n.zoom .fit {\n  margin-left: 7px;\n}\n.footer .icon {\n  width: 16px;\n  height: 16px;\n}\n.tbar {\n  --hover: #353535;\n  --active: #4a4a4a;\n  --muted: #d0d0d0;\n  position: fixed;\n  left: calc(var(--nav) + (100vw - var(--nav)) / 2);\n  top: calc(var(--head) + 10px);\n  transform: translateX(-50%);\n  z-index: 2147483646;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 5px 6px;\n  background: #202020;\n  color: #f8f8f8;\n  border-radius: 10px;\n  box-shadow: 0 3px 16px #00000014;\n  max-width: calc(100vw - var(--nav) - 24px);\n}\n.text-tools,\n.image-tools,\n.object-tools {\n  display: flex;\n  align-items: center;\n  gap: 3px;\n}\n.tbar .seg { background: #353535; }\n.tbar .seg button[aria-pressed="true"] { background: #555; color: #fff; box-shadow: none; }\n.image-tools > [data-act="image-replace"] { font-size: 12px; font-weight: 400; gap: 5px; }\n.tbar .color-control .color-swatch { box-shadow: 0 0 0 1px #ffffff90; }\n.tbar .fs {\n  width: 52px;\n  height: 29px;\n  background: #383838;\n  border: 0;\n  border-radius: 5px;\n  padding: 0 4px;\n  text-align: center;\n  font-variant-numeric: tabular-nums;\n  appearance: textfield;\n}\n.fs::-webkit-inner-spin-button {\n  appearance: none;\n}\n.color-control { position: relative; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:7px; cursor:pointer; }\n.color-control:hover { background:var(--hover); }\n.color-control input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }\n.color-control .color-swatch {\n  display: block;\n  width: 19px;\n  height: 19px;\n  border-radius: 50%;\n  background: currentColor;\n  box-shadow: inset 0 0 0 1px #0002;\n}\n.add-text { gap: 0; width: 36px; }\n.add-text .icon:first-child { width: 12px; height: 12px; }\n.add-text .icon:last-child { width: 17px; height: 17px; }\n.menu-panel[data-menu="more"], .menu-panel[data-menu="element"], .menu-panel[data-menu="page"] { width: 190px; min-width: 190px; }\n.seg {\n  display: flex;\n  padding: 2px;\n  border-radius: 7px;\n  background: #f3f3f3;\n}\n.seg button {\n  height: 27px;\n  font-size: 12px;\n  padding: 0 10px;\n}\n.seg button[aria-pressed="true"] {\n  background: #fff;\n  box-shadow: 0 1px 3px #0001;\n}\n.compact-select {\n  border: 0;\n  background: #f4f4f4;\n  height: 29px;\n  padding: 0 7px;\n  border-radius: 5px;\n  font-size: 12px;\n}\n.tbar .icon {\n  width: 17px;\n  height: 17px;\n}\n.sel {\n  position: fixed;\n  display: none;\n  border: 1px solid var(--selection);\n  box-shadow: 0 0 0 1px #ffffffb3;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.sel.typing {\n  border-style: dashed;\n}\n.sel i {\n  position: absolute;\n  width: 8px;\n  height: 8px;\n  margin: -4px 0 0 -4px;\n  background: #fff;\n  border: 1px solid var(--selection);\n  border-radius: 1px;\n  pointer-events: auto;\n  box-shadow: 0 0 0 1px #ffffff80;\n}\n.sel.typing i {\n  display: none;\n}\n.sel.multiple i {\n  display: none;\n}\n.sel.group i[data-h="n"],.sel.group i[data-h="s"],.sel.group i[data-h="e"],.sel.group i[data-h="w"] { display:none; }\n.sel.unsupported i { display:none; }\n.rotate-handle {\n  position:fixed; width:24px; min-width:24px; height:24px; padding:4px; margin:-12px;\n  border:1px solid var(--selection); border-radius:50%; background:var(--paper);\n  color:var(--selection); z-index:2147483645; cursor:grab;\n  box-shadow:0 0 0 1px #ffffff80;\n}\n.rotate-handle .icon { width:14px; height:14px; }\n.rotate-handle:active { cursor:grabbing; }\n.rotation-feedback {\n  position:fixed; padding:3px 6px; border-radius:5px; background:#202020;\n  color:#fff; font-size:11px; font-variant-numeric:tabular-nums;\n  pointer-events:none; z-index:2147483645;\n}\n.rotation-panel label { display:flex; align-items:center; gap:6px; margin:4px 6px 8px; }\n.rotation-angle { width:80px; height:28px; border:1px solid var(--line); border-radius:5px; padding:3px 6px; }\n.rotation-multiple { margin:4px 6px; font-size:12px; color:var(--muted); line-height:1.5; }\n.selection-member {\n  position: fixed;\n  border: 1px dashed var(--selection);\n  box-shadow: 0 0 0 1px #ffffffb3;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.marquee {\n  position: fixed;\n  border: 1px solid var(--selection);\n  background: #258bff18;\n  pointer-events: none;\n  z-index: 2147483644;\n}\n.selection-count {\n  padding: 0 7px;\n  color: var(--muted);\n  font-size: 12px;\n  white-space: nowrap;\n}\n.guides {\n  position: fixed;\n  left: var(--nav);\n  top: var(--head);\n  width: calc(100vw - var(--nav));\n  height: calc(100vh - var(--head) - var(--foot));\n  overflow: hidden;\n  pointer-events: none;\n  z-index: 2147483643;\n  fill: none;\n}\n.guide-halo {\n  stroke: #ffffffb3;\n  stroke-width: 3px;\n}\n.guide-line {\n  stroke: var(--guide);\n  stroke-width: 1px;\n}\n.guide-distance-bg { fill: #202020; }\n.guide-distance {\n  fill: #fff;\n  stroke: none;\n  font-family: inherit;\n  font-size: 11px;\n  font-variant-numeric: tabular-nums;\n}\n:host([data-nav-hidden]) .guides {\n  left: 0;\n  width: 100vw;\n}\n.sel i::before {\n  content: "";\n  position: absolute;\n  inset: -5px;\n}\n[data-h="nw"] {\n  left: 0;\n  top: 0;\n  cursor: nwse-resize;\n}\n[data-h="n"] {\n  left: 50%;\n  top: 0;\n  cursor: ns-resize;\n}\n[data-h="ne"] {\n  left: 100%;\n  top: 0;\n  cursor: nesw-resize;\n}\n[data-h="e"] {\n  left: 100%;\n  top: 50%;\n  cursor: ew-resize;\n}\n[data-h="se"] {\n  left: 100%;\n  top: 100%;\n  cursor: nwse-resize;\n}\n[data-h="s"] {\n  left: 50%;\n  top: 100%;\n  cursor: ns-resize;\n}\n[data-h="sw"] {\n  left: 0;\n  top: 100%;\n  cursor: nesw-resize;\n}\n[data-h="w"] {\n  left: 0;\n  top: 50%;\n  cursor: ew-resize;\n}\n.menu-panel {\n  position: fixed;\n  z-index: 2147483647;\n  min-width: 180px;\n  max-width: min(330px, calc(100vw - 20px));\n  max-height: 70vh;\n  overflow: auto;\n  padding: 6px;\n  border-radius: 10px;\n  background: white;\n  box-shadow: 0 6px 28px #00000024;\n  font-size: 12px;\n}\n.menu-panel button {\n  width: 100%;\n  justify-content: flex-start;\n  height: 34px;\n  padding: 0 9px;\n  border-radius: 6px;\n  font-size: 12px;\n}\n.menu-panel .icon {\n  width: 16px;\n  height: 16px;\n}\n.menu-caption {\n  font-size: 11px;\n  color: #6a6a6a;\n  padding: 8px 9px 4px;\n}\n.menu-separator {\n  height: 1px;\n  background: #eee;\n  margin: 5px 7px;\n}\n.status-detail {\n  font-size: 12px;\n  line-height: 1.65;\n  white-space: normal;\n  margin: 6px 8px;\n  color: #555;\n  max-width: 265px;\n}\n.status-panel button {\n  height: auto;\n  min-height: 34px;\n  white-space: normal;\n  text-align: left;\n}\n.modal {\n  position: fixed;\n  inset: 0;\n  z-index: 2147483647;\n  background: #0005;\n  display: flex;\n  padding: 36px;\n  font:\n    13px/1.4 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    sans-serif;\n  color: #222;\n}\n.box {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  background: #fff;\n  border-radius: 12px;\n  overflow: hidden;\n  min-width: 0;\n}\n.mh {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  padding: 11px 16px;\n  background: #f6f6f6;\n  flex-wrap: wrap;\n}\n.mh .hint {\n  color: #666;\n  font-size: 11px;\n}\n.mh .sp {\n  flex: 1;\n}\ntextarea {\n  flex: 1;\n  min-height: 0;\n  border: 0;\n  outline: none;\n  resize: none;\n  padding: 18px;\n  font:\n    12px/1.6 ui-monospace,\n    Menlo,\n    Consolas,\n    monospace;\n  white-space: pre;\n  tab-size: 2;\n  caret-color: #222;\n}\n.toast {\n  position: fixed;\n  left: 50%;\n  bottom: 65px;\n  transform: translateX(-50%);\n  max-width: calc(100vw - 40px);\n  padding: 10px 16px;\n  border-radius: 9px;\n  background: #222;\n  color: #fff;\n  font:\n    12px/1.5 -apple-system,\n    BlinkMacSystemFont,\n    "Segoe UI",\n    sans-serif;\n  opacity: 0;\n  transition: opacity 0.15s;\n  pointer-events: none;\n  z-index: 2147483647;\n}\n.toast.show {\n  opacity: 1;\n}\n.empty-canvas {\n  position: fixed;\n  left: var(--nav);\n  right: 0;\n  top: var(--head);\n  bottom: var(--foot);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-direction: column;\n  gap: 14px;\n  color: #666;\n  font-size: 13px;\n}\n.empty-canvas p {\n  margin: 0;\n}\n.empty-canvas > .icon {\n  width: 30px;\n  height: 30px;\n  color: #aaa;\n}\n.play-controls {\n  position: fixed;\n  bottom: 22px;\n  left: 50%;\n  transform: translateX(-50%);\n  z-index: 2147483647;\n  display: flex;\n  align-items: center;\n  gap: 5px;\n  padding: 5px 8px;\n  background: #ffffffed;\n  border-radius: 10px;\n  box-shadow: 0 4px 18px #0002;\n  opacity: 0;\n  transition: opacity 0.15s;\n}\n.play-controls button {\n  height: 31px;\n  min-width: 31px;\n}\n.play-controls.visible,\n.play-controls:hover,\n.play-controls:focus-within {\n  opacity: 1;\n}\n.play-controls .play-title {\n  max-width: 190px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-size: 12px;\n  color: #555;\n  margin: 0 7px;\n}\n.play-controls .pageno {\n  font-size: 12px;\n}\n.play-exit {\n  position: fixed;\n  top: 16px;\n  right: 16px;\n  z-index: 2147483647;\n  background: #fffffff0;\n  color: #222;\n}\n:host([data-playing]) .head,\n:host([data-playing]) .nav,\n:host([data-playing]) .footer,\n:host([data-playing]) .tbar,\n:host([data-playing]) .sel,\n:host([data-playing]) .guides,\n:host([data-playing]) .selection-members,\n:host([data-playing]) .marquee,\n:host([data-playing]) .empty-canvas {\n  display: none !important;\n}\n:host(:not([data-playing])) .play-controls,\n:host(:not([data-playing])) .play-exit {\n  display: none !important;\n}\n:host([data-nav-hidden]) .nav {\n  display: none;\n}\n:host([data-nav-hidden]) .footer {\n  left: 0;\n}\n:host([data-nav-hidden]) .tbar {\n  left: 50%;\n  max-width: calc(100vw - 24px);\n}\n:host([data-nav-hidden]) .empty-canvas {\n  left: 0;\n}\n@media (max-width: 1050px) {\n  .head {\n    gap: 9px;\n    padding: 0 10px;\n  }\n  .document-title {\n    max-width: 140px;\n  }\n  .save-state {\n    max-width: 95px;\n    font-size: 10px;\n  }\n  .group-gap {\n    margin-left: 6px;\n  }\n  .actions {\n    flex: initial;\n  }\n  .document {\n    flex: 1;\n  }\n  .head button {\n    padding-inline: 7px;\n  }\n  .actions .button-label {\n    display: none;\n  }\n}\n@media (max-width: 760px) {\n  :host {\n    --nav: 170px;\n  }\n  .head {\n    gap: 4px;\n  }\n  .document-title {\n    max-width: 100px;\n    font-size: 12px;\n  }\n  .save-state {\n    max-width: 27px;\n  }\n  .save-state .state-text {\n    display: none;\n  }\n  .head .preview-button span,\n  .head .export-label {\n    display: none;\n  }\n  .head .group-gap {\n    margin-left: 2px;\n  }\n  .head .layout-toggle {\n    margin-inline: 3px;\n  }\n  .head .layout-toggle button { padding-inline: 6px; font-size: 11px; }\n  .page-title {\n    max-width: 110px;\n  }\n  .footer {\n    padding: 0 7px;\n  }\n  .tbar {\n    gap: 1px;\n    padding: 4px;\n  }\n  .tbar button {\n    padding-inline: 5px;\n    min-width: 28px;\n  }\n  .nav-head {\n    padding-inline: 12px;\n  }\n}\n@media (max-width: 540px) {\n  :host {\n    --nav: 0px;\n  }\n  .nav {\n    display: none !important;\n  }\n  .footer {\n    left: 0;\n  }\n  .tbar {\n    left: 50%;\n    max-width: calc(100vw - 16px);\n  }\n  .document-title {\n    max-width: 80px;\n  }\n  .head {\n    padding-inline: 6px;\n  }\n  .head button {\n    padding-inline: 5px;\n    min-width: 28px;\n  }\n  .head .document {\n    gap: 2px;\n  }\n  .head .nav-toggle {\n    display: inline-flex;\n  }\n  .head .selection-tool {\n    display: none;\n  }\n  .head .done-button span,\n  .head .preview-button > .icon:last-child {\n    display: none;\n  }\n  :host([data-editing]) .head .preview-button {\n    display: none;\n  }\n  .head .document { flex: 0; gap: 3px; }\n  .head .document-title { display: none; }\n  .head .save-state { width: 22px; min-width: 22px; max-width: 22px; padding: 0; flex-shrink: 0; }\n  .head .tools > [data-act="undo"], .head .tools > [data-act="redo"] { display: none; }\n  .head .actions { flex: initial; }\n  .head [data-act="export"] > .icon:last-child {\n    display: none;\n  }\n  :host([data-mobile-nav]) .nav {\n    display: flex !important;\n    width: 170px;\n    bottom: 40px;\n    box-shadow: 5px 0 20px #0001;\n  }\n  .head .actions {\n    gap: 1px;\n  }\n  .page-title {\n    max-width: 90px;\n  }\n  .footer .fit span {\n    display: none;\n  }\n  .modal {\n    padding: 10px;\n  }\n  .mh .hint {\n    display: none;\n  }\n}\n@media (prefers-reduced-motion: reduce) {\n  * {\n    transition: none !important;\n    scroll-behavior: auto !important;\n  }\n}\n@media print {\n  :host {\n    display: none !important;\n  }\n}\n\n.more-text-formats {\n  display: flex;\n  gap: 4px;\n  padding: 3px 6px;\n}\n.more-text-formats button {\n  width: 32px;\n  padding: 0;\n  justify-content: center;\n}\n:host([data-readonly]) .tools {\n  display: none;\n}\n\n.play-exit:focus-visible {\n  opacity: 1 !important;\n}\n\n/* Experimental text sizing; diagnostics stay inside the editor shadow root. */\n.text-layout-panel { width: 268px; }\n.text-layout-panel strong { display: block; padding: 8px 10px 0; font-weight: 550; }\n.text-layout-status { margin: 8px 10px 12px; max-width: 232px; color: var(--muted); line-height: 1.6; }\n.text-layout-status[data-overflow="true"] { color: #a84c18; }\n\n/* AI review controls live outside the scaled content. */\n.review-actions { position:fixed; z-index:2147483645; display:flex; align-items:center; padding:3px; gap:0; background:var(--paper); border-radius:8px; box-shadow:0 3px 12px #0002; }\n.review-actions button { height:30px; min-width:62px; font-size:12px; border-radius:6px; }\n.review-accept { background:#202020; color:#fff; }\nbutton.review-accept:hover:not(:disabled) { background:#3c3c3c; }\nbutton[aria-disabled=true] { opacity:.45; cursor:default; }\n.review-scope { color:var(--muted); font-size:12px; padding:0 8px; }\n.review-summary { position:fixed; z-index:2147483646; width:280px; background:var(--paper); border-radius:8px; box-shadow:0 5px 20px #0002; }\n.review-summary-bar { display:flex; padding:4px; gap:4px; }\n.review-trigger { flex:1; justify-content:space-between; font-size:12px; }\n.review-trigger .icon { transform:rotate(180deg); }\n.review-trigger[aria-expanded=true] .icon { transform:none; }\n.review-summary-bar .review-accept { height:30px; font-size:12px; }\n.review-panel { padding:10px 12px 4px; overflow:auto; }\n.review-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; }\n.review-message { color:var(--muted); font-size:12px; line-height:1.5; margin:4px 0 10px; }\n.review-item { display:flex; gap:8px; padding:8px 0; border-top:1px solid var(--line); align-items:center; }\n.review-item[data-current] .review-name { font-weight:600; }\n.review-info { flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:4px; }\n.review-name { width:100%; min-width:0; display:flex; justify-content:flex-start; gap:4px; text-align:left; padding:0; font-size:12px; }\n.review-page { flex-shrink:0; white-space:nowrap; }\n.review-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.review-name:disabled { opacity:1; }\n.review-kind { display:inline-block; padding:1px 5px; border-radius:3px; background:var(--hover); font-size:10px; line-height:16px; color:var(--muted); }\n.review-item-actions { display:flex; flex-shrink:0; gap:2px; margin-left:auto; }\n.review-item-actions button { height:28px; padding:0 6px; font-size:12px; }\n.review-before { position:fixed; z-index:2147483643; overflow:hidden; background:var(--workspace); pointer-events:none; }\n.review-projection { position:absolute; overflow:hidden; pointer-events:none; }\n.review-projection iframe { position:absolute; left:0; top:0; border:0; transform-origin:top left; background:white; pointer-events:none; }\n.review-hint { position:fixed; right:16px; bottom:112px; pointer-events:none; z-index:2147483646; font-size:12px; color:var(--muted); background:var(--paper); padding:6px 10px; border-radius:6px; }\n\n/* Crop controls share the existing compact, neutral editor surface. */\n.crop-source{position:fixed;border:1px dashed #16a878;pointer-events:none;z-index:34;box-sizing:border-box;opacity:.75}\n.crop-panel{position:fixed;z-index:70;width:286px;max-width:calc(100vw - 16px);padding:14px;background:#fff;color:#222;border:1px solid #ddd;border-radius:12px;box-shadow:0 6px 24px #0002;font:13px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;box-sizing:border-box}\n.crop-heading,.crop-controls,.crop-actions{display:flex;align-items:center;gap:8px}.crop-heading{justify-content:space-between;margin-bottom:12px}.crop-heading span{font-size:12px;color:#777}.crop-controls input[type=range]{width:100%;min-width:40px;accent-color:#222}.crop-controls input[type=number]{width:52px;padding:5px;border:1px solid #ddd;border-radius:5px;font:inherit}.crop-actions{justify-content:flex-end;margin-top:12px}.crop-actions button{padding:6px 14px;border:0;border-radius:6px;background:#eee;color:#222;font:inherit;cursor:pointer}.crop-actions .primary{background:#222;color:#fff}\n.crop-controls label,.crop-controls>span{white-space:nowrap;flex:0 0 auto}.crop-controls input[type=range]{width:0;flex:1 1 auto}.crop-actions button:hover{filter:brightness(.95)}.crop-actions button:focus-visible,.crop-controls input:focus-visible{outline:2px solid #1683ff;outline-offset:2px}\n';
 
   // node_modules/lucide/dist/esm/icons/arrow-down.mjs
   var ArrowDown = [
@@ -784,6 +851,16 @@ property of their respective owners.
     ["circle", { cx: "15", cy: "12", r: "1" }],
     ["circle", { cx: "15", cy: "5", r: "1" }],
     ["circle", { cx: "15", cy: "19", r: "1" }]
+  ];
+
+  // node_modules/lucide/dist/esm/icons/group.mjs
+  var Group = [
+    ["path", { d: "M3 7V5c0-1.1.9-2 2-2h2" }],
+    ["path", { d: "M17 3h2c1.1 0 2 .9 2 2v2" }],
+    ["path", { d: "M21 17v2c0 1.1-.9 2-2 2h-2" }],
+    ["path", { d: "M7 21H5c-1.1 0-2-.9-2-2v-2" }],
+    ["rect", { width: "7", height: "5", x: "7", y: "7", rx: "1" }],
+    ["rect", { width: "7", height: "5", x: "10", y: "12", rx: "1" }]
   ];
 
   // node_modules/lucide/dist/esm/icons/image-plus.mjs
@@ -1009,6 +1086,12 @@ property of their respective owners.
     ["path", { d: "M9 20h6" }]
   ];
 
+  // node_modules/lucide/dist/esm/icons/ungroup.mjs
+  var Ungroup = [
+    ["rect", { x: "11", y: "14", width: "10", height: "7", rx: "2" }],
+    ["rect", { x: "3", y: "3", width: "10", height: "7", rx: "2" }]
+  ];
+
   // node_modules/lucide/dist/esm/icons/x.mjs
   var X = [
     ["path", { d: "M18 6 6 18" }],
@@ -1064,7 +1147,9 @@ property of their respective owners.
     GripVertical,
     TextCursorInput,
     CheckCheck,
-    RotateCw
+    RotateCw,
+    Group,
+    Ungroup
   };
   var escape = (text) => String(text).replace(
     /[&"<>]/g,
@@ -1103,9 +1188,9 @@ property of their respective owners.
     csp.content = `default-src 'none'; script-src 'none'; style-src 'unsafe-inline' http: https:; img-src data: blob: http: https:; font-src data: http: https:; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri ${new URL(baseURL).origin}`;
     doc.head.prepend(csp, base);
     doc.body.inert = true;
-    const style = doc.createElement("style");
-    style.textContent = "html,body{margin:0!important;min-height:100%!important}body{pointer-events:none!important}*,*::before,*::after{animation:none!important;transition:none!important}";
-    doc.head.append(style);
+    const style2 = doc.createElement("style");
+    style2.textContent = "html,body{margin:0!important;min-height:100%!important}body{pointer-events:none!important}*,*::before,*::after{animation:none!important;transition:none!important}";
+    doc.head.append(style2);
     return "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
   }
   function createReview({ ui, persistence, navigate, view, restoreTarget, toast }) {
@@ -1436,7 +1521,7 @@ property of their respective owners.
       <label class="color-control" title="文字颜色" aria-label="文字颜色"><span class="color-swatch"></span><input type="color" class="cpick" aria-label="文字颜色"></label>
       ${button("text-align", "AlignLeft", "左对齐；点击切换为居中", { cls: "icon-only text-align" })}</div>
     <div class="image-tools" hidden>${button("image-crop", "Crop", "裁切图片", { text: "裁切" })}${button("image-replace", "RefreshCw", "替换图片", { text: "替换" })}<div class="seg" role="group" aria-label="图片填充模式"><button data-act="image-fit" title="完整显示，保持比例">适应</button><button data-act="image-cover" title="裁切铺满，保持比例">填充</button></div></div>
-    <div class="object-tools">${button("rotation", "RotateCw", "旋转", { cls: "icon-only", attrs: 'aria-expanded="false" aria-haspopup="menu"' })}${button("element-more", "Ellipsis", "元素操作", { cls: "icon-only", attrs: 'aria-expanded="false" aria-haspopup="menu"' })}</div>
+    <div class="object-tools">${button("group", "Group", "组合", { text: "组合", attrs: "hidden" })}${button("ungroup", "Ungroup", "取消组合", { text: "取消组合", attrs: "hidden" })}${button("group-exit", "ChevronLeft", "返回上层组合", { cls: "icon-only", attrs: "hidden" })}${button("rotation", "RotateCw", "旋转", { cls: "icon-only", attrs: 'aria-expanded="false" aria-haspopup="menu"' })}${button("element-more", "Ellipsis", "元素操作", { cls: "icon-only", attrs: 'aria-expanded="false" aria-haspopup="menu"' })}</div>
   </div>
   <div class="crop-source" hidden aria-hidden="true"></div>
   <section class="crop-panel" aria-label="图片裁切" hidden><div class="crop-heading"><strong>裁切</strong><span>拖动图片调整取景</span></div><div class="crop-controls"><label for="crop-zoom">缩放</label><input id="crop-zoom" class="crop-zoom" aria-label="裁切缩放" type="range" min="100" max="500" step="1"><input class="crop-zoom-value" aria-label="裁切缩放百分比" type="number" min="100" max="2000" step="1"><span>%</span></div><div class="crop-actions"><button data-act="crop-cancel">取消</button><button class="primary" data-act="crop-done">完成</button></div></section>
@@ -1450,7 +1535,7 @@ property of their respective owners.
     ${button("download", "Download", "下载 HTML", { text: "下载 HTML" })}${button("copy", "Copy", "复制 HTML", { text: "复制 HTML" })}${button("print", "Printer", "浏览器打印 / PDF", { text: "打印" })}
   </div>
   <div class="menu-panel" data-menu="more" role="menu" hidden>${button("source", "Code", "查看或修改源码", { text: "源码" })}${button("save", "Save", "立即保存 (Ctrl/⌘ S)", { text: "立即保存" })}<div class="menu-separator"></div>${button("help", "TextCursorInput", "快捷键与使用帮助", { text: "快捷键与帮助" })}</div>
-  <div class="menu-panel" data-menu="element" role="menu" hidden><div class="more-text-section" hidden><div class="more-text-formats" role="group" aria-label="更多文字格式">${fmt("italic", "Italic", "斜体")}${fmt("underline", "Underline", "下划线")}${fmt("strikeThrough", "Strikethrough", "删除线")}</div>${button("text-layout", "TextCursorInput", "文字适配：检测溢出、调整高度和字号", { text: "文字适配", attrs: 'aria-expanded="false" aria-haspopup="menu"' })}<button data-fmt="removeFormat">${icon("Type")}清除文字格式</button><div class="menu-separator"></div></div>${button("element-duplicate", "Copy", "复制元素 (Ctrl/⌘ D)", { text: "复制元素" })}${button("element-front", "BringToFront", "置于顶层", { text: "置于顶层" })}${button("element-back", "SendToBack", "置于底层", { text: "置于底层" })}${button("element-delete", "Trash2", "删除元素 (Delete)", { text: "删除元素" })}</div>
+  <div class="menu-panel" data-menu="element" role="menu" hidden><div class="more-text-section" hidden><div class="more-text-formats" role="group" aria-label="更多文字格式">${fmt("italic", "Italic", "斜体")}${fmt("underline", "Underline", "下划线")}${fmt("strikeThrough", "Strikethrough", "删除线")}</div>${button("text-layout", "TextCursorInput", "文字适配：检测溢出、调整高度和字号", { text: "文字适配", attrs: 'aria-expanded="false" aria-haspopup="menu"' })}<button data-fmt="removeFormat">${icon("Type")}清除文字格式</button><div class="menu-separator"></div></div>${button("group", "Group", "组合", { text: "组合", attrs: "hidden" })}${button("ungroup", "Ungroup", "取消组合", { text: "取消组合", attrs: "hidden" })}${button("group-enter", "MousePointer2", "进入组合", { text: "进入组合", attrs: "hidden" })}${button("group-exit", "ChevronLeft", "返回上层组合", { text: "返回上层", attrs: "hidden" })}${button("element-duplicate", "Copy", "复制元素 (Ctrl/⌘ D)", { text: "复制元素" })}${button("element-front", "BringToFront", "置于顶层", { text: "置于顶层" })}${button("element-back", "SendToBack", "置于底层", { text: "置于底层" })}${button("element-delete", "Trash2", "删除元素 (Delete)", { text: "删除元素" })}</div>
   <div class="menu-panel" data-menu="page" role="menu" hidden>${button("page-add", "Plus", "在此后新增页面", { text: "新增页面" })}${button("page-copy", "Copy", "复制页面", { text: "复制页面" })}${button("page-rename", "TextCursorInput", "重命名页面", { text: "重命名" })}<div class="menu-separator"></div>${button("page-up", "ArrowUp", "上移页面", { text: "上移" })}${button("page-down", "ArrowDown", "下移页面", { text: "下移" })}<div class="menu-separator"></div>${button("page-delete", "Trash2", "删除页面", { text: "删除页面" })}</div>
   <div class="menu-panel status-panel" data-menu="status" role="menu" hidden><p class="status-detail"></p>${button("retry", "RefreshCw", "重试保存", { text: "重试", attrs: "hidden" })}${button("recover", "RefreshCw", "恢复未保存草稿", { text: "恢复草稿", attrs: "hidden" })}${button("conflict", "Download", "下载当前副本并同步最新文件", { text: "下载副本并同步", attrs: "hidden" })}</div>
   <div class="empty-canvas" hidden>${icon("Presentation")}<p>从第一页开始</p>${button("page-add", "Plus", "新增页面", { text: "新增页面", cls: "primary" })}</div>
@@ -1975,7 +2060,7 @@ property of their respective owners.
     stage,
     host,
     ui,
-    style,
+    style: style2,
     draw,
     pageStep,
     finishEditing,
@@ -2000,13 +2085,13 @@ property of their respective owners.
     function drawViewport() {
       if (S.playing && S.playMode === "scroll") {
         const z2 = S.zoom, b2 = size();
-        style.textContent = `@media screen{html[data-editor-scrolling] [data-stage]{position:fixed!important;inset:0!important;display:flex!important;flex-direction:column!important;align-items:center!important;width:100%!important;height:100vh!important;min-width:0!important;min-height:0!important;max-width:none!important;max-height:none!important;margin:0!important;padding:max(32px,calc((100vh - ${b2.h * z2}px)/2)) 24px!important;gap:40px!important;box-sizing:border-box!important;transform:none!important;overflow:auto!important;overscroll-behavior:contain;scrollbar-gutter:stable both-edges}html[data-editor-scrolling] [data-artboard]{display:block!important;flex-shrink:0!important;margin:0!important;zoom:${z2}!important;box-shadow:none!important}}`;
+        style2.textContent = `@media screen{html[data-editor-scrolling] [data-stage]{position:fixed!important;inset:0!important;display:flex!important;flex-direction:column!important;align-items:center!important;width:100%!important;height:100vh!important;min-width:0!important;min-height:0!important;max-width:none!important;max-height:none!important;margin:0!important;padding:max(32px,calc((100vh - ${b2.h * z2}px)/2)) 24px!important;gap:40px!important;box-sizing:border-box!important;transform:none!important;overflow:auto!important;overscroll-behavior:contain;scrollbar-gutter:stable both-edges}html[data-editor-scrolling] [data-artboard]{display:block!important;flex-shrink:0!important;margin:0!important;zoom:${z2}!important;box-shadow:none!important}}`;
         draw();
         return;
       }
       const v = bounds(), b = size(), z = S.zoom;
       const x = v.x + (v.w - b.w * z) / 2 + pan.x, y = v.y + (v.h - b.h * z) / 2 + pan.y;
-      style.textContent = `@media screen{html[data-editor-on] [data-stage]{position:fixed!important;inset:auto!important;left:${x}px!important;top:${y}px!important;display:block!important;width:${b.w}px!important;height:${b.h}px!important;min-width:0!important;min-height:0!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important;gap:0!important;transform-origin:0 0!important;transform:scale(${z})!important;overflow:visible!important}html[data-editor-on] [data-artboard]{margin:0!important;box-shadow:none!important}}`;
+      style2.textContent = `@media screen{html[data-editor-on] [data-stage]{position:fixed!important;inset:auto!important;left:${x}px!important;top:${y}px!important;display:block!important;width:${b.w}px!important;height:${b.h}px!important;min-width:0!important;min-height:0!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important;gap:0!important;transform-origin:0 0!important;transform:scale(${z})!important;overflow:visible!important}html[data-editor-on] [data-artboard]{margin:0!important;box-shadow:none!important}}`;
       ui.querySelector("[data-act=zoom-fit]").setAttribute("aria-pressed", S.fit);
       ui.querySelector(".zv").textContent = `${Math.round(z * 100)}%`;
       draw();
@@ -7012,7 +7097,7 @@ property of their respective owners.
       svg.replaceChildren();
     };
     const localRect = (el, o) => {
-      const r = el.getBoundingClientRect();
+      const r = objectRect(el);
       return {
         x: (r.left - o.x) / o.s,
         y: (r.top - o.y) / o.s,
@@ -7020,7 +7105,7 @@ property of their respective owners.
         h: r.height / o.s
       };
     };
-    function begin(elements, board) {
+    function begin(elements, board, context = null) {
       const nodes = Array.isArray(elements) ? elements : [elements];
       const groupRect = (o2) => {
         const rects = nodes.map((n) => localRect(n, o2));
@@ -7038,12 +7123,13 @@ property of their respective owners.
       const targets = [
         { x: 0, y: 0, w: board.clientWidth, h: board.clientHeight }
       ];
-      for (const node of board.querySelectorAll("[data-el]")) {
+      for (const node of new Set([...board.querySelectorAll("[data-el]")].map((n) => logicalTarget(n, context)))) {
+        if (!node || context && !context.contains(node)) continue;
         if (nodes.some(
           (el) => node === el || node.contains(el) || el.contains(node)
         ) || node.closest("[data-artboard]") !== board)
           continue;
-        const style = getComputedStyle(node);
+        const style2 = getComputedStyle(node);
         let transparent = false;
         for (let ancestor = node; ancestor && ancestor !== board.parentElement; ancestor = ancestor.parentElement) {
           if (getComputedStyle(ancestor).opacity === "0") {
@@ -7051,7 +7137,7 @@ property of their respective owners.
             break;
           }
         }
-        if (style.visibility !== "visible" || transparent || !node.getClientRects().length) continue;
+        if (style2.visibility !== "visible" || transparent || !objectRect(node).width) continue;
         const r = localRect(node, o);
         if (r.w > 0 && r.h > 0) targets.push(r);
       }
@@ -7187,7 +7273,7 @@ property of their respective owners.
     );
   }
   function unionRect(nodes) {
-    const rects = nodes.map((n) => n.getBoundingClientRect());
+    const rects = nodes.map(objectRect);
     const left = Math.min(...rects.map((r) => r.left)), top = Math.min(...rects.map((r) => r.top));
     const right = Math.max(...rects.map((r) => r.right)), bottom = Math.max(...rects.map((r) => r.bottom));
     return {
@@ -7199,23 +7285,24 @@ property of their respective owners.
       height: bottom - top
     };
   }
-  function selectable(board) {
-    return [...board.querySelectorAll("[data-el]")].filter((n) => {
-      const r = n.getBoundingClientRect(), s = getComputedStyle(n);
+  function selectable(board, context = null) {
+    return [...new Set([...(context || board).querySelectorAll("[data-el]")].map((n) => logicalTarget(n, context)))].filter((n) => {
+      if (!n) return false;
+      const r = objectRect(n), s = getComputedStyle(n);
       return n.closest("[data-artboard]") === board && r.width > 0 && r.height > 0 && s.visibility === "visible" && s.opacity !== "0";
     });
   }
-  function directionTarget(nodes, board, key) {
+  function directionTarget(nodes, board, key, context = null) {
     const selected = selectionRoots(nodes);
     if (!selected.length) return null;
-    const from = selected.at(-1).getBoundingClientRect();
+    const from = objectRect(selected.at(-1));
     const x = from.left + from.width / 2, y = from.top + from.height / 2;
     const horizontal = ["ArrowLeft", "ArrowRight"].includes(key), sign = ["ArrowLeft", "ArrowUp"].includes(key) ? -1 : 1;
     let best = null;
-    for (const node of selectable(board)) {
+    for (const node of selectable(board, context)) {
       if (selected.some((n) => n === node || n.contains(node) || node.contains(n)))
         continue;
-      const r = node.getBoundingClientRect(), dx = r.left + r.width / 2 - x, dy = r.top + r.height / 2 - y;
+      const r = objectRect(node), dx = r.left + r.width / 2 - x, dy = r.top + r.height / 2 - y;
       const forward = (horizontal ? dx : dy) * sign, cross = Math.abs(horizontal ? dy : dx);
       if (forward <= 1) continue;
       const score = forward + cross * 2;
@@ -7234,7 +7321,7 @@ property of their respective owners.
         members.replaceChildren();
         if (nodes.length < 2) return;
         for (const node of nodes) {
-          const r = node.getBoundingClientRect(), frame = document.createElement("div");
+          const r = objectRect(node), frame = document.createElement("div");
           frame.className = "selection-member";
           Object.assign(frame.style, {
             left: r.left + "px",
@@ -7276,6 +7363,7 @@ property of their respective owners.
         reviewContext: 0,
         sel: null,
         selection: [],
+        group: null,
         drag: null,
         text: null,
         range: null,
@@ -7337,7 +7425,7 @@ property of their respective owners.
       let focusedBeforeModal = null;
       const fromUI = (e) => e.composedPath().includes(host);
       const inStage = (n) => n instanceof Element && !!n.closest("[data-artboard]");
-      const visible = (n) => n.getClientRects().length > 0;
+      const visible = (n) => isGroup(n) ? objectRect(n).width > 0 && objectRect(n).height > 0 : n.getClientRects().length > 0;
       const scaleOf = (b) => b.getBoundingClientRect().width / b.offsetWidth || 1;
       const isArtboard = (b) => b?.dataset.mode === "artboard";
       const activeBoard = () => S.sel?.closest("[data-artboard]") || S.current || boards()[0];
@@ -7445,7 +7533,17 @@ property of their respective owners.
           next: node.nextSibling
         }));
         select(null);
+        const ancestors = [...new Set(nodes.flatMap((node) => {
+          const list = [];
+          for (let n = node.parentElement; isGroup(n); n = n.parentElement) list.push(n);
+          return list;
+        }))];
         nodes.forEach((node) => node.remove());
+        for (const group of ancestors.sort((a, b2) => a.contains(b2) ? 1 : b2.contains(a) ? -1 : 0)) if (!group.children.length) {
+          places.push({ node: group, parent: group.parentNode, next: group.nextSibling });
+          group.remove();
+        }
+        drawSel();
         push({
           undo: () => [...places].reverse().forEach(
             ({ node, parent, next }) => parent.insertBefore(
@@ -7453,7 +7551,10 @@ property of their respective owners.
               next?.parentNode === parent ? next : null
             )
           ),
-          redo: () => nodes.forEach((node) => node.remove()),
+          redo: () => {
+            [...places].forEach(({ node }) => node.remove());
+            drawSel();
+          },
           board: b
         });
       }
@@ -7510,6 +7611,7 @@ property of their respective owners.
         host.toggleAttribute("data-editing", on);
         if (!on) {
           endText();
+          S.group = null;
           select(null);
         }
         syncBar();
@@ -7573,9 +7675,9 @@ property of their respective owners.
           (el) => el.parentElement.closest("[data-el],[data-artboard]") === b && visible(el)
         );
         const m = tops.map((el) => {
-          const style = getComputedStyle(el);
-          const dimension = (axis, sides) => (parseFloat(style[axis]) || (axis === "width" ? el.offsetWidth : el.offsetHeight)) + (style.boxSizing === "border-box" ? 0 : sides.reduce(
-            (sum, side2) => sum + parseFloat(style[`padding${side2}`]) + parseFloat(style[`border${side2}Width`]),
+          const style2 = getComputedStyle(el);
+          const dimension = (axis, sides) => (parseFloat(style2[axis]) || (axis === "width" ? el.offsetWidth : el.offsetHeight)) + (style2.boxSizing === "border-box" ? 0 : sides.reduce(
+            (sum, side2) => sum + parseFloat(style2[`padding${side2}`]) + parseFloat(style2[`border${side2}Width`]),
             0
           ));
           return {
@@ -7660,9 +7762,142 @@ property of their respective owners.
           el.style.top = y + "px";
         } else el.style.translate = x || y ? `${x}px ${y}px` : "";
       }
+      function transformable(nodes) {
+        const roots = groupRoots(nodes);
+        return roots.length > 0 && nodes.every((n) => !isGroup(n) || !groupStructureProblem(n)) && roots.every((n) => n.getClientRects().length && elementGeometry(n).supported);
+      }
+      function enterGroup(group, target = null) {
+        if (!isGroup(group) || !S.editing || !persistence?.canEdit()) return;
+        crop.finish();
+        endText();
+        const issue = groupStructureProblem(group);
+        if (issue) return toast(issue);
+        S.group = group;
+        select(logicalTarget(target, group) || [...group.children][0] || null);
+      }
+      function exitGroup() {
+        if (!S.group) return;
+        crop.finish();
+        endText();
+        const group = S.group;
+        S.group = group.parentElement?.closest('[data-group="1"][data-el]') || null;
+        select(group.isConnected ? group : null);
+      }
+      function groupSelection() {
+        crop.finish();
+        endText();
+        const nodes = selectionRoots(S.selection), issue = groupProblem(nodes);
+        if (issue) return toast(issue);
+        const parent = nodes[0].parentElement, board = activeBoard();
+        const ordered = [...parent.childNodes], first = ordered.findIndex((n) => nodes.includes(n)), last = ordered.findLastIndex((n) => nodes.includes(n));
+        const children = ordered.slice(first, last + 1), next = ordered[last + 1] || null;
+        const unchanged = layoutProbe(board);
+        const sequence = stage.getAttribute("data-element-seq");
+        const group = document.createElement("div");
+        group.dataset.group = "1";
+        group.dataset.el = elementId(board, "group");
+        group.style.display = "contents";
+        group.setAttribute("role", "group");
+        const wrap = () => {
+          parent.insertBefore(group, children[0].parentNode === parent ? children[0] : next?.parentNode === parent ? next : null);
+          children.forEach((n) => group.append(n));
+        };
+        const unwrap = () => {
+          children.forEach((n) => parent.insertBefore(n, group));
+          group.remove();
+        };
+        wrap();
+        if (groupStructureProblem(group) || !unchanged()) {
+          unwrap();
+          sequence === null ? stage.removeAttribute("data-element-seq") : stage.setAttribute("data-element-seq", sequence);
+          return toast("这种布局的组合会改变样式、位置或绘制顺序，已保留原样", 4e3);
+        }
+        const context = S.group;
+        push({ board, undo: () => {
+          unwrap();
+          S.group = context;
+          select(nodes);
+        }, redo: () => {
+          wrap();
+          S.group = context;
+          select(group);
+        } });
+        select(group);
+      }
+      function ungroupSelection() {
+        const group = S.selection.length === 1 && isGroup(S.sel) ? S.sel : null;
+        if (!group) return;
+        crop.finish();
+        endText();
+        const issue = groupStructureProblem(group);
+        if (issue) return toast(issue);
+        const parent = group.parentNode, children = [...group.childNodes], next = group.nextSibling, board = activeBoard(), context = S.group;
+        const unwrap = () => {
+          children.forEach((n) => parent.insertBefore(n, group));
+          group.remove();
+        };
+        const wrap = () => {
+          parent.insertBefore(group, children[0]?.parentNode === parent ? children[0] : next?.parentNode === parent ? next : null);
+          children.forEach((n) => group.append(n));
+        };
+        const unchanged = layoutProbe(board, [group]);
+        unwrap();
+        if (!unchanged()) {
+          wrap();
+          return toast("取消组合会改变当前布局，已保留原样", 4e3);
+        }
+        const members = children.filter((n) => n.nodeType === 1);
+        push({ board, undo: () => {
+          wrap();
+          S.group = context;
+          select(group);
+        }, redo: () => {
+          unwrap();
+          S.group = context;
+          select(members);
+        } });
+        select(members);
+      }
+      function startGroupResize(e, dir) {
+        if (dir.length !== 2 || groupStructureProblem(S.sel)) return;
+        endText();
+        const nodes = groupRoots([S.sel]), items = nodes.map((node) => ({ node, g: elementGeometry(node), p: getPos(node), scale: getComputedStyle(node).scale }));
+        if (!items.length || items.some((i) => !i.g.supported)) return toast("这种变换暂不支持组合缩放");
+        const rect = unionRect([S.sel]), board = activeBoard(), boardScale = scaleOf(board), before = snap(nodes);
+        const anchor = { x: dir.includes("w") ? rect.right : rect.left, y: dir.includes("n") ? rect.bottom : rect.top };
+        const dx = (dir.includes("w") ? -1 : 1) * rect.width, dy = (dir.includes("n") ? -1 : 1) * rect.height;
+        const minimum = Math.max(...items.map((i) => 8 * boardScale / Math.min(i.g.w * i.g.scale, i.g.h * i.g.scale)), ...items.flatMap((i) => textMetrics(i.node).filter((m) => m.node.textContent.trim()).map((m) => 6 * boardScale / (m.font * elementGeometry(m.node).scale))));
+        let moved = false, factor = 1;
+        S.drag = { move(ev) {
+          if (!moved && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 3) return;
+          if (!moved) {
+            items.forEach((i) => {
+              prepareTransform(i.node, i.g, i.p);
+              i.position = getPos(i.node);
+            });
+            moved = true;
+          }
+          const k = Math.max(minimum, 1 + ((ev.clientX - e.clientX) * dx + (ev.clientY - e.clientY) * dy) / (dx * dx + dy * dy));
+          factor = k;
+          for (const i of items) {
+            setPos(i.node, i.position, i.position.x, i.position.y);
+            const scale = i.scale === "none" ? 1 : parseFloat(i.scale);
+            i.node.style.scale = String(scale * k);
+            keepCenter(i.node, i.position, { x: anchor.x + (i.g.cx - anchor.x) * k, y: anchor.y + (i.g.cy - anchor.y) * k });
+          }
+          drawSel();
+        }, up() {
+          if (moved && Math.abs(factor - 1) > 1e-6) commit(before, board);
+          else if (moved) apply(before);
+        }, cancel() {
+          apply(before);
+          drawSel();
+        } };
+      }
       function select(el, keepDrag = false) {
         if (crop.active && !crop.owns(el)) crop.finish();
         const nodes = selectionRoots(Array.isArray(el) ? el : el ? [el] : []);
+        if (S.group && (!S.group.isConnected || nodes.some((n) => !S.group.contains(n)))) S.group = null;
         if (nodes.length !== S.selection.length || nodes.some((n, i) => n !== S.selection[i])) {
           if (!keepDrag && S.drag?.cancel) {
             S.drag.cancel();
@@ -7676,6 +7911,7 @@ property of their respective owners.
         syncBar();
       }
       function drawSel() {
+        if (S.group && (!S.group.isConnected || S.group.closest("[data-artboard]") !== S.current)) S.group = null;
         crop.refresh();
         guides.refresh();
         S.selection = selectionRoots(S.selection).filter((n) => visible(n));
@@ -7684,7 +7920,7 @@ property of their respective owners.
         const el = S.sel;
         if (!el || !el.isConnected || !visible(el)) selBox.style.display = "none";
         else {
-          const r = unionRect(S.selection), g = S.selection.length === 1 ? elementGeometry(el) : null;
+          const r = unionRect(S.selection), g = S.selection.length === 1 && !isGroup(el) ? elementGeometry(el) : null;
           const oriented = g?.supported;
           const width = oriented ? g.w * g.scale : r.width, height = oriented ? g.h * g.scale : r.height;
           Object.assign(selBox.style, {
@@ -7695,9 +7931,10 @@ property of their respective owners.
             height: height + "px",
             transform: oriented ? `rotate(${g.angle}deg)` : "none"
           });
-          selBox.classList.toggle("unsupported", S.selection.some((n) => !elementGeometry(n).supported));
+          selBox.classList.toggle("unsupported", !transformable(S.selection));
           selBox.classList.toggle("typing", !!S.text);
           selBox.classList.toggle("multiple", S.selection.length > 1);
+          selBox.classList.toggle("group", S.selection.length === 1 && isGroup(el));
         }
         positionRotation();
         placeTbar();
@@ -7730,8 +7967,8 @@ property of their respective owners.
               width: Math.abs(cx - x),
               height: Math.abs(cy - y)
             };
-            const hits = selectable(board).filter((n) => {
-              const r = n.getBoundingClientRect();
+            const hits = selectable(board, S.group).filter((n) => {
+              const r = objectRect(n);
               return r.left < rect.right && r.right > rect.left && r.top < rect.bottom && r.bottom > rect.top;
             });
             select(additive ? [...before, ...hits] : hits, true);
@@ -7747,9 +7984,9 @@ property of their respective owners.
         };
       }
       function startDrag(e, el) {
-        const b = el.closest("[data-artboard]"), s = scaleOf(b), nodes = selectionRoots(S.selection), positions = nodes.map((node) => ({ node, p: getPos(node), g: elementGeometry(node) })), before = snap(nodes);
-        if (positions.some((item) => !item.g.supported)) return toast("这种变换暂不支持拖动、缩放或旋转");
-        let alignment = guides.begin(nodes, b);
+        const b = el.closest("[data-artboard]"), s = scaleOf(b), nodes = groupRoots(S.selection), positions = nodes.map((node) => ({ node, p: getPos(node), g: elementGeometry(node) })), before = snap(nodes);
+        if (!transformable(S.selection) || positions.some((item) => !item.g.supported)) return toast("这种变换暂不支持拖动、缩放或旋转");
+        let alignment = guides.begin(nodes, b, S.group);
         const x0 = e.clientX, y0 = e.clientY;
         let moved = false;
         S.drag = {
@@ -7762,7 +7999,7 @@ property of their respective owners.
                 item.p = getPos(item.node);
                 item.g = elementGeometry(item.node);
               });
-              alignment = guides.begin(nodes, b);
+              alignment = guides.begin(nodes, b, S.group);
             }
             moved = true;
             const delta = alignment.move(
@@ -7809,6 +8046,7 @@ property of their respective owners.
       }
       function startResize(e, dir) {
         if (S.selection.length !== 1) return;
+        if (isGroup(S.sel)) return startGroupResize(e, dir);
         endText();
         const el = S.sel, b = el.closest("[data-artboard]"), initial = elementGeometry(el);
         if (!initial.supported) return toast("这种变换暂不支持拖动、缩放或旋转");
@@ -7874,7 +8112,7 @@ property of their respective owners.
         };
       }
       function rotationItems() {
-        return selectionRoots(S.selection).map((node) => ({ node, g: elementGeometry(node), p: getPos(node) }));
+        return groupRoots(S.selection).map((node) => ({ node, g: elementGeometry(node), p: getPos(node) }));
       }
       function applyRotation(items, center, delta) {
         const rad = delta * Math.PI / 180, cos = Math.cos(rad), sin = Math.sin(rad);
@@ -7893,7 +8131,7 @@ property of their respective owners.
         }
       }
       function rotateTo(value) {
-        if (!S.sel || S.selection.length !== 1 || !S.editing || !persistence?.canEdit() || !Number.isFinite(value)) return;
+        if (!S.sel || isGroup(S.sel) || S.selection.length !== 1 || !S.editing || !persistence?.canEdit() || !Number.isFinite(value)) return;
         endText();
         const items = rotationItems(), g = items[0].g, delta = normalizedAngle(value - g.angle);
         if (!g.supported) return toast("这种变换暂不支持拖动、缩放或旋转");
@@ -7908,7 +8146,7 @@ property of their respective owners.
         endText();
         closeMenus();
         const items = rotationItems();
-        if (items.some((item) => !item.g.supported)) return toast("这种变换暂不支持拖动、缩放或旋转");
+        if (!transformable(S.selection) || items.some((item) => !item.g.supported)) return toast("这种变换暂不支持拖动、缩放或旋转");
         const r = unionRect(S.selection), center = { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
         const before = snap(items.map((item) => item.node)), b = activeBoard();
         let last = Math.atan2(e.clientY - center.y, e.clientX - center.x) * 180 / Math.PI, total = 0, changed = false;
@@ -7919,7 +8157,7 @@ property of their respective owners.
             const current = Math.atan2(ev.clientY - center.y, ev.clientX - center.x) * 180 / Math.PI;
             total += normalizedAngle(current - last);
             last = current;
-            const base = items.length === 1 ? items[0].g.angle : 0;
+            const base = S.selection.length === 1 && !isGroup(S.sel) ? items[0].g.angle : 0;
             const delta = snappedAngle(base + total, ev) - base;
             operation.delta = delta;
             if (Math.abs(delta) < 1e-4 && !changed) return;
@@ -7949,26 +8187,26 @@ property of their respective owners.
           return;
         }
         const button2 = $(".rotate-handle"), feedback = $(".rotation-feedback");
-        const show = S.editing && !S.playing && !S.text && S.sel && S.selection.every((n) => elementGeometry(n).supported);
+        const show = S.editing && !S.playing && !S.text && S.sel && transformable(S.selection);
         button2.hidden = !show;
         feedback.hidden = !show || !S.drag?.rotation;
         if (!show) return;
-        const r = unionRect(S.selection), g = S.selection.length === 1 ? elementGeometry(S.sel) : null;
+        const r = unionRect(S.selection), g = S.selection.length === 1 && !isGroup(S.sel) ? elementGeometry(S.sel) : null;
         const rad = (g?.angle || 0) * Math.PI / 180, height = g ? g.h * g.scale : r.height;
         const x = (r.left + r.right) / 2 + Math.sin(rad) * (height / 2 + 26);
         const y = (r.top + r.bottom) / 2 - Math.cos(rad) * (height / 2 + 26);
         const v = viewport.bounds(), left = Math.max(v.x + 15, Math.min(v.x + v.w - 15, x)), top = Math.max(v.y + 15, Math.min(v.y + v.h - 15, y));
         Object.assign(button2.style, { left: `${left}px`, top: `${top}px` });
-        const degrees = Math.round((S.selection.length === 1 ? g.angle : S.drag?.delta || 0) * 10) / 10;
-        feedback.textContent = `${S.selection.length > 1 && degrees > 0 ? "+" : ""}${degrees}°`;
+        const degrees = Math.round((g ? g.angle : S.drag?.delta || 0) * 10) / 10;
+        feedback.textContent = `${!g && degrees > 0 ? "+" : ""}${degrees}°`;
         Object.assign(feedback.style, { left: `${Math.min(v.x + v.w - 62, left + 20)}px`, top: `${Math.max(v.y + 5, top - 13)}px` });
-        if (ui.activeElement !== $(".rotation-angle") && S.selection.length === 1) $(".rotation-angle").value = degrees;
+        if (ui.activeElement !== $(".rotation-angle") && g) $(".rotation-angle").value = degrees;
       }
       function nudge(el, k, n) {
         crop.finish();
-        const nodes = S.selection.includes(el) ? selectionRoots(S.selection) : [el];
+        const nodes = S.selection.includes(el) ? groupRoots(S.selection) : groupRoots([el]);
         const dx = k === "arrowleft" ? -n : k === "arrowright" ? n : 0, dy = k === "arrowup" ? -n : k === "arrowdown" ? n : 0;
-        if (nodes.some((node) => !elementGeometry(node).supported)) return toast("这种变换暂不支持拖动、缩放或旋转");
+        if (!transformable(S.selection.includes(el) ? S.selection : [el]) || nodes.some((node) => !elementGeometry(node).supported)) return toast("这种变换暂不支持拖动、缩放或旋转");
         record(
           nodes,
           () => nodes.forEach((node) => {
@@ -7983,6 +8221,7 @@ property of their respective owners.
         drawSel();
       }
       function duplicate(el) {
+        if (isGroup(el) && !transformable([el])) return toast("这种组合暂不支持复制位移，已保留原样");
         crop.finish();
         const b = el.closest("[data-artboard]");
         const nodes = S.selection.includes(el) ? selectionRoots(S.selection) : [el];
@@ -8003,6 +8242,10 @@ property of their respective owners.
         copies.forEach(({ node, copy, p }) => {
           if (p.abs) setPos(copy, p, p.x + 16, p.y + 16);
           node.after(copy);
+          if (isGroup(copy)) groupRoots([copy]).forEach((member) => {
+            const p2 = getPos(member), g = elementGeometry(member), d = inverseDelta(g.parent, 16 * scaleOf(b), 16 * scaleOf(b));
+            setPos(member, p2, p2.x + d.x, p2.y + d.y);
+          });
         });
         const places = copies.map(({ copy }) => ({
           node: copy,
@@ -8284,14 +8527,25 @@ property of their respective owners.
           ++layoutRequest;
           return;
         }
-        const multi = S.selection.length > 1;
-        const supported = S.selection.every((n) => elementGeometry(n).supported);
+        const multi = S.selection.length > 1 || isGroup(el);
+        ui.querySelectorAll("[data-act=group]").forEach((n) => {
+          n.hidden = S.selection.length < 2;
+          n.disabled = !!groupProblem(S.selection);
+          n.title = groupProblem(S.selection) || "组合";
+        });
+        ui.querySelectorAll("[data-act=ungroup],[data-act=group-enter]").forEach((n) => {
+          n.hidden = !isGroup(el) || S.selection.length !== 1;
+        });
+        ui.querySelectorAll("[data-act=group-exit]").forEach((n) => {
+          n.hidden = !S.group;
+        });
+        const supported = transformable(S.selection);
         $("[data-act=rotation]").disabled = !supported;
         $(".rotation-single").hidden = multi;
         $(".rotation-multiple").hidden = !multi;
         if (!supported) $("[data-menu=rotation]").hidden = true;
         $(".selection-count").hidden = !multi;
-        $(".selection-count").textContent = multi ? `已选 ${S.selection.length} 个元素` : "";
+        $(".selection-count").textContent = multi ? isGroup(el) && S.selection.length === 1 ? `组合 · ${groupRoots([el]).length} 个对象` : `已选 ${S.selection.length} 个元素` : "";
         const image = !multi && !!cropImage(el), text = !multi && !el.matches(MEDIA) && !el.querySelector("[data-el]") && !!el.textContent.trim();
         $(".text-tools").hidden = !text;
         $(".more-text-section").hidden = !text;
@@ -8353,7 +8607,7 @@ property of their respective owners.
         startRotation(e);
       });
       $(".rotate-handle").addEventListener("keydown", (e) => {
-        if (["ArrowLeft", "ArrowRight"].includes(e.key) && S.selection.length === 1) {
+        if (["ArrowLeft", "ArrowRight"].includes(e.key) && S.selection.length === 1 && !isGroup(S.sel)) {
           e.preventDefault();
           rotateTo(elementGeometry(S.sel).angle + (e.key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 15 : 1));
         } else if (["Enter", " "].includes(e.key)) {
@@ -8413,6 +8667,7 @@ property of their respective owners.
               modal.hidden = true;
               focusedBeforeModal?.focus();
             } else if (typing) endText();
+            else if (S.group) exitGroup();
             else if (el) select(null);
             else if (S.editing) {
               setEditing(false);
@@ -8435,12 +8690,12 @@ property of their respective owners.
           } else if (mod && (k === "1" || c === "Digit1" || c === "Numpad1"))
             zoomFit();
           else if (mod && e.shiftKey && k.startsWith("arrow") && can) {
-            const next = directionTarget(S.selection, S.current, e.key);
+            const next = directionTarget(S.selection, S.current, e.key, S.group);
             if (next) select([...S.selection, next]);
           } else if (mod && k === "d" && can) duplicate(el);
           else if ((k === "delete" || k === "backspace") && can) removeEl(el);
           else if (k === "enter" && can && S.selection.length === 1)
-            cropImage(el) ? crop.start(el) : startText(el);
+            isGroup(el) ? enterGroup(el) : cropImage(el) ? crop.start(el) : startText(el);
           else if (k.startsWith("arrow") && can && !mod)
             nudge(el, k, e.shiftKey ? 10 : 1);
           else if (!typing && !mod && (k === "pagedown" || !el && k === "arrowright"))
@@ -8508,7 +8763,9 @@ property of their respective owners.
           e.preventDefault();
           ui.activeElement?.blur();
           endText();
-          const el = e.target.closest("[data-el]");
+          const raw = e.target.closest("[data-el]");
+          if (S.group && raw && !S.group.contains(raw)) S.group = null;
+          const el = logicalTarget(raw, S.group);
           if (!el) {
             startMarquee(e);
             return;
@@ -8553,7 +8810,7 @@ property of their respective owners.
             }
             if (type === "contextmenu" && !editable) {
               if (e.ctrlKey || e.metaKey || e.shiftKey) return;
-              const el = e.target.closest("[data-el]");
+              const el = logicalTarget(e.target, S.group);
               if (el) {
                 if (!S.selection.includes(el)) select(el);
                 openMenu("element", null, { x: e.clientX, y: e.clientY });
@@ -8561,7 +8818,11 @@ property of their respective owners.
             }
             if (type === "dblclick" && !editable) {
               if (e.shiftKey || e.ctrlKey || e.metaKey) return;
-              const el = e.target.closest("[data-el]");
+              const el = logicalTarget(e.target, S.group);
+              if (isGroup(el)) {
+                enterGroup(el, e.target);
+                return;
+              }
               if (el) select(el);
               cropImage(el) ? crop.start(el) : startText(el, e.clientX, e.clientY);
             }
@@ -8655,7 +8916,7 @@ property of their respective owners.
         const el = S.sel;
         if (!el) return;
         const board = el.closest("[data-artboard]");
-        const plans = S.selection.map(
+        const plans = groupRoots(S.selection).map(
           (n) => layerChanges(n, board, front, S.selection)
         );
         record(
@@ -8789,6 +9050,10 @@ property of their respective owners.
         },
         "text-height": () => adaptText("height"),
         "text-fit": () => adaptText("fit"),
+        group: groupSelection,
+        ungroup: ungroupSelection,
+        "group-enter": () => enterGroup(S.sel),
+        "group-exit": exitGroup,
         "element-duplicate": () => S.sel && duplicate(S.sel),
         "element-delete": () => S.sel && removeEl(S.sel),
         "element-front": () => layer(true),
@@ -8800,7 +9065,7 @@ property of their respective owners.
         "element-more": (btn) => openMenu("element", btn),
         rotation: (btn) => {
           openMenu("rotation", btn);
-          if (!$("[data-menu=rotation]").hidden && S.selection.length === 1) {
+          if (!$("[data-menu=rotation]").hidden && S.selection.length === 1 && !isGroup(S.sel)) {
             $(".rotation-angle").focus();
             $(".rotation-angle").select();
           }
@@ -8851,6 +9116,10 @@ property of their respective owners.
         "text-height",
         "text-fit",
         "text-align",
+        "group",
+        "ungroup",
+        "group-enter",
+        "group-exit",
         "element-duplicate",
         "element-delete",
         "element-front",
@@ -8921,6 +9190,7 @@ property of their respective owners.
         idx: boards().indexOf(S.current)
       });
       function setContent(c) {
+        S.group = null;
         endText();
         select(null);
         headCSS().forEach((n) => n.remove());
@@ -8997,7 +9267,10 @@ property of their respective owners.
         printStyle.textContent = sz ? `@page{size:${sz.w}px ${sz.h}px;margin:0}` : "";
       });
       function setCurrent(b) {
-        if (S.current !== (b || null)) S.reviewContext++;
+        if (S.current !== (b || null)) {
+          S.reviewContext++;
+          S.group = null;
+        }
         S.current = b || null;
         boards().forEach(
           (x) => x.toggleAttribute("data-editor-current", x === b)
@@ -9139,7 +9412,7 @@ property of their respective owners.
             const o = origin(b);
             b.querySelectorAll("[data-el]").forEach((el) => {
               if (!visible(el)) return el.removeAttribute("data-bbox");
-              const r = el.getBoundingClientRect();
+              const r = objectRect(el);
               const v = [r.left - o.x, r.top - o.y, r.width, r.height].map((n) => Math.round(n / o.s)).join(",");
               if (el.dataset.bbox !== v) el.dataset.bbox = v;
             });
@@ -9237,6 +9510,7 @@ property of their respective owners.
         },
         reload: reloadLatest,
         historyBoundary() {
+          S.group = null;
           S.undo = [];
           S.redo = [];
           select(null);

@@ -1,3 +1,4 @@
+import { isGroup, groupRoots, objectRect, logicalTarget, groupProblem, groupStructureProblem, layoutProbe } from "./groups.js";
 import { createCrop, cropImage } from './crop.js';
 import { toolbarHTML } from "./ui.js";
 import { createExporter } from "./export.js";
@@ -38,6 +39,7 @@ import {
       reviewContext: 0,
       sel: null,
       selection: [],
+      group: null,
       drag: null,
       text: null,
       range: null,
@@ -119,7 +121,7 @@ import {
     const fromUI = (e) => e.composedPath().includes(host);
     const inStage = (n) =>
       n instanceof Element && !!n.closest("[data-artboard]");
-    const visible = (n) => n.getClientRects().length > 0;
+    const visible = (n) => isGroup(n) ? objectRect(n).width > 0 && objectRect(n).height > 0 : n.getClientRects().length > 0;
     const scaleOf = (b) => b.getBoundingClientRect().width / b.offsetWidth || 1; // 已包含缩放
     const isArtboard = (b) => b?.dataset.mode === "artboard";
     const activeBoard = () =>
@@ -245,7 +247,12 @@ import {
           next: node.nextSibling,
         }));
       select(null);
+      const ancestors = [...new Set(nodes.flatMap(node => { const list=[]; for(let n=node.parentElement; isGroup(n); n=n.parentElement) list.push(n); return list; }))];
       nodes.forEach((node) => node.remove());
+      for (const group of ancestors.sort((a,b) => a.contains(b)?1:b.contains(a)?-1:0)) if (!group.children.length) {
+        places.push({node:group,parent:group.parentNode,next:group.nextSibling}); group.remove();
+      }
+      drawSel();
       push({
         undo: () =>
           [...places]
@@ -256,7 +263,7 @@ import {
                 next?.parentNode === parent ? next : null,
               ),
             ),
-        redo: () => nodes.forEach((node) => node.remove()),
+        redo: () => { [...places].forEach(({node}) => node.remove()); drawSel(); },
         board: b,
       });
     }
@@ -316,6 +323,7 @@ import {
       host.toggleAttribute("data-editing", on);
       if (!on) {
         endText();
+        S.group = null;
         select(null);
       }
       syncBar();
@@ -500,10 +508,90 @@ import {
       } else el.style.translate = x || y ? `${x}px ${y}px` : "";
     }
 
+    function transformable(nodes) {
+      const roots=groupRoots(nodes);
+      return roots.length>0 && nodes.every(n => !isGroup(n) || !groupStructureProblem(n)) && roots.every(n => n.getClientRects().length && elementGeometry(n).supported);
+    }
+    function enterGroup(group, target = null) {
+      if (!isGroup(group) || !S.editing || !persistence?.canEdit()) return;
+      crop.finish(); endText();
+      const issue = groupStructureProblem(group);
+      if (issue) return toast(issue);
+      S.group = group;
+      select(logicalTarget(target, group) || [...group.children][0] || null);
+    }
+    function exitGroup() {
+      if (!S.group) return;
+      crop.finish(); endText();
+      const group = S.group;
+      S.group = group.parentElement?.closest('[data-group="1"][data-el]') || null;
+      select(group.isConnected ? group : null);
+    }
+    function groupSelection() {
+      crop.finish(); endText();
+      const nodes = selectionRoots(S.selection), issue = groupProblem(nodes);
+      if (issue) return toast(issue);
+      const parent = nodes[0].parentElement, board = activeBoard();
+      const ordered = [...parent.childNodes], first = ordered.findIndex(n => nodes.includes(n)), last = ordered.findLastIndex(n => nodes.includes(n));
+      const children = ordered.slice(first,last+1), next = ordered[last+1] || null;
+      const unchanged = layoutProbe(board);
+      const sequence = stage.getAttribute('data-element-seq');
+      const group = document.createElement('div');
+      group.dataset.group = '1'; group.dataset.el = elementId(board,'group'); group.style.display = 'contents'; group.setAttribute('role','group');
+      const wrap = () => { parent.insertBefore(group, children[0].parentNode===parent ? children[0] : next?.parentNode===parent ? next : null); children.forEach(n => group.append(n)); };
+      const unwrap = () => { children.forEach(n => parent.insertBefore(n,group)); group.remove(); };
+      wrap();
+      if (groupStructureProblem(group) || !unchanged()) { unwrap(); sequence===null ? stage.removeAttribute('data-element-seq') : stage.setAttribute('data-element-seq',sequence); return toast('这种布局的组合会改变样式、位置或绘制顺序，已保留原样',4000); }
+      const context = S.group;
+      push({board, undo:() => { unwrap(); S.group=context; select(nodes); }, redo:() => { wrap(); S.group=context; select(group); }});
+      select(group);
+    }
+    function ungroupSelection() {
+      const group = S.selection.length===1 && isGroup(S.sel) ? S.sel : null;
+      if (!group) return;
+      crop.finish(); endText();
+      const issue = groupStructureProblem(group);
+      if (issue) return toast(issue);
+      const parent=group.parentNode, children=[...group.childNodes], next=group.nextSibling, board=activeBoard(), context=S.group;
+      const unwrap=() => { children.forEach(n => parent.insertBefore(n,group)); group.remove(); };
+      const wrap=() => { parent.insertBefore(group,children[0]?.parentNode===parent ? children[0] : next?.parentNode===parent ? next : null); children.forEach(n => group.append(n)); };
+      const unchanged=layoutProbe(board,[group]);
+      unwrap();
+      if (!unchanged()) { wrap(); return toast('取消组合会改变当前布局，已保留原样',4000); }
+      const members=children.filter(n => n.nodeType===1);
+      push({board,undo:() => { wrap(); S.group=context; select(group); },redo:() => { unwrap(); S.group=context; select(members); }});
+      select(members);
+    }
+    function startGroupResize(e, dir) {
+      if (dir.length!==2 || groupStructureProblem(S.sel)) return;
+      endText();
+      const nodes=groupRoots([S.sel]), items=nodes.map(node => ({node,g:elementGeometry(node),p:getPos(node),scale:getComputedStyle(node).scale}));
+      if (!items.length || items.some(i => !i.g.supported)) return toast('这种变换暂不支持组合缩放');
+      const rect=unionRect([S.sel]), board=activeBoard(), boardScale=scaleOf(board), before=snap(nodes);
+      const anchor={x:dir.includes('w')?rect.right:rect.left,y:dir.includes('n')?rect.bottom:rect.top};
+      const dx=(dir.includes('w')?-1:1)*rect.width,dy=(dir.includes('n')?-1:1)*rect.height;
+      const minimum=Math.max(...items.map(i => 8*boardScale/Math.min(i.g.w*i.g.scale,i.g.h*i.g.scale)), ...items.flatMap(i => textMetrics(i.node).filter(m=>m.node.textContent.trim()).map(m=>6*boardScale/(m.font*elementGeometry(m.node).scale))));
+      let moved=false, factor=1;
+      S.drag={move(ev) {
+        if (!moved && Math.hypot(ev.clientX-e.clientX,ev.clientY-e.clientY)<3) return;
+        if (!moved) { items.forEach(i => { prepareTransform(i.node,i.g,i.p); i.position=getPos(i.node); }); moved=true; }
+        const k=Math.max(minimum,1+((ev.clientX-e.clientX)*dx+(ev.clientY-e.clientY)*dy)/(dx*dx+dy*dy));
+        factor=k;
+        for (const i of items) {
+          setPos(i.node,i.position,i.position.x,i.position.y);
+          const scale=i.scale==='none'?1:parseFloat(i.scale);
+          i.node.style.scale=String(scale*k);
+          keepCenter(i.node,i.position,{x:anchor.x+(i.g.cx-anchor.x)*k,y:anchor.y+(i.g.cy-anchor.y)*k});
+        }
+        drawSel();
+      },up() { if(moved && Math.abs(factor-1)>1e-6)commit(before,board); else if(moved)apply(before); },cancel() { apply(before); drawSel(); }};
+    }
+
     /* ---------- 选中 / 拖动 / 改大小 ---------- */
     function select(el, keepDrag = false) {
       if (crop.active && !crop.owns(el)) crop.finish();
       const nodes = selectionRoots(Array.isArray(el) ? el : el ? [el] : []);
+      if (S.group && (!S.group.isConnected || nodes.some(n => !S.group.contains(n)))) S.group = null;
       if (
         nodes.length !== S.selection.length ||
         nodes.some((n, i) => n !== S.selection[i])
@@ -520,6 +608,7 @@ import {
       syncBar();
     }
     function drawSel() {
+      if (S.group && (!S.group.isConnected || S.group.closest("[data-artboard]") !== S.current)) S.group = null;
       crop.refresh();
       guides.refresh();
       S.selection = selectionRoots(S.selection).filter((n) => visible(n));
@@ -528,7 +617,7 @@ import {
       const el = S.sel;
       if (!el || !el.isConnected || !visible(el)) selBox.style.display = "none";
       else {
-        const r = unionRect(S.selection), g = S.selection.length === 1 ? elementGeometry(el) : null;
+        const r = unionRect(S.selection), g = S.selection.length === 1 && !isGroup(el) ? elementGeometry(el) : null;
         const oriented = g?.supported;
         const width = oriented ? g.w * g.scale : r.width, height = oriented ? g.h * g.scale : r.height;
         Object.assign(selBox.style, {
@@ -539,9 +628,10 @@ import {
           height: height + "px",
           transform: oriented ? `rotate(${g.angle}deg)` : 'none',
         });
-        selBox.classList.toggle('unsupported', S.selection.some(n => !elementGeometry(n).supported));
+        selBox.classList.toggle('unsupported', !transformable(S.selection));
         selBox.classList.toggle("typing", !!S.text);
         selBox.classList.toggle("multiple", S.selection.length > 1);
+        selBox.classList.toggle("group", S.selection.length === 1 && isGroup(el));
       }
       positionRotation();
       placeTbar();
@@ -581,8 +671,8 @@ import {
             width: Math.abs(cx - x),
             height: Math.abs(cy - y),
           };
-          const hits = selectable(board).filter((n) => {
-            const r = n.getBoundingClientRect();
+          const hits = selectable(board, S.group).filter((n) => {
+            const r = objectRect(n);
             return (
               r.left < rect.right &&
               r.right > rect.left &&
@@ -606,11 +696,11 @@ import {
     function startDrag(e, el) {
       const b = el.closest("[data-artboard]"),
         s = scaleOf(b),
-        nodes = selectionRoots(S.selection),
+        nodes = groupRoots(S.selection),
         positions = nodes.map((node) => ({ node, p: getPos(node), g: elementGeometry(node) })),
         before = snap(nodes);
-      if (positions.some(item => !item.g.supported)) return toast('这种变换暂不支持拖动、缩放或旋转');
-      let alignment = guides.begin(nodes, b);
+      if (!transformable(S.selection) || positions.some(item => !item.g.supported)) return toast('这种变换暂不支持拖动、缩放或旋转');
+      let alignment = guides.begin(nodes, b, S.group);
       const x0 = e.clientX,
         y0 = e.clientY;
       let moved = false;
@@ -623,7 +713,7 @@ import {
               prepareTransform(item.node, item.g, item.p);
               item.p = getPos(item.node); item.g = elementGeometry(item.node);
             });
-            alignment = guides.begin(nodes, b);
+            alignment = guides.begin(nodes, b, S.group);
           }
           moved = true;
           const delta = alignment.move(
@@ -670,6 +760,7 @@ import {
     }
     function startResize(e, dir) {
       if (S.selection.length !== 1) return;
+      if (isGroup(S.sel)) return startGroupResize(e, dir);
       endText();
       const el = S.sel, b = el.closest('[data-artboard]'), initial = elementGeometry(el);
       if (!initial.supported) return toast('这种变换暂不支持拖动、缩放或旋转');
@@ -717,7 +808,7 @@ import {
     }
 
     function rotationItems() {
-      return selectionRoots(S.selection).map(node => ({ node, g: elementGeometry(node), p: getPos(node) }));
+      return groupRoots(S.selection).map(node => ({ node, g: elementGeometry(node), p: getPos(node) }));
     }
     function applyRotation(items, center, delta) {
       const rad = delta * Math.PI / 180, cos = Math.cos(rad), sin = Math.sin(rad);
@@ -734,7 +825,7 @@ import {
       }
     }
     function rotateTo(value) {
-      if (!S.sel || S.selection.length !== 1 || !S.editing || !persistence?.canEdit() || !Number.isFinite(value)) return;
+      if (!S.sel || isGroup(S.sel) || S.selection.length !== 1 || !S.editing || !persistence?.canEdit() || !Number.isFinite(value)) return;
       endText();
       const items = rotationItems(), g = items[0].g, delta = normalizedAngle(value - g.angle);
       if (!g.supported) return toast('这种变换暂不支持拖动、缩放或旋转');
@@ -747,7 +838,7 @@ import {
       if (e.button !== 0 || !S.sel || !S.editing || !persistence?.canEdit()) return;
       endText(); closeMenus();
       const items = rotationItems();
-      if (items.some(item => !item.g.supported)) return toast('这种变换暂不支持拖动、缩放或旋转');
+      if (!transformable(S.selection) || items.some(item => !item.g.supported)) return toast('这种变换暂不支持拖动、缩放或旋转');
       const r = unionRect(S.selection), center = { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
       const before = snap(items.map(item => item.node)), b = activeBoard();
       let last = Math.atan2(e.clientY - center.y, e.clientX - center.x) * 180 / Math.PI, total = 0, changed = false;
@@ -756,7 +847,7 @@ import {
         move(ev) {
           const current = Math.atan2(ev.clientY - center.y, ev.clientX - center.x) * 180 / Math.PI;
           total += normalizedAngle(current - last); last = current;
-          const base = items.length === 1 ? items[0].g.angle : 0;
+          const base = S.selection.length===1 && !isGroup(S.sel) ? items[0].g.angle : 0;
           const delta = snappedAngle(base + total, ev) - base;
           operation.delta = delta;
           if (Math.abs(delta) < .0001 && !changed) return;
@@ -775,28 +866,28 @@ import {
     function positionRotation() {
       if (crop.active) { $('.rotate-handle').hidden = true; $('.rotation-feedback').hidden = true; return; }
       const button = $('.rotate-handle'), feedback = $('.rotation-feedback');
-      const show = S.editing && !S.playing && !S.text && S.sel && S.selection.every(n => elementGeometry(n).supported);
+      const show = S.editing && !S.playing && !S.text && S.sel && transformable(S.selection);
       button.hidden = !show; feedback.hidden = !show || !S.drag?.rotation;
       if (!show) return;
-      const r = unionRect(S.selection), g = S.selection.length === 1 ? elementGeometry(S.sel) : null;
+      const r = unionRect(S.selection), g = S.selection.length === 1 && !isGroup(S.sel) ? elementGeometry(S.sel) : null;
       const rad = (g?.angle || 0) * Math.PI / 180, height = g ? g.h * g.scale : r.height;
       const x = (r.left + r.right) / 2 + Math.sin(rad) * (height / 2 + 26);
       const y = (r.top + r.bottom) / 2 - Math.cos(rad) * (height / 2 + 26);
       const v = viewport.bounds(), left = Math.max(v.x + 15, Math.min(v.x + v.w - 15, x)), top = Math.max(v.y + 15, Math.min(v.y + v.h - 15, y));
       Object.assign(button.style, { left: `${left}px`, top: `${top}px` });
-      const degrees = Math.round((S.selection.length === 1 ? g.angle : S.drag?.delta || 0) * 10) / 10;
-      feedback.textContent = `${S.selection.length > 1 && degrees > 0 ? '+' : ''}${degrees}°`;
+      const degrees = Math.round((g ? g.angle : S.drag?.delta || 0) * 10) / 10;
+      feedback.textContent = `${!g && degrees > 0 ? '+' : ''}${degrees}°`;
       Object.assign(feedback.style, { left: `${Math.min(v.x + v.w - 62, left + 20)}px`, top: `${Math.max(v.y + 5, top - 13)}px` });
-      if (ui.activeElement !== $('.rotation-angle') && S.selection.length === 1) $('.rotation-angle').value = degrees;
+      if (ui.activeElement !== $('.rotation-angle') && g) $('.rotation-angle').value = degrees;
     }
     function nudge(el, k, n) {
       crop.finish();
       const nodes = S.selection.includes(el)
-        ? selectionRoots(S.selection)
-        : [el];
+        ? groupRoots(S.selection)
+        : groupRoots([el]);
       const dx = k === "arrowleft" ? -n : k === "arrowright" ? n : 0,
         dy = k === "arrowup" ? -n : k === "arrowdown" ? n : 0;
-      if (nodes.some(node => !elementGeometry(node).supported)) return toast('这种变换暂不支持拖动、缩放或旋转');
+      if (!transformable(S.selection.includes(el) ? S.selection : [el]) || nodes.some(node => !elementGeometry(node).supported)) return toast('这种变换暂不支持拖动、缩放或旋转');
       record(
         nodes,
         () =>
@@ -811,6 +902,7 @@ import {
       drawSel();
     }
     function duplicate(el) {
+      if (isGroup(el) && !transformable([el])) return toast('这种组合暂不支持复制位移，已保留原样');
       crop.finish();
       const b = el.closest("[data-artboard]");
       const nodes = S.selection.includes(el)
@@ -833,6 +925,7 @@ import {
       copies.forEach(({ node, copy, p }) => {
         if (p.abs) setPos(copy, p, p.x + 16, p.y + 16);
         node.after(copy);
+        if (isGroup(copy)) groupRoots([copy]).forEach(member => { const p = getPos(member), g = elementGeometry(member), d = inverseDelta(g.parent, 16 * scaleOf(b), 16 * scaleOf(b)); setPos(member, p, p.x+d.x, p.y+d.y); });
       });
       const places = copies.map(({ copy }) => ({
         node: copy,
@@ -1133,15 +1226,18 @@ import {
         ++layoutRequest;
         return;
       }
-      const multi = S.selection.length > 1;
-      const supported = S.selection.every(n => elementGeometry(n).supported);
+      const multi = S.selection.length > 1 || isGroup(el);
+      ui.querySelectorAll("[data-act=group]").forEach(n => { n.hidden = S.selection.length < 2; n.disabled = !!groupProblem(S.selection); n.title = groupProblem(S.selection) || "组合"; });
+      ui.querySelectorAll("[data-act=ungroup],[data-act=group-enter]").forEach(n => { n.hidden = !isGroup(el) || S.selection.length !== 1; });
+      ui.querySelectorAll("[data-act=group-exit]").forEach(n => { n.hidden = !S.group; });
+      const supported = transformable(S.selection);
       $('[data-act=rotation]').disabled = !supported;
       $('.rotation-single').hidden = multi;
       $('.rotation-multiple').hidden = !multi;
       if (!supported) $('[data-menu=rotation]').hidden = true;
       $(".selection-count").hidden = !multi;
       $(".selection-count").textContent = multi
-        ? `已选 ${S.selection.length} 个元素`
+        ? isGroup(el) && S.selection.length === 1 ? `组合 · ${groupRoots([el]).length} 个对象` : `已选 ${S.selection.length} 个元素`
         : "";
       const image = !multi && !!cropImage(el),
         text =
@@ -1195,7 +1291,7 @@ import {
     });
     $('.rotate-handle').addEventListener('pointerdown', e => { e.preventDefault(); startRotation(e); });
     $('.rotate-handle').addEventListener('keydown', e => {
-      if (['ArrowLeft', 'ArrowRight'].includes(e.key) && S.selection.length === 1) {
+      if (['ArrowLeft', 'ArrowRight'].includes(e.key) && S.selection.length === 1 && !isGroup(S.sel)) {
         e.preventDefault(); rotateTo(elementGeometry(S.sel).angle + (e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 15 : 1));
       } else if (['Enter', ' '].includes(e.key)) { e.preventDefault(); ACTS.rotation($('[data-act=rotation]')); }
     });
@@ -1270,6 +1366,7 @@ import {
             modal.hidden = true;
             focusedBeforeModal?.focus();
           } else if (typing) endText();
+          else if (S.group) exitGroup();
           else if (el) select(null);
           else if (S.editing) {
             setEditing(false);
@@ -1297,12 +1394,12 @@ import {
         } else if (mod && (k === "1" || c === "Digit1" || c === "Numpad1"))
           zoomFit();
         else if (mod && e.shiftKey && k.startsWith("arrow") && can) {
-          const next = directionTarget(S.selection, S.current, e.key);
+          const next = directionTarget(S.selection, S.current, e.key, S.group);
           if (next) select([...S.selection, next]);
         } else if (mod && k === "d" && can) duplicate(el);
         else if ((k === "delete" || k === "backspace") && can) removeEl(el);
         else if (k === "enter" && can && S.selection.length === 1)
-          cropImage(el) ? crop.start(el) : startText(el);
+          isGroup(el) ? enterGroup(el) : cropImage(el) ? crop.start(el) : startText(el);
         else if (k.startsWith("arrow") && can && !mod)
           nudge(el, k, e.shiftKey ? 10 : 1);
         else if (
@@ -1388,7 +1485,9 @@ import {
         e.preventDefault();
         ui.activeElement?.blur();
         endText();
-        const el = e.target.closest("[data-el]");
+        const raw = e.target.closest("[data-el]");
+        if (S.group && raw && !S.group.contains(raw)) S.group = null;
+        const el = logicalTarget(raw, S.group);
         if (!el) {
           startMarquee(e);
           return;
@@ -1431,7 +1530,7 @@ import {
           }
           if (type === "contextmenu" && !editable) {
             if (e.ctrlKey || e.metaKey || e.shiftKey) return;
-            const el = e.target.closest("[data-el]");
+            const el = logicalTarget(e.target, S.group);
             if (el) {
               if (!S.selection.includes(el)) select(el);
               openMenu("element", null, { x: e.clientX, y: e.clientY });
@@ -1439,7 +1538,8 @@ import {
           }
           if (type === "dblclick" && !editable) {
             if (e.shiftKey || e.ctrlKey || e.metaKey) return;
-            const el = e.target.closest("[data-el]");
+            const el = logicalTarget(e.target, S.group);
+            if (isGroup(el)) { enterGroup(el, e.target); return; }
             if (el) select(el);
             cropImage(el)
               ? crop.start(el)
@@ -1540,7 +1640,7 @@ import {
       const el = S.sel;
       if (!el) return;
       const board = el.closest("[data-artboard]");
-      const plans = S.selection.map((n) =>
+      const plans = groupRoots(S.selection).map((n) =>
         layerChanges(n, board, front, S.selection),
       );
       record(
@@ -1669,6 +1769,10 @@ import {
       },
       "text-height": () => adaptText("height"),
       "text-fit": () => adaptText("fit"),
+      group: groupSelection,
+      ungroup: ungroupSelection,
+      "group-enter": () => enterGroup(S.sel),
+      "group-exit": exitGroup,
       "element-duplicate": () => S.sel && duplicate(S.sel),
       "element-delete": () => S.sel && removeEl(S.sel),
       "element-front": () => layer(true),
@@ -1680,7 +1784,7 @@ import {
       "element-more": (btn) => openMenu("element", btn),
       rotation: btn => {
         openMenu('rotation', btn);
-        if (!$('[data-menu=rotation]').hidden && S.selection.length === 1) { $('.rotation-angle').focus(); $('.rotation-angle').select(); }
+        if (!$('[data-menu=rotation]').hidden && S.selection.length === 1 && !isGroup(S.sel)) { $('.rotation-angle').focus(); $('.rotation-angle').select(); }
       },
       'rotation-reset': () => rotateTo(0),
       save: () => save(),
@@ -1727,6 +1831,7 @@ import {
       "text-height",
       "text-fit",
       "text-align",
+      "group", "ungroup", "group-enter", "group-exit",
       "element-duplicate",
       "element-delete",
       "element-front",
@@ -1820,6 +1925,7 @@ import {
       idx: boards().indexOf(S.current),
     });
     function setContent(c) {
+      S.group = null;
       endText();
       select(null);
       headCSS().forEach((n) => n.remove());
@@ -1901,7 +2007,7 @@ import {
 
     /* ---------- 单页 / 翻页 ---------- */
     function setCurrent(b) {
-      if (S.current !== (b || null)) S.reviewContext++;
+      if (S.current !== (b || null)) { S.reviewContext++; S.group = null; }
       S.current = b || null;
       boards().forEach((x) =>
         x.toggleAttribute("data-editor-current", x === b),
@@ -2057,7 +2163,7 @@ import {
           const o = origin(b);
           b.querySelectorAll("[data-el]").forEach((el) => {
             if (!visible(el)) return el.removeAttribute("data-bbox");
-            const r = el.getBoundingClientRect();
+            const r = objectRect(el);
             const v = [r.left - o.x, r.top - o.y, r.width, r.height]
               .map((n) => Math.round(n / o.s))
               .join(",");
@@ -2158,7 +2264,7 @@ import {
         return true;
       },
       reload: reloadLatest,
-      historyBoundary() { S.undo = []; S.redo = []; select(null); syncBar(); },
+      historyBoundary() { S.group = null; S.undo = []; S.redo = []; select(null); syncBar(); },
       prepareReview(kind) {
         if (sourcePending() || (pages.hasPendingRename() && kind !== "rename")) return false;
         editRequested = false;

@@ -4331,6 +4331,16 @@ property of their respective owners.
     };
   }
 
+  // html-design/src/groups.js
+  var isGroup = (node) => !!node?.matches?.('[data-group="1"][data-el]');
+  function groupStructureProblem(group) {
+    if (!isGroup(group)) return null;
+    const cs = getComputedStyle(group);
+    if (cs.display !== "contents" || cs.transform !== "none" || cs.rotate !== "none" || cs.scale !== "none" || cs.translate !== "none" || Number(cs.zoom) !== 1 || cs.filter !== "none" || cs.opacity !== "1" || cs.perspective !== "none" || ["::before", "::after"].some((p) => !["none", "normal", '""'].includes(getComputedStyle(group, p).content)) || [...group.childNodes].some((n) => n.nodeType === Node.ELEMENT_NODE ? !n.hasAttribute("data-el") : n.nodeType === Node.TEXT_NODE && n.textContent.trim()) || !group.children.length)
+      return "组合的CSS或结构不受支持，已保留原样";
+    return [...group.children].map(groupStructureProblem).find(Boolean) || null;
+  }
+
   // html-design/src/crop-geometry.js
   function cropGeometry(frame, geometry) {
     const img = frame?.querySelector(":scope > img[data-crop-image]");
@@ -4578,6 +4588,15 @@ property of their respective owners.
       if (el.hasAttribute("data-el") && (!usableQaId(el.dataset.el) || idCounts.get(el.dataset.el) !== 1)) {
         incomplete = true;
         emit("ID_INVALID", board, el, { kind: "element", length: el.dataset.el.length }, "error");
+      }
+      if (isGroup(el)) {
+        const reason = groupStructureProblem(el);
+        if (reason) {
+          incomplete = true;
+          coverage.elements.unsupported++;
+          emit("GEOMETRY_UNSUPPORTED", board, el, { reason });
+        }
+        continue;
       }
       if (!visible(el, board)) {
         incomplete = true;

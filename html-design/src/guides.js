@@ -1,3 +1,4 @@
+import { objectRect, logicalTarget } from "./groups.js";
 // Geometry stays in document pixels; the magnetic range stays constant on screen.
 const anchors = (r, axis) =>
   axis === "x"
@@ -140,7 +141,7 @@ export function createGuides({ ui, origin }) {
     svg.replaceChildren();
   };
   const localRect = (el, o) => {
-    const r = el.getBoundingClientRect();
+    const r = objectRect(el);
     return {
       x: (r.left - o.x) / o.s,
       y: (r.top - o.y) / o.s,
@@ -148,7 +149,7 @@ export function createGuides({ ui, origin }) {
       h: r.height / o.s,
     };
   };
-  function begin(elements, board) {
+  function begin(elements, board, context = null) {
     const nodes = Array.isArray(elements) ? elements : [elements];
     const groupRect = (o) => {
       const rects = nodes.map((n) => localRect(n, o));
@@ -167,7 +168,8 @@ export function createGuides({ ui, origin }) {
     const targets = [
       { x: 0, y: 0, w: board.clientWidth, h: board.clientHeight },
     ];
-    for (const node of board.querySelectorAll("[data-el]")) {
+    for (const node of new Set([...board.querySelectorAll("[data-el]")].map(n => logicalTarget(n, context)))) {
+      if (!node || (context && !context.contains(node))) continue;
       if (
         nodes.some(
           (el) => node === el || node.contains(el) || el.contains(node),
@@ -180,7 +182,7 @@ export function createGuides({ ui, origin }) {
       for (let ancestor = node; ancestor && ancestor !== board.parentElement; ancestor = ancestor.parentElement) {
         if (getComputedStyle(ancestor).opacity === "0") { transparent = true; break; }
       }
-      if (style.visibility !== "visible" || transparent || !node.getClientRects().length) continue;
+      if (style.visibility !== "visible" || transparent || !objectRect(node).width) continue;
       const r = localRect(node, o);
       if (r.w > 0 && r.h > 0) targets.push(r);
     }

@@ -65,7 +65,7 @@ body{margin:0;background:#e9e9ec;font-family:var(--font);color:var(--text)}
 
 ## 3. 元素（data-el）
 
-- 人可能想移动、改字、替换的每个可见块都要加 `data-el`，包括标题、段落、按钮、图片、卡片、图标、装饰图形。
+- 当前编辑对象由 `data-el` 显式标记，尚不自动发现任意普通 HTML；真实 DOM 负责几何和排版。人可能想移动、改字、替换的每个可见块都要加 `data-el`，包括标题、段落、按钮、图片、卡片、图标、装饰图形。
 - 命名格式是 `页id-语义`，例如 `p1-title`、`p3-card2`、`p3-card2-icon`。**整个文件内唯一**，已有的 id 永远不要改。
 - 可以嵌套：卡片是 `data-el`，卡片里的标题、文字也是 `data-el`。只有不嵌套 `data-el` 的元素才能双击改字，所以文字要放在自己单独的 `data-el` 元素上。
 - 纯布局用的包装层（只用来做 flex 或 grid）不需要加 `data-el`。
@@ -109,6 +109,8 @@ AI 经协作 `commit` 后，待审阅页底显示「放弃｜接受」：悬停�
 
 共享 CSS、脚本、页外结构或已有页顺序变化使用整份文档范围，放弃会恢复整份文档（保留之前已接受成果）；文档级待审阅后的人工修改会接受整次审阅。不要为了小改动无故触及全局范围。放弃成功后刷新会清空原来的普通撤销/重做历史，不能跨恢复重放旧命令。审阅可在预览直接执行，后台安全交接；等待时切页或播放会取消这次操作，返回后需重新选择。详见 [协作与审阅](references/collaboration.md)。
 
+多选同页同父容器的相邻对象可「组合」，双击逐级进入，Esc结束局部编辑后返回上层；组支持整体移动、旋转、等比角点缩放与取消组合。保留 `data-group="1"`/`display:contents` 语义包装和成员CSS，不改写为坐标JSON。布局无法安全保持时拒绝操作；详见[编辑器操作](references/editor-controls.md#组合)。
+
 文字选中后可用「更多 → 文字适配」查看溢出：选择「高度随内容」保持字号、调整文本框，或「缩小字号适配」保持框、按比例缩小到最小 6px；均可一次撤销。适配需明确操作，检测本身不改文档，不是自动 DesignQA。
 
 如果确实需要自己的翻页逻辑，监听 `editor:goto` 事件，通过 `e.detail.index`（从 0 开始）和 `e.detail.id`（画板编号）同步状态。不要自行写入编辑器维护的 `data-editor-current` 属性。
@@ -126,6 +128,7 @@ AI 经协作 `commit` 后，待审阅页底显示「放弃｜接受」：悬停�
 | 内联 `left/top/width/min-height/height` | 可编辑元素 | 人调整的位置和尺寸，必须保留 |
 | 内联 `font-size/line-height/letter-spacing/word-spacing` | 文字及内部子元素 | 角点缩放或格式工具产生的排版，必须保留 |
 | 内联 `object-fit` | 图片 | `contain` 为 Fit，`cover` 为 Cover，必须保留 |
+| `data-group="1"` 与 `display:contents` | 语义组合包装 | 保留成员DOM与CSS变换，不作为一个有盒布局容器或改为坐标JSON |
 | `data-crop-frame="1"` / `data-crop-image` | 外框 / 内部真实图片 | 外框保留原 `data-el`，内部图片保留 id/class/src/alt；不可拆散或给内部图重复加 `data-el` |
 | `data-page-seq / data-element-seq` | 舞台 | 编辑器生成标识的递增计数；删除页面/元素后不回退 |
 

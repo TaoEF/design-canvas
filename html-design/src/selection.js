@@ -1,3 +1,4 @@
+import { objectRect, logicalTarget } from "./groups.js";
 export function selectionRoots(nodes) {
   const unique = [...new Set(nodes)].filter((n) => n?.isConnected);
   return unique.filter(
@@ -6,7 +7,7 @@ export function selectionRoots(nodes) {
 }
 
 export function unionRect(nodes) {
-  const rects = nodes.map((n) => n.getBoundingClientRect());
+  const rects = nodes.map(objectRect);
   const left = Math.min(...rects.map((r) => r.left)),
     top = Math.min(...rects.map((r) => r.top));
   const right = Math.max(...rects.map((r) => r.right)),
@@ -21,9 +22,10 @@ export function unionRect(nodes) {
   };
 }
 
-export function selectable(board) {
-  return [...board.querySelectorAll("[data-el]")].filter((n) => {
-    const r = n.getBoundingClientRect(),
+export function selectable(board, context = null) {
+  return [...new Set([...(context || board).querySelectorAll("[data-el]")].map(n => logicalTarget(n, context)))].filter((n) => {
+    if (!n) return false;
+    const r = objectRect(n),
       s = getComputedStyle(n);
     return (
       n.closest("[data-artboard]") === board &&
@@ -35,21 +37,21 @@ export function selectable(board) {
   });
 }
 
-export function directionTarget(nodes, board, key) {
+export function directionTarget(nodes, board, key, context = null) {
   const selected = selectionRoots(nodes);
   if (!selected.length) return null;
-  const from = selected.at(-1).getBoundingClientRect();
+  const from = objectRect(selected.at(-1));
   const x = from.left + from.width / 2,
     y = from.top + from.height / 2;
   const horizontal = ["ArrowLeft", "ArrowRight"].includes(key),
     sign = ["ArrowLeft", "ArrowUp"].includes(key) ? -1 : 1;
   let best = null;
-  for (const node of selectable(board)) {
+  for (const node of selectable(board, context)) {
     if (
       selected.some((n) => n === node || n.contains(node) || node.contains(n))
     )
       continue;
-    const r = node.getBoundingClientRect(),
+    const r = objectRect(node),
       dx = r.left + r.width / 2 - x,
       dy = r.top + r.height / 2 - y;
     const forward = (horizontal ? dx : dy) * sign,
@@ -73,7 +75,7 @@ export function createSelectionOverlay(ui) {
       members.replaceChildren();
       if (nodes.length < 2) return;
       for (const node of nodes) {
-        const r = node.getBoundingClientRect(),
+        const r = objectRect(node),
           frame = document.createElement("div");
         frame.className = "selection-member";
         Object.assign(frame.style, {
