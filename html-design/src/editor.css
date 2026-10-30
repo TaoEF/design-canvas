@@ -485,7 +485,7 @@ button.primary:hover:not(:disabled) {
 }
 .sel.unsupported i { display:none; }
 .rotate-handle {
-  position:fixed; width:24px; height:24px; padding:4px; margin:-12px;
+  position:fixed; width:24px; min-width:24px; height:24px; padding:4px; margin:-12px;
   border:1px solid var(--selection); border-radius:50%; background:var(--paper);
   color:var(--selection); z-index:2147483645; cursor:grab;
   box-shadow:0 0 0 1px #ffffff80;
@@ -539,13 +539,12 @@ button.primary:hover:not(:disabled) {
   stroke: var(--guide);
   stroke-width: 1px;
 }
+.guide-distance-bg { fill: #202020; }
 .guide-distance {
-  fill: #047857;
-  stroke: #fff;
-  stroke-width: 3px;
-  paint-order: stroke;
-  stroke-linejoin: round;
-  font: 11px system-ui, sans-serif;
+  fill: #fff;
+  stroke: none;
+  font-family: inherit;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 :host([data-nav-hidden]) .guides {

@@ -118,6 +118,14 @@ export function snapMove(rect, targets, delta, threshold, peers = targets) {
       else matches.splice(i, 1);
     }
   }
+  // An ordinary edge/center can win the same destination as spacing. Keep its
+  // correction, but do not hide a genuine equal gap at the final position.
+  const final = { ...rect, x: rect.x + result.x, y: rect.y + result.y };
+  for (const axis of ["x", "y"]) {
+    if (matches.some(match => match.axis === axis && match.kind === "spacing")) continue;
+    const coincident = spacingCandidates(final, peers, axis, 1e-6)[0];
+    if (coincident) matches.push(coincident);
+  }
   return result;
 }
 
@@ -193,11 +201,18 @@ export function createGuides({ ui, origin }) {
           return path;
         });
         const labels = matches.filter(match => match.kind === "spacing").flatMap(match => [0, 1].map(() => {
+          const group = document.createElementNS(svg.namespaceURI, "g");
+          const background = document.createElementNS(svg.namespaceURI, "rect");
+          background.setAttribute("class", "guide-distance-bg");
+          background.setAttribute("rx", "5");
+          background.setAttribute("height", "21");
           const label = document.createElementNS(svg.namespaceURI, "text");
           label.setAttribute("class", "guide-distance");
-          label.textContent = String(Math.round(match.gap * 10) / 10);
-          svg.append(label);
-          return label;
+          label.setAttribute("text-anchor", "middle");
+          label.setAttribute("dominant-baseline", "central");
+          label.textContent = String(Math.round(match.gap));
+          group.append(background, label); svg.append(group);
+          return { label, background };
         }));
         redraw = () => {
           if (nodes.some((el) => !el.isConnected) || !board.isConnected)
@@ -215,13 +230,16 @@ export function createGuides({ ui, origin }) {
               if (match.kind === "spacing") {
                 const { cross, spans } = spacingSpans(match, moving);
                 return spans.map(([from, to]) => {
-                  const label = labels[labelIndex++];
+                  const { label, background } = labels[labelIndex++];
+                  const width = Math.ceil(label.getComputedTextLength() + 12);
+                  const cx = axis === "x" ? x((from + to) / 2) : x(cross) + 6 + width / 2;
+                  const cy = axis === "x" ? y(cross) - 16 : y((from + to) / 2);
+                  label.setAttribute("x", cx); label.setAttribute("y", cy);
+                  background.setAttribute("x", cx - width / 2); background.setAttribute("y", cy - 10.5);
+                  background.setAttribute("width", width);
                   if (axis === "x") {
-                    label.setAttribute("x", x((from + to) / 2)); label.setAttribute("y", y(cross) - 6);
-                    label.setAttribute("text-anchor", "middle");
                     return `M${x(from)},${y(cross)}H${x(to)}M${x(from)},${y(cross)-4}v8M${x(to)},${y(cross)-4}v8`;
                   }
-                  label.setAttribute("x", x(cross) + 7); label.setAttribute("y", y((from + to) / 2) + 4);
                   return `M${x(cross)},${y(from)}V${y(to)}M${x(cross)-4},${y(from)}h8M${x(cross)-4},${y(to)}h8`;
                 }).join("");
               }
