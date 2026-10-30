@@ -1,3 +1,4 @@
+import { selectionFrame, frameCorner, resizeCursor, sameSelection, rotationGroups, groupLocalAngle, writeGroupAngle } from './oriented-selection.js';
 import { isGroup, groupRoots, objectRect, logicalTarget, groupProblem, groupStructureProblem, stableGroupMarkup, layoutProbe } from "./groups.js";
 import { createCrop, cropImage } from './crop.js';
 import { toolbarHTML } from "./ui.js";
@@ -52,6 +53,7 @@ import {
       replace: null,
     };
 
+    let selectionDirection = {nodes:[],angle:0};
     let persistence = null, reviewUI = null, reviewRestorePage = null;
     let canRequestEdit = false,
       editRequested = false,
@@ -195,13 +197,17 @@ import {
       persistence?.markDirty();
       syncBar();
     }
-    function commit(before, board) {
+    function restoreDirection(state) {
+      if(state && sameSelection(state.nodes,S.selection)) selectionDirection={nodes:[...state.nodes],angle:state.angle};
+    }
+    function commit(before, board, directionBefore = null) {
       const after = snap(
         before.map((x) => x.el),
         before[0]?.h != null,
       );
+      const directionAfter = directionBefore ? {nodes:[...directionBefore.nodes],angle:selectionDirection.angle} : null;
       if (key(before) !== key(after))
-        push({ undo: () => apply(before), redo: () => apply(after), board });
+        push({ undo: () => { apply(before); restoreDirection(directionBefore); }, redo: () => { apply(after); restoreDirection(directionAfter); }, board });
     }
     function record(els, fn, board) {
       const b = snap(els);
@@ -569,9 +575,11 @@ import {
       endText();
       const nodes=groupRoots([S.sel]), items=nodes.map(node => ({node,g:elementGeometry(node),p:getPos(node),scale:getComputedStyle(node).scale}));
       if (!items.length || items.some(i => !i.g.supported)) return toast('这种变换暂不支持组合缩放');
-      const rect=unionRect([S.sel]), board=activeBoard(), boardScale=scaleOf(board), before=snap(nodes);
-      const anchor={x:dir.includes('w')?rect.right:rect.left,y:dir.includes('n')?rect.bottom:rect.top};
-      const dx=(dir.includes('w')?-1:1)*rect.width,dy=(dir.includes('n')?-1:1)*rect.height;
+      const frame=selectionFrame([S.sel]), board=activeBoard(), boardScale=scaleOf(board), before=snap(nodes);
+      if(!frame)return;
+      const sx=dir.includes('w')?-1:1,sy=dir.includes('n')?-1:1;
+      const anchor=frameCorner(frame,-sx,-sy), corner=frameCorner(frame,sx,sy);
+      const dx=corner.x-anchor.x,dy=corner.y-anchor.y;
       const minimum=Math.max(...items.map(i => 8*boardScale/Math.min(i.g.w*i.g.scale,i.g.h*i.g.scale)), ...items.flatMap(i => textMetrics(i.node).filter(m=>m.node.textContent.trim()).map(m=>6*boardScale/(m.font*elementGeometry(m.node).scale))));
       let moved=false, factor=1;
       S.drag={move(ev) {
@@ -604,6 +612,7 @@ import {
         }
         guides.clear();
       }
+      if(!sameSelection(nodes,selectionDirection.nodes))selectionDirection={nodes:[...nodes],angle:0};
       S.selection = nodes;
       S.sel = nodes.at(-1) || null;
       drawSel();
@@ -614,22 +623,23 @@ import {
       crop.refresh();
       guides.refresh();
       S.selection = selectionRoots(S.selection).filter((n) => visible(n));
+      if(!sameSelection(S.selection,selectionDirection.nodes))selectionDirection={nodes:[...S.selection],angle:0};
       S.sel = S.selection.at(-1) || null;
       selectionOverlay.draw(S.selection);
       const el = S.sel;
       if (!el || !el.isConnected || !visible(el)) selBox.style.display = "none";
       else {
-        const r = unionRect(S.selection), g = S.selection.length === 1 && !isGroup(el) ? elementGeometry(el) : null;
-        const oriented = g?.supported;
-        const width = oriented ? g.w * g.scale : r.width, height = oriented ? g.h * g.scale : r.height;
+        const r = unionRect(S.selection), frame = selectionFrame(S.selection,selectionDirection.angle);
+        const width = frame ? frame.width : r.width, height = frame ? frame.height : r.height;
         Object.assign(selBox.style, {
           display: "block",
-          left: (oriented ? g.cx - width / 2 : r.left) + "px",
-          top: (oriented ? g.cy - height / 2 : r.top) + "px",
+          left: (frame ? frame.cx-width/2 : r.left) + "px",
+          top: (frame ? frame.cy-height/2 : r.top) + "px",
           width: width + "px",
           height: height + "px",
-          transform: oriented ? `rotate(${g.angle}deg)` : 'none',
+          transform: frame ? `rotate(${frame.angle}deg)` : 'none',
         });
+        selBox.querySelectorAll('[data-h]').forEach(n=>n.style.cursor=resizeCursor(n.dataset.h,frame?.angle||0));
         selBox.classList.toggle('unsupported', !transformable(S.selection));
         selBox.classList.toggle("typing", !!S.text);
         selBox.classList.toggle("multiple", S.selection.length > 1);
@@ -841,27 +851,33 @@ import {
       endText(); closeMenus();
       const items = rotationItems();
       if (!transformable(S.selection) || items.some(item => !item.g.supported)) return toast('这种变换暂不支持拖动、缩放或旋转');
-      const r = unionRect(S.selection), center = { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
-      const before = snap(items.map(item => item.node)), b = activeBoard();
+      const frame=selectionFrame(S.selection,selectionDirection.angle);
+      if(!frame)return;
+      const center={x:frame.cx,y:frame.cy}, groups=rotationGroups(S.selection).map(node=>({node,angle:groupLocalAngle(node)}));
+      const before = snap([...items.map(item => item.node),...groups.map(g=>g.node)]), b = activeBoard();
+      const directionBefore={nodes:[...S.selection],angle:selectionDirection.angle};
       let last = Math.atan2(e.clientY - center.y, e.clientX - center.x) * 180 / Math.PI, total = 0, changed = false;
       const operation = {
         rotation: true, delta: 0,
         move(ev) {
           const current = Math.atan2(ev.clientY - center.y, ev.clientX - center.x) * 180 / Math.PI;
           total += normalizedAngle(current - last); last = current;
-          const base = S.selection.length===1 && !isGroup(S.sel) ? items[0].g.angle : 0;
+          const base = frame.angle;
           const delta = snappedAngle(base + total, ev) - base;
           operation.delta = delta;
           if (Math.abs(delta) < .0001 && !changed) return;
-          changed = true; applyRotation(items, center, delta); drawSel();
+          changed = true; applyRotation(items, center, delta);
+          groups.forEach(g=>writeGroupAngle(g.node,g.angle+delta));
+          if(S.selection.length>1)selectionDirection.angle=directionBefore.angle+delta;
+          drawSel();
         },
         up() {
           const delta = operation.delta; operation.rotation = false;
-          if (changed && Math.abs(normalizedAngle(delta)) > .01) commit(before, b);
-          else if (changed) apply(before);
+          if (changed && Math.abs(normalizedAngle(delta)) > .01) commit(before, b, directionBefore);
+          else if (changed) { apply(before); restoreDirection(directionBefore); }
           drawSel();
         },
-        cancel() { operation.rotation = false; apply(before); drawSel(); },
+        cancel() { operation.rotation = false; apply(before); restoreDirection(directionBefore); drawSel(); },
       };
       S.drag = operation;
     }
@@ -871,10 +887,11 @@ import {
       const show = S.editing && !S.playing && !S.text && S.sel && transformable(S.selection);
       button.hidden = !show; feedback.hidden = !show || !S.drag?.rotation;
       if (!show) return;
-      const r = unionRect(S.selection), g = S.selection.length === 1 && !isGroup(S.sel) ? elementGeometry(S.sel) : null;
-      const rad = (g?.angle || 0) * Math.PI / 180, height = g ? g.h * g.scale : r.height;
-      const x = (r.left + r.right) / 2 + Math.sin(rad) * (height / 2 + 26);
-      const y = (r.top + r.bottom) / 2 - Math.cos(rad) * (height / 2 + 26);
+      const frame=selectionFrame(S.selection,selectionDirection.angle), g = S.selection.length === 1 && !isGroup(S.sel) ? elementGeometry(S.sel) : null;
+      if(!frame){button.hidden=true;feedback.hidden=true;return;}
+      const rad = frame.angle * Math.PI / 180;
+      const x = frame.cx + Math.sin(rad) * (frame.height / 2 + 26);
+      const y = frame.cy - Math.cos(rad) * (frame.height / 2 + 26);
       const v = viewport.bounds(), left = Math.max(v.x + 15, Math.min(v.x + v.w - 15, x)), top = Math.max(v.y + 15, Math.min(v.y + v.h - 15, y));
       Object.assign(button.style, { left: `${left}px`, top: `${top}px` });
       const degrees = Math.round((g ? g.angle : S.drag?.delta || 0) * 10) / 10;

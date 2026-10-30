@@ -35,6 +35,10 @@ sources:
     status: current
   - path: html-design/src/crop-geometry.js
     status: current
+  - path: html-design/src/oriented-selection.js
+    status: current
+  - path: html-design/oriented-selection.test.mjs
+    status: current
   - path: html-design/src/geometry.js
     status: current
   - path: html-design/rotation.test.mjs
@@ -148,3 +152,9 @@ Issue #6 唯一审查修复：已裁切框从Fit重入时，只有有效手势�
 ## 键盘上下文与帮助
 
 Ctrl/⌘ G、Shift G与菜单共用组合/取消动作及写权限守卫；Ctrl/⌘ A选择当前页或当前组内逻辑根。输入/contenteditable/select、IME composition、源码/帮助、菜单、裁切与缩略图优先保留各自语义，预览不接管浏览器全选。裁切Undo/Redo仍走局部历史，Esc先结束文字或局部操作再退出组合；AI/readonly不能通过键盘绕过权限。`shortcuts.js`仅提供平台显示标签，不另建命令框架。更多→快捷键与帮助为持久对话框，Tab约束在关闭按钮与可滚动说明区，Esc返回可见更多按钮；viewport不在模态或IME组词时启动空格平移。
+
+## 群组与多选方向框
+
+`oriented-selection.js`用visibleMember/groupRoots真实border-box角点沿参考轴投影，重算中心与尺寸；不旋转已经膨胀的BCR。普通单选沿原真实方向，显式组方向=真实渲染父CSS累积方向+可选`data-group-angle-v1`数值；缺字段/非法值按本地0。contents祖先提示不相加。只在有效整体旋转时写归一化方向；直接展开的嵌套语义组一起更新，有盒祖先内组随真实父变换，不再加delta。无第二套矩阵/坐标模型。
+
+选框、旋转中心、屏幕固定圆形手柄与角点局部对角线共用selectionFrame；resize cursor按屏幕方向，反馈/工具条仍水平夹紧。组缩放保持真实对角锚点与原文字/元素下限，临时多选不提供缩放。临时方向只跟当前逻辑成员集合（忽略顺序），换集合重置页面轴；Undo/Redo仅在当前同集合恢复运行态方向，不覆盖另一集合。成员CSS和所有受影响组标量同一snap，cancel/no-op还原字段缺失状态；复制保留组标量、取消组合只解包装。保存/AI交接沿原手势收尾。参考线/QA维持实际AABB，PPTX只读真实成员CSS、不应用提示。

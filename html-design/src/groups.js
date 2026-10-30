@@ -5,7 +5,7 @@ export function groupRoots(nodes) {
   const expanded = roots.flatMap(n => isGroup(n) ? groupRoots([...n.children]) : [n]);
   return expanded.filter(n => !expanded.some(other => other !== n && other.contains(n)));
 }
-function visibleMember(node) {
+export function visibleMember(node) {
   if (!node.getClientRects().length || getComputedStyle(node).visibility !== 'visible') return false;
   for (let n = node; n; n = n.parentElement) {
     const cs = getComputedStyle(n);

@@ -274,6 +274,72 @@ All trademarks and registered trademarks mentioned herein are the
 property of their respective owners.
  */
 (() => {
+  // html-design/src/geometry.js
+  function elementGeometry(el) {
+    const number2 = (value) => parseFloat(value) || 0;
+    const angleValue = (value) => {
+      if (value === "none") return 0;
+      const parts = value.trim().split(/\s+/), angle = parts.pop();
+      if (parts.length && parts.join(" ") !== "z" && parts.join(" ") !== "0 0 1") return NaN;
+      const n = parseFloat(angle);
+      return angle.endsWith("rad") && !angle.endsWith("grad") ? n * 180 / Math.PI : angle.endsWith("grad") ? n * 0.9 : angle.endsWith("turn") ? n * 360 : n;
+    };
+    const cs = getComputedStyle(el), r = el.getBoundingClientRect();
+    const chain = [];
+    for (let n = el; n; n = n.parentElement) chain.unshift(n);
+    let matrix = new DOMMatrix(), parent = matrix, supported = true;
+    for (const n of chain) {
+      const s = getComputedStyle(n), t = new DOMMatrix(s.transform), angle = angleValue(s.rotate);
+      const scales = s.scale === "none" ? [1, 1] : s.scale.split(/\s+/).map(Number);
+      if (scales.length === 1) scales.push(scales[0]);
+      const x = Math.hypot(t.a, t.b), y = Math.hypot(t.c, t.d), tolerance = 1e-4 * Math.max(1, x * y);
+      if (!t.is2D || t.a * t.d - t.b * t.c <= 0 || x < 1e-6 || Math.abs(x - y) > 1e-4 * Math.max(x, y) || Math.abs(t.a * t.c + t.b * t.d) > tolerance || !Number.isFinite(angle) || scales.length !== 2 || scales[0] <= 0 || Math.abs(scales[0] - scales[1]) > 1e-4 || s.perspective !== "none" || s.offsetPath !== "none") supported = false;
+      const zoom = Number(s.zoom) || 1;
+      if (n === el) parent = matrix.scale(zoom);
+      if (s.display !== "inline" || n.matches("img,svg,canvas,video,iframe")) {
+        matrix = matrix.rotate(Number.isFinite(angle) ? angle : 0).scale(scales[0] || 1).multiply(new DOMMatrix([t.a, t.b, t.c, t.d, 0, 0]));
+      }
+      matrix = matrix.scale(zoom);
+    }
+    const scale = Math.hypot(matrix.a, matrix.b);
+    const border = (axis) => {
+      const sides = axis === "width" ? ["Left", "Right"] : ["Top", "Bottom"];
+      const value = parseFloat(cs[axis]);
+      return Number.isFinite(value) ? value + (cs.boxSizing === "border-box" ? 0 : sides.reduce((sum, side) => sum + number2(cs[`padding${side}`]) + number2(cs[`border${side}Width`]), 0)) : NaN;
+    };
+    const inline = cs.display === "inline" && !el.matches("img,svg,canvas,video,iframe");
+    const w = inline ? r.width / scale : border("width"), h = inline ? r.height / scale : border("height");
+    if (!scale || !Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0 || inline && el.getClientRects().length > 1) supported = false;
+    const plain = (m) => ({ a: m.a, b: m.b, c: m.c, d: m.d });
+    return {
+      supported,
+      inline,
+      w,
+      h,
+      cx: (r.left + r.right) / 2,
+      cy: (r.top + r.bottom) / 2,
+      scale,
+      angle: Math.atan2(matrix.b, matrix.a) * 180 / Math.PI,
+      individual: angleValue(cs.rotate),
+      matrix: plain(matrix),
+      parent: plain(parent)
+    };
+  }
+  function inverseDelta(matrix, x, y) {
+    const d = matrix.a * matrix.d - matrix.b * matrix.c;
+    return { x: (matrix.d * x - matrix.c * y) / d, y: (matrix.a * y - matrix.b * x) / d };
+  }
+  function mappedDelta(matrix, x, y) {
+    return { x: matrix.a * x + matrix.c * y, y: matrix.b * x + matrix.d * y };
+  }
+  var normalizedAngle = (angle) => ((angle + 180) % 360 + 360) % 360 - 180;
+  function snappedAngle(angle, event) {
+    if (event.altKey) return angle;
+    if (event.shiftKey) return Math.round(angle / 15) * 15;
+    const nearest = Math.round(angle / 90) * 90;
+    return Math.abs(nearest - angle) <= 3 ? nearest : angle;
+  }
+
   // html-design/src/groups.js
   var isGroup = (node) => !!node?.matches?.('[data-group="1"][data-el]');
   function groupRoots(nodes) {
@@ -354,6 +420,61 @@ property of their respective owners.
     return [...group.children].map(groupStructureProblem).find(Boolean) || null;
   }
 
+  // html-design/src/oriented-selection.js
+  var GROUP_ANGLE = "data-group-angle-v1";
+  var sameSelection = (a, b) => a.length === b.length && a.every((n) => b.includes(n));
+  function groupLocalAngle(group) {
+    const raw = group.getAttribute(GROUP_ANGLE);
+    return raw?.trim() && raw.length <= 64 && Number.isFinite(Number(raw)) ? normalizedAngle(Number(raw)) : 0;
+  }
+  function parentAngle(group) {
+    let parent = group.parentElement;
+    while (parent && getComputedStyle(parent).display === "contents") parent = parent.parentElement;
+    return parent ? elementGeometry(parent).angle : 0;
+  }
+  function rotationGroups(nodes) {
+    return nodes.flatMap((node) => isGroup(node) ? [node, ...rotationGroups([...node.children])] : []);
+  }
+  function writeGroupAngle(group, angle) {
+    const value = Math.round(normalizedAngle(angle) * 1e4) / 1e4;
+    if (Math.abs(value) < 1e-4) group.removeAttribute(GROUP_ANGLE);
+    else group.setAttribute(GROUP_ANGLE, String(value));
+  }
+  function orientedBounds(points, angle) {
+    if (!points.length) return null;
+    const r = angle * Math.PI / 180, c = Math.cos(r), s = Math.sin(r);
+    const local = points.map((p) => ({ x: c * p.x + s * p.y, y: -s * p.x + c * p.y }));
+    const left = Math.min(...local.map((p) => p.x)), right = Math.max(...local.map((p) => p.x));
+    const top = Math.min(...local.map((p) => p.y)), bottom = Math.max(...local.map((p) => p.y));
+    const x = (left + right) / 2, y = (top + bottom) / 2;
+    return { cx: c * x - s * y, cy: s * x + c * y, width: right - left, height: bottom - top, angle };
+  }
+  function selectionFrame(nodes, multiAngle = 0) {
+    if (nodes.length === 1 && !isGroup(nodes[0])) {
+      const g = elementGeometry(nodes[0]);
+      return g.supported ? { cx: g.cx, cy: g.cy, width: g.w * g.scale, height: g.h * g.scale, angle: g.angle } : null;
+    }
+    const points = [];
+    for (const node of groupRoots(nodes).filter(visibleMember)) {
+      const g = elementGeometry(node);
+      if (!g.supported) return null;
+      for (const x of [-g.w / 2, g.w / 2]) for (const y of [-g.h / 2, g.h / 2])
+        points.push({ x: g.cx + g.matrix.a * x + g.matrix.c * y, y: g.cy + g.matrix.b * x + g.matrix.d * y });
+    }
+    const group = nodes.length === 1 && isGroup(nodes[0]) ? nodes[0] : null;
+    const board = nodes[0]?.closest("[data-artboard]");
+    const angle = group ? parentAngle(group) + groupLocalAngle(group) : (board ? elementGeometry(board).angle : 0) + multiAngle;
+    return orientedBounds(points, angle);
+  }
+  function frameCorner(frame, x, y) {
+    const r = frame.angle * Math.PI / 180, c = Math.cos(r), s = Math.sin(r);
+    return { x: frame.cx + c * x * frame.width / 2 - s * y * frame.height / 2, y: frame.cy + s * x * frame.width / 2 + c * y * frame.height / 2 };
+  }
+  function resizeCursor(handle, angle) {
+    const base = { e: 0, se: 45, s: 90, sw: 135, w: 180, nw: 225, n: 270, ne: 315 }[handle];
+    return ["ew-resize", "nwse-resize", "ns-resize", "nesw-resize"][(Math.round((base + angle) / 45) % 4 + 4) % 4];
+  }
+
   // html-design/src/crop-geometry.js
   function cropGeometry(frame, geometry) {
     const img = frame?.querySelector(":scope > img[data-crop-image]");
@@ -383,72 +504,6 @@ property of their respective owners.
     const expectedY = g.cy + g.matrix.b * ox + g.matrix.d * oy + g.matrix.b * (tx + z * w / 2) + g.matrix.d * (ty + z * h / 2);
     if (Math.abs(inner.cx - expectedX) > 0.2 || Math.abs(inner.cy - expectedY) > 0.2) return fail("image offset differs from crop content box");
     return { supported: true, w, h, z, x, y, insets };
-  }
-
-  // html-design/src/geometry.js
-  function elementGeometry(el) {
-    const number2 = (value) => parseFloat(value) || 0;
-    const angleValue = (value) => {
-      if (value === "none") return 0;
-      const parts = value.trim().split(/\s+/), angle = parts.pop();
-      if (parts.length && parts.join(" ") !== "z" && parts.join(" ") !== "0 0 1") return NaN;
-      const n = parseFloat(angle);
-      return angle.endsWith("rad") && !angle.endsWith("grad") ? n * 180 / Math.PI : angle.endsWith("grad") ? n * 0.9 : angle.endsWith("turn") ? n * 360 : n;
-    };
-    const cs = getComputedStyle(el), r = el.getBoundingClientRect();
-    const chain = [];
-    for (let n = el; n; n = n.parentElement) chain.unshift(n);
-    let matrix = new DOMMatrix(), parent = matrix, supported = true;
-    for (const n of chain) {
-      const s = getComputedStyle(n), t = new DOMMatrix(s.transform), angle = angleValue(s.rotate);
-      const scales = s.scale === "none" ? [1, 1] : s.scale.split(/\s+/).map(Number);
-      if (scales.length === 1) scales.push(scales[0]);
-      const x = Math.hypot(t.a, t.b), y = Math.hypot(t.c, t.d), tolerance = 1e-4 * Math.max(1, x * y);
-      if (!t.is2D || t.a * t.d - t.b * t.c <= 0 || x < 1e-6 || Math.abs(x - y) > 1e-4 * Math.max(x, y) || Math.abs(t.a * t.c + t.b * t.d) > tolerance || !Number.isFinite(angle) || scales.length !== 2 || scales[0] <= 0 || Math.abs(scales[0] - scales[1]) > 1e-4 || s.perspective !== "none" || s.offsetPath !== "none") supported = false;
-      const zoom = Number(s.zoom) || 1;
-      if (n === el) parent = matrix.scale(zoom);
-      if (s.display !== "inline" || n.matches("img,svg,canvas,video,iframe")) {
-        matrix = matrix.rotate(Number.isFinite(angle) ? angle : 0).scale(scales[0] || 1).multiply(new DOMMatrix([t.a, t.b, t.c, t.d, 0, 0]));
-      }
-      matrix = matrix.scale(zoom);
-    }
-    const scale = Math.hypot(matrix.a, matrix.b);
-    const border = (axis) => {
-      const sides = axis === "width" ? ["Left", "Right"] : ["Top", "Bottom"];
-      const value = parseFloat(cs[axis]);
-      return Number.isFinite(value) ? value + (cs.boxSizing === "border-box" ? 0 : sides.reduce((sum, side) => sum + number2(cs[`padding${side}`]) + number2(cs[`border${side}Width`]), 0)) : NaN;
-    };
-    const inline = cs.display === "inline" && !el.matches("img,svg,canvas,video,iframe");
-    const w = inline ? r.width / scale : border("width"), h = inline ? r.height / scale : border("height");
-    if (!scale || !Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0 || inline && el.getClientRects().length > 1) supported = false;
-    const plain = (m) => ({ a: m.a, b: m.b, c: m.c, d: m.d });
-    return {
-      supported,
-      inline,
-      w,
-      h,
-      cx: (r.left + r.right) / 2,
-      cy: (r.top + r.bottom) / 2,
-      scale,
-      angle: Math.atan2(matrix.b, matrix.a) * 180 / Math.PI,
-      individual: angleValue(cs.rotate),
-      matrix: plain(matrix),
-      parent: plain(parent)
-    };
-  }
-  function inverseDelta(matrix, x, y) {
-    const d = matrix.a * matrix.d - matrix.b * matrix.c;
-    return { x: (matrix.d * x - matrix.c * y) / d, y: (matrix.a * y - matrix.b * x) / d };
-  }
-  function mappedDelta(matrix, x, y) {
-    return { x: matrix.a * x + matrix.c * y, y: matrix.b * x + matrix.d * y };
-  }
-  var normalizedAngle = (angle) => ((angle + 180) % 360 + 360) % 360 - 180;
-  function snappedAngle(angle, event) {
-    if (event.altKey) return angle;
-    if (event.shiftKey) return Math.round(angle / 15) * 15;
-    const nearest = Math.round(angle / 90) * 90;
-    return Math.abs(nearest - angle) <= 3 ? nearest : angle;
   }
 
   // html-design/src/crop.js
@@ -7422,6 +7477,7 @@ property of their respective owners.
         fit: true,
         replace: null
       };
+      let selectionDirection = { nodes: [], angle: 0 };
       let persistence = null, reviewUI = null, reviewRestorePage = null;
       let canRequestEdit = false, editRequested = false, requestingEdit = false;
       const mkStyle = (v, css = "") => {
@@ -7535,13 +7591,23 @@ property of their respective owners.
         persistence?.markDirty();
         syncBar();
       }
-      function commit(before, board) {
+      function restoreDirection(state) {
+        if (state && sameSelection(state.nodes, S.selection)) selectionDirection = { nodes: [...state.nodes], angle: state.angle };
+      }
+      function commit(before, board, directionBefore = null) {
         const after = snap(
           before.map((x) => x.el),
           before[0]?.h != null
         );
+        const directionAfter = directionBefore ? { nodes: [...directionBefore.nodes], angle: selectionDirection.angle } : null;
         if (key(before) !== key(after))
-          push({ undo: () => apply(before), redo: () => apply(after), board });
+          push({ undo: () => {
+            apply(before);
+            restoreDirection(directionBefore);
+          }, redo: () => {
+            apply(after);
+            restoreDirection(directionAfter);
+          }, board });
       }
       function record(els, fn, board) {
         const b = snap(els);
@@ -7912,9 +7978,11 @@ property of their respective owners.
         endText();
         const nodes = groupRoots([S.sel]), items = nodes.map((node) => ({ node, g: elementGeometry(node), p: getPos(node), scale: getComputedStyle(node).scale }));
         if (!items.length || items.some((i) => !i.g.supported)) return toast("这种变换暂不支持组合缩放");
-        const rect = unionRect([S.sel]), board = activeBoard(), boardScale = scaleOf(board), before = snap(nodes);
-        const anchor = { x: dir.includes("w") ? rect.right : rect.left, y: dir.includes("n") ? rect.bottom : rect.top };
-        const dx = (dir.includes("w") ? -1 : 1) * rect.width, dy = (dir.includes("n") ? -1 : 1) * rect.height;
+        const frame = selectionFrame([S.sel]), board = activeBoard(), boardScale = scaleOf(board), before = snap(nodes);
+        if (!frame) return;
+        const sx = dir.includes("w") ? -1 : 1, sy = dir.includes("n") ? -1 : 1;
+        const anchor = frameCorner(frame, -sx, -sy), corner = frameCorner(frame, sx, sy);
+        const dx = corner.x - anchor.x, dy = corner.y - anchor.y;
         const minimum = Math.max(...items.map((i) => 8 * boardScale / Math.min(i.g.w * i.g.scale, i.g.h * i.g.scale)), ...items.flatMap((i) => textMetrics(i.node).filter((m) => m.node.textContent.trim()).map((m) => 6 * boardScale / (m.font * elementGeometry(m.node).scale))));
         let moved = false, factor = 1;
         S.drag = { move(ev) {
@@ -7954,6 +8022,7 @@ property of their respective owners.
           }
           guides.clear();
         }
+        if (!sameSelection(nodes, selectionDirection.nodes)) selectionDirection = { nodes: [...nodes], angle: 0 };
         S.selection = nodes;
         S.sel = nodes.at(-1) || null;
         drawSel();
@@ -7964,22 +8033,23 @@ property of their respective owners.
         crop.refresh();
         guides.refresh();
         S.selection = selectionRoots(S.selection).filter((n) => visible(n));
+        if (!sameSelection(S.selection, selectionDirection.nodes)) selectionDirection = { nodes: [...S.selection], angle: 0 };
         S.sel = S.selection.at(-1) || null;
         selectionOverlay.draw(S.selection);
         const el = S.sel;
         if (!el || !el.isConnected || !visible(el)) selBox.style.display = "none";
         else {
-          const r = unionRect(S.selection), g = S.selection.length === 1 && !isGroup(el) ? elementGeometry(el) : null;
-          const oriented = g?.supported;
-          const width = oriented ? g.w * g.scale : r.width, height = oriented ? g.h * g.scale : r.height;
+          const r = unionRect(S.selection), frame = selectionFrame(S.selection, selectionDirection.angle);
+          const width = frame ? frame.width : r.width, height = frame ? frame.height : r.height;
           Object.assign(selBox.style, {
             display: "block",
-            left: (oriented ? g.cx - width / 2 : r.left) + "px",
-            top: (oriented ? g.cy - height / 2 : r.top) + "px",
+            left: (frame ? frame.cx - width / 2 : r.left) + "px",
+            top: (frame ? frame.cy - height / 2 : r.top) + "px",
             width: width + "px",
             height: height + "px",
-            transform: oriented ? `rotate(${g.angle}deg)` : "none"
+            transform: frame ? `rotate(${frame.angle}deg)` : "none"
           });
+          selBox.querySelectorAll("[data-h]").forEach((n) => n.style.cursor = resizeCursor(n.dataset.h, frame?.angle || 0));
           selBox.classList.toggle("unsupported", !transformable(S.selection));
           selBox.classList.toggle("typing", !!S.text);
           selBox.classList.toggle("multiple", S.selection.length > 1);
@@ -8196,8 +8266,11 @@ property of their respective owners.
         closeMenus();
         const items = rotationItems();
         if (!transformable(S.selection) || items.some((item) => !item.g.supported)) return toast("这种变换暂不支持拖动、缩放或旋转");
-        const r = unionRect(S.selection), center = { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
-        const before = snap(items.map((item) => item.node)), b = activeBoard();
+        const frame = selectionFrame(S.selection, selectionDirection.angle);
+        if (!frame) return;
+        const center = { x: frame.cx, y: frame.cy }, groups = rotationGroups(S.selection).map((node) => ({ node, angle: groupLocalAngle(node) }));
+        const before = snap([...items.map((item) => item.node), ...groups.map((g) => g.node)]), b = activeBoard();
+        const directionBefore = { nodes: [...S.selection], angle: selectionDirection.angle };
         let last = Math.atan2(e.clientY - center.y, e.clientX - center.x) * 180 / Math.PI, total = 0, changed = false;
         const operation = {
           rotation: true,
@@ -8206,24 +8279,30 @@ property of their respective owners.
             const current = Math.atan2(ev.clientY - center.y, ev.clientX - center.x) * 180 / Math.PI;
             total += normalizedAngle(current - last);
             last = current;
-            const base = S.selection.length === 1 && !isGroup(S.sel) ? items[0].g.angle : 0;
+            const base = frame.angle;
             const delta = snappedAngle(base + total, ev) - base;
             operation.delta = delta;
             if (Math.abs(delta) < 1e-4 && !changed) return;
             changed = true;
             applyRotation(items, center, delta);
+            groups.forEach((g) => writeGroupAngle(g.node, g.angle + delta));
+            if (S.selection.length > 1) selectionDirection.angle = directionBefore.angle + delta;
             drawSel();
           },
           up() {
             const delta = operation.delta;
             operation.rotation = false;
-            if (changed && Math.abs(normalizedAngle(delta)) > 0.01) commit(before, b);
-            else if (changed) apply(before);
+            if (changed && Math.abs(normalizedAngle(delta)) > 0.01) commit(before, b, directionBefore);
+            else if (changed) {
+              apply(before);
+              restoreDirection(directionBefore);
+            }
             drawSel();
           },
           cancel() {
             operation.rotation = false;
             apply(before);
+            restoreDirection(directionBefore);
             drawSel();
           }
         };
@@ -8240,10 +8319,15 @@ property of their respective owners.
         button2.hidden = !show;
         feedback.hidden = !show || !S.drag?.rotation;
         if (!show) return;
-        const r = unionRect(S.selection), g = S.selection.length === 1 && !isGroup(S.sel) ? elementGeometry(S.sel) : null;
-        const rad = (g?.angle || 0) * Math.PI / 180, height = g ? g.h * g.scale : r.height;
-        const x = (r.left + r.right) / 2 + Math.sin(rad) * (height / 2 + 26);
-        const y = (r.top + r.bottom) / 2 - Math.cos(rad) * (height / 2 + 26);
+        const frame = selectionFrame(S.selection, selectionDirection.angle), g = S.selection.length === 1 && !isGroup(S.sel) ? elementGeometry(S.sel) : null;
+        if (!frame) {
+          button2.hidden = true;
+          feedback.hidden = true;
+          return;
+        }
+        const rad = frame.angle * Math.PI / 180;
+        const x = frame.cx + Math.sin(rad) * (frame.height / 2 + 26);
+        const y = frame.cy - Math.cos(rad) * (frame.height / 2 + 26);
         const v = viewport.bounds(), left = Math.max(v.x + 15, Math.min(v.x + v.w - 15, x)), top = Math.max(v.y + 15, Math.min(v.y + v.h - 15, y));
         Object.assign(button2.style, { left: `${left}px`, top: `${top}px` });
         const degrees = Math.round((g ? g.angle : S.drag?.delta || 0) * 10) / 10;
