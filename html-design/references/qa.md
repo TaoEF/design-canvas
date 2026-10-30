@@ -83,6 +83,10 @@ has a five-second per-image bound. Truncation returns incomplete coverage.
 
 This is a first set of layout diagnostics, not a complete visual/aesthetic or
 arbitrary-overlap audit. Supported 2D-rotated objects retain BCR page-boundary facts, while rotated text
-lines remain unsupported. Advanced crop coverage is not yet implemented. Automated AI-commit feedback and editor QA UI remain
+lines remain unsupported. Version-1 crop frames are validated against actual clipping
+and image geometry; only trusted internal image overflow is exempt from page-boundary
+warnings. Hidden or unreliable crop geometry leaves coverage incomplete rather than
+passing silently. Semantic `display:contents` groups receive structural checks;
+their marked members remain the geometry targets. Automated AI-commit feedback and editor QA UI remain
 [Issue #7](https://github.com/TaoEF/dom-slides/issues/7); the command adds no gate.
 The existing [text measure/check interface](text-measurement.md) remains stable.
