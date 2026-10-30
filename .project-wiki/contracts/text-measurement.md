@@ -69,7 +69,7 @@ measure 输入纯文本、字体、行高与候选内容宽度；check 扫描保
 
 ## 保存快照的文字对比度
 
-#33在同一次QA浏览器准备中独立运行固定本地axe-core4.10.3的color-contrast规则，不受TEXT_UNSUPPORTED/LINE_UNSUPPORTED阻断。普通文字AA4.5，大字AA3；判定用未缩放设计尺寸与引擎未舍入分类。白字白底1:1保留incomplete/possible-same-color，白字黄底按实际比值报告。复杂图片/渐变/混合/遮挡、SVG/生成文字或无引擎报告均明确未确认，不自建颜色猜测。独立contrast覆盖区分checked/low/unverified/hidden/inapplicable/unmarked和截断；真实文字item可共享所属data-el定位，ID/证据仍受现有上限约束。
+#33在同一次QA浏览器准备中独立运行固定本地axe-core4.10.3的color-contrast规则，不受TEXT_UNSUPPORTED/LINE_UNSUPPORTED阻断。普通文字AA4.5，大字AA3；判定用未缩放设计尺寸与引擎未舍入分类。白字白底1:1保留incomplete/possible-same-color，白字黄底按实际比值报告。实际参与文字背景的图片/渐变、混合/遮挡、SVG/生成文字或无引擎报告均明确未确认，不自建颜色猜测。不透明纯色层已遮住远祖先背景时保留axe确定事实；checkbox/radio/range/color等不显示value的控件归不适用，form-only可见文字缺data-el同样TEXT_UNMARKED/non-clean。独立contrast覆盖区分checked/low/unverified/hidden/inapplicable/unmarked和截断；真实文字item可共享所属data-el定位，ID/证据仍受现有上限约束。
 
 仅QA的隔离context允许JavaScript调度可信axe（false下其异步调度不会完成）；响应头CSP仍强制script-src none/object-src none/frame-src none，并保留导航拦截，稿件inline/external/module/event-handler/javascript URL/内嵌frame不运行，内容meta CSP不能放宽响应头。旧measure/check继续javaScriptEnabled:false。引擎来自npm ci的生产依赖，失败/超时不能返回clean。contrast库存上限500文字item/100000字符/2000元素，issues共享500条/128KiB与30秒扫描预算。只有确定TEXT_LOW_CONTRAST可显式豁免并计数，未知覆盖不可豁免；字段与原因见references/qa.md。
 

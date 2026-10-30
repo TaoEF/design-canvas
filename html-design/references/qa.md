@@ -31,7 +31,7 @@ elements, scanned graphemes, suppressions, admitted issue bytes and omitted issu
 lower bounds when truncated. Never interpret missing issues as a clean result
 without checking `status`, `truncated` and coverage.
 
-`coverage.contrast` is independent of text-layout support: `seen`, `checked` (passes plus known failures), `low`, `unverified`, `hidden`, `inapplicable`, `unmarked`, `suppressed`, `truncated`, `complete`, `limit`, and `engine`. Counts describe actual text elements, so rich-text children can share one editable object ID. `complete` is false for unknown or truncated contrast coverage; hidden text and disabled native controls are counted separately. Unmarked/invalid identities still follow the existing non-clean QA semantics.
+`coverage.contrast` is independent of text-layout support: `seen`, `checked` (passes plus known failures), `low`, `unverified`, `hidden`, `inapplicable`, `unmarked`, `suppressed`, `truncated`, `complete`, `limit`, and `engine`. Counts describe text items and inventoried native controls; non-text controls are counted inapplicable, and rich-text children can share one editable object ID. `complete` is false for unknown or truncated contrast coverage; hidden text and disabled native controls are counted separately. Unmarked/invalid identities still follow the existing non-clean QA semantics.
 
 Each issue has a stable `code`, `severity: warning|error`, nullable `pageId` and
 `elementId`, and bounded `evidence`. IDs are null when missing, non-unique or longer than 256 UTF-16 units; overlong IDs report `ID_INVALID` with their length rather than a shortened locator. This also bounds clipping-ancestor identifiers.
@@ -61,10 +61,10 @@ artboards, including text outside the viewport, participate in the same snapshot
   and ratios are null rather than inferred.
 
 Inherited colors, transparent ancestors and determinable alpha use engine
-facts. Image/gradient backgrounds, blending/filters, generated text and SVG text
-remain unverified; obscured text follows engine uncertainty. Visible text without
-an engine report never counts as passed. Saved form values are inventoried;
-disabled native controls are inapplicable, while `aria-hidden` alone does not
+facts. Image/gradient backgrounds that participate behind the text, blending/filters, generated text and SVG text
+remain unverified. An opaque pure-color layer can mask more distant backgrounds without discarding confirmed engine facts; obscured text follows engine uncertainty. Visible text without
+an engine report never counts as passed. Visible saved form text is inventoried (password previews are masked); checkbox/radio/range/color/image/file controls do not expose their internal values as visible text. Missing `data-el` on form-only or generated text reports `TEXT_UNMARKED` with null identity and incomplete coverage.
+Disabled native controls are inapplicable, while `aria-hidden` alone does not
 hide visually present text. This is not an arbitrary-overlap detector.
 
 The contrast inventory has separate limits of 500 text elements, 100,000 text

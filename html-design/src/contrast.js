@@ -13,11 +13,17 @@ function hidden(el, board) {
 }
 function uncertainBackground(el) {
   if (el.closest('svg')) return 'svg-text';
+  let covered = false;
   for (let n = el; n; n = n.parentElement) {
     const s = getComputedStyle(n);
-    if (s.backgroundImage !== 'none') return 'image-or-gradient-background';
+    if (Number(s.opacity) < 1) covered = false;
+    if (!covered && s.backgroundImage !== 'none') return 'image-or-gradient-background';
     if (s.mixBlendMode !== 'normal' || s.backgroundBlendMode !== 'normal' || s.filter !== 'none' || s.backdropFilter !== 'none') return 'blending-or-filter';
     if (['::before', '::after'].some(p => !['none', 'normal', '""'].includes(getComputedStyle(n, p).content))) return 'generated-content';
+    // This only recognizes an opaque browser-computed RGB layer; axe still
+    // determines the actual foreground/background and contrast ratio. Effects
+    // on higher ancestors remain relevant even after their backgrounds are masked.
+    if (s.display !== 'contents' && s.backgroundClip !== 'text' && Number(s.opacity) === 1 && /^rgb\([^/]+\)$/.test(s.backgroundColor)) covered = true;
   }
   return null;
 }
@@ -54,11 +60,15 @@ export async function checkContrast({ boards, coverage, emit, output }) {
       if (el.closest(skip)) continue;
       const generated = ['::before', '::after'].map(p => getComputedStyle(el, p).content)
         .filter(v => !['none', 'normal', '""'].includes(v)).join(' ');
-      const value = el.matches('input:not([type=hidden]),textarea,select') ? (el.value || el.getAttribute('placeholder') || '') : '';
-      if ((generated || value) && !seen.has(el)) {
+      const input = el.matches('input:not([type=hidden])');
+      const nonTextControl = input && ['checkbox', 'radio', 'range', 'color', 'image', 'file'].includes(el.type);
+      let value = !nonTextControl && (input || el.matches('textarea')) ? (el.value || el.getAttribute('placeholder') || '') : '';
+      if (el.matches('select')) value = el.selectedOptions[0]?.label || '';
+      if (input && el.type === 'password' && value) value = '[masked]';
+      if ((generated || value || nonTextControl) && !seen.has(el)) {
         if (items.length >= LIMIT) { facts.truncated = true; break generated; }
         const owner = el.closest('[data-el]');
-        const item = { board, el, owner: owner && board.contains(owner) ? owner : null, preview: (generated || value).slice(0, 80) };
+        const item = { board, el, owner: owner && board.contains(owner) ? owner : null, preview: (generated || value).slice(0, 80), nonTextControl: nonTextControl && !generated, generatedOrForm: true };
         seen.set(el, item); items.push(item);
       }
     } while ((el = walker.nextNode()));
@@ -68,8 +78,11 @@ export async function checkContrast({ boards, coverage, emit, output }) {
   for (const item of items) {
     if (hidden(item.el, item.board)) { facts.hidden++; continue; }
     // Disabled native controls are outside WCAG text contrast, unlike arbitrary [disabled] nodes.
-    if (item.el.closest('button:disabled,input:disabled,select:disabled,textarea:disabled,option:disabled')) { facts.inapplicable++; continue; }
-    if (!item.owner) facts.unmarked++;
+    if (item.nonTextControl || item.el.closest('button:disabled,input:disabled,select:disabled,textarea:disabled,option:disabled')) { facts.inapplicable++; continue; }
+    if (!item.owner) {
+      facts.unmarked++; facts.complete = false;
+      if (item.generatedOrForm) emit('TEXT_UNMARKED', item.board, null, { reason: 'unmarked', kind: 'contrast-text', page: boards.indexOf(item.board) + 1 });
+    }
     eligible.push(item);
   }
   let results, failure = null;

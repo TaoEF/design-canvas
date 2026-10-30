@@ -111,3 +111,33 @@ test('generated/SVG text and saved form values do not disappear from the contras
   assert.ok(contrast(r).some(i => i.elementId === 'value'), JSON.stringify(r));
   assert.equal(r.coverage.contrast.complete, false);
 });
+
+test('opaque cards retain confirmed contrast over distant gradients while participating backgrounds/effects remain unknown', async () => {
+  const r = await qa(html(p('opaque-pass', 20, 'Opaque pass', 'background:white;color:black') +
+    p('opaque-low', 80, 'Opaque low', 'background:white;color:#aaa') +
+    p('alpha-card', 140, 'Transparent card', 'background:rgba(255,255,255,.5);color:black') +
+    `<div style="filter:opacity(.9)">${p('filtered-card', 200, 'Filtered card', 'background:white;color:black')}</div>`,
+    '[data-artboard]{background:linear-gradient(white,black)}'));
+  assert.ok(!contrast(r).some(i => i.elementId === 'opaque-pass'));
+  const low = contrast(r).find(i => i.elementId === 'opaque-low');
+  assert.equal(low.code, 'TEXT_LOW_CONTRAST'); assert.equal(low.evidence.foreground, '#aaaaaa'); assert.equal(low.evidence.background, '#ffffff'); assert.equal(low.evidence.ratio, 2.32);
+  for (const id of ['alpha-card', 'filtered-card']) assert.ok(contrast(r).some(i => i.elementId === id && i.code === 'CONTRAST_UNVERIFIED'));
+  assert.equal(r.coverage.contrast.checked, 2); assert.equal(r.coverage.contrast.low, 1);
+});
+
+test('non-text native input values are inapplicable rather than invented visible text', async () => {
+  const r = await qa(html(['checkbox', 'radio', 'range', 'color'].map((type, i) => `<input data-el="${type}" type="${type}" style="position:absolute;left:40px;top:${20 + i * 60}px">`).join('')));
+  assert.equal(r.status, 'ok', JSON.stringify(r)); assert.deepEqual(contrast(r), []);
+  assert.equal(r.coverage.contrast.inapplicable, 4); assert.equal(r.coverage.contrast.unverified, 0);
+  assert.equal(r.coverage.contrast.checked, 0);
+});
+
+test('form-only visible text without an editable identity cannot report clean; marked text stays checkable', async () => {
+  const field = id => `<input ${id} value="Readable value" style="font:20px Arial;color:black;background:white">`;
+  const missing = await qa(html(field('')));
+  assert.equal(missing.status, 'issues'); assert.equal(missing.coverage.contrast.unmarked, 1); assert.equal(missing.coverage.contrast.complete, false);
+  assert.ok(missing.issues.some(i => i.code === 'TEXT_UNMARKED' && i.pageId === 'p1' && i.elementId === null));
+  assert.equal(missing.coverage.contrast.checked, 1);
+  const marked = await qa(html(field('data-el="input"')));
+  assert.equal(marked.status, 'ok', JSON.stringify(marked)); assert.equal(marked.coverage.contrast.unmarked, 0); assert.equal(marked.coverage.contrast.checked, 1);
+});
