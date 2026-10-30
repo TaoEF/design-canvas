@@ -1,4 +1,4 @@
-import { isGroup, groupRoots, objectRect, logicalTarget, groupProblem, groupStructureProblem, layoutProbe } from "./groups.js";
+import { isGroup, groupRoots, objectRect, logicalTarget, groupProblem, groupStructureProblem, stableGroupMarkup, layoutProbe } from "./groups.js";
 import { createCrop, cropImage } from './crop.js';
 import { toolbarHTML } from "./ui.js";
 import { createExporter } from "./export.js";
@@ -541,7 +541,7 @@ import {
       const wrap = () => { parent.insertBefore(group, children[0].parentNode===parent ? children[0] : next?.parentNode===parent ? next : null); children.forEach(n => group.append(n)); };
       const unwrap = () => { children.forEach(n => parent.insertBefore(n,group)); group.remove(); };
       wrap();
-      if (groupStructureProblem(group) || !unchanged()) { unwrap(); sequence===null ? stage.removeAttribute('data-element-seq') : stage.setAttribute('data-element-seq',sequence); return toast('这种布局的组合会改变样式、位置或绘制顺序，已保留原样',4000); }
+      if (groupStructureProblem(group) || !stableGroupMarkup(board) || !unchanged()) { unwrap(); sequence===null ? stage.removeAttribute('data-element-seq') : stage.setAttribute('data-element-seq',sequence); return toast('这种布局的组合会改变样式、位置或绘制顺序，已保留原样',4000); }
       const context = S.group;
       push({board, undo:() => { unwrap(); S.group=context; select(nodes); }, redo:() => { wrap(); S.group=context; select(group); }});
       select(group);
@@ -557,7 +557,7 @@ import {
       const wrap=() => { parent.insertBefore(group,children[0]?.parentNode===parent ? children[0] : next?.parentNode===parent ? next : null); children.forEach(n => group.append(n)); };
       const unchanged=layoutProbe(board,[group]);
       unwrap();
-      if (!unchanged()) { wrap(); return toast('取消组合会改变当前布局，已保留原样',4000); }
+      if (!stableGroupMarkup(board) || !unchanged()) { wrap(); return toast('取消组合会改变当前布局，已保留原样',4000); }
       const members=children.filter(n => n.nodeType===1);
       push({board,undo:() => { wrap(); S.group=context; select(group); },redo:() => { unwrap(); S.group=context; select(members); }});
       select(members);

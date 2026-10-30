@@ -281,9 +281,17 @@ property of their respective owners.
     const expanded = roots.flatMap((n) => isGroup(n) ? groupRoots([...n.children]) : [n]);
     return expanded.filter((n) => !expanded.some((other) => other !== n && other.contains(n)));
   }
+  function visibleMember(node) {
+    if (!node.getClientRects().length || getComputedStyle(node).visibility !== "visible") return false;
+    for (let n = node; n; n = n.parentElement) {
+      const cs = getComputedStyle(n);
+      if (cs.opacity === "0" || cs.display === "none" || cs.contentVisibility === "hidden") return false;
+    }
+    return true;
+  }
   function objectRect(node) {
     if (!isGroup(node)) return node.getBoundingClientRect();
-    const rects = groupRoots([node]).filter((n) => n.getClientRects().length && getComputedStyle(n).visibility === "visible").map((n) => n.getBoundingClientRect());
+    const rects = groupRoots([node]).filter(visibleMember).map((n) => n.getBoundingClientRect());
     if (!rects.length) return new DOMRect();
     const x = Math.min(...rects.map((r) => r.left)), y = Math.min(...rects.map((r) => r.top));
     return new DOMRect(x, y, Math.max(...rects.map((r) => r.right)) - x, Math.max(...rects.map((r) => r.bottom)) - y);
@@ -298,12 +306,17 @@ property of their respective owners.
     if (nodes.length < 2) return "请选择至少两个同一容器内的对象";
     const parent = nodes[0].parentElement, board = nodes[0].closest("[data-artboard]");
     if (!board || nodes.some((n) => n.parentElement !== parent || n.closest("[data-artboard]") !== board)) return "只能组合同页、同一父容器内的对象";
-    if (!parent.matches("div,section,article,aside,main,header,footer,nav,figure,figcaption,a")) return "这种容器暂不支持组合";
+    if (!parent.matches("div,section,article,aside,main,header,footer,nav,figure,figcaption")) return "这种容器暂不支持组合";
     const children = [...parent.children], indices = nodes.map((n) => children.indexOf(n)).sort((a, b) => a - b);
     if (indices.at(-1) - indices[0] + 1 !== nodes.length) return "请选择顺序相邻的对象，以保留原有绘制顺序";
     const slice = [...parent.childNodes].slice([...parent.childNodes].indexOf(children[indices[0]]), [...parent.childNodes].indexOf(children[indices.at(-1)]) + 1);
     if (slice.some((n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim())) return "对象之间含有独立文字，暂不能安全组合";
     return null;
+  }
+  function stableGroupMarkup(board) {
+    const template = document.createElement("template");
+    template.innerHTML = board.outerHTML;
+    return template.content.childNodes.length === 1 && template.content.firstChild.isEqualNode(board);
   }
   var boxes = (node) => [...node.getClientRects()].map((r) => [r.x, r.y, r.width, r.height]);
   var style = (node, pseudo) => {
@@ -7807,7 +7820,7 @@ property of their respective owners.
           group.remove();
         };
         wrap();
-        if (groupStructureProblem(group) || !unchanged()) {
+        if (groupStructureProblem(group) || !stableGroupMarkup(board) || !unchanged()) {
           unwrap();
           sequence === null ? stage.removeAttribute("data-element-seq") : stage.setAttribute("data-element-seq", sequence);
           return toast("这种布局的组合会改变样式、位置或绘制顺序，已保留原样", 4e3);
@@ -7842,7 +7855,7 @@ property of their respective owners.
         };
         const unchanged = layoutProbe(board, [group]);
         unwrap();
-        if (!unchanged()) {
+        if (!stableGroupMarkup(board) || !unchanged()) {
           wrap();
           return toast("取消组合会改变当前布局，已保留原样", 4e3);
         }
