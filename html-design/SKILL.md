@@ -76,6 +76,9 @@ body{margin:0;background:#e9e9ec;font-family:var(--font);color:var(--text)}
 - 颜色、字体、圆角等都引用 `data-design` 里的变量，不要到处写死。
 - 用 class 写样式，同一个组件复用同一个 class。
 - 排版优先用 flex 或 grid，让元素按排版自然排列，**不要自己写大量 `position:absolute`**。需要精确摆放时，由人切到画板模式处理。
+- 常规排版直接使用浏览器原生 CSS Grid/Flex，无需 Bootstrap 等框架；用户明确要求框架或已有稿依赖框架时沿用其选择。
+- 根据内容选择布局：Grid 适合图文分栏、卡片矩阵和跨行列关系；Flex 适合单轴排列、页眉页脚与内容组。两栏可用 `1fr 1fr` 或 `1fr 1.5fr`，等宽三栏可用 `repeat(3, minmax(0, 1fr))`，间距用 `gap`。12列只在多区域跨度需要共同基准时采用，不作为所有页面的固定模板。
+- 多列内容易受长文字或图片的默认最小尺寸撑开：按需使用 `minmax(0, 1fr)`、子项 `min-width:0`；固定高度内容区还需检查行轨道与子项最小高度。让浏览器计算实际几何，再按第9节检查换行和越界，不用缩放整块内容掩盖排版问题。
 - **不要使用 CSS 的 `translate` 属性**（编辑器用它来记录拖动），位移请用 `transform`。
 - 不要给 `data-el` 元素的 `position / left / top / width / min-height / translate / margin` 加 `!important`，否则编辑器写的内联样式会失效。
 - 可以用入场动画，但动画的结束状态必须是可见的（用 `animation-fill-mode: both` 或 `forwards`）。

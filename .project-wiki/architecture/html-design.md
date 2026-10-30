@@ -6,7 +6,7 @@ owners:
   - html-design/src/
   - html-design/server.mjs
   - html-design/build.mjs
-updated: 2026-10-29
+updated: 2026-10-30
 sources:
   - path: PRODUCT.md
     status: current
@@ -45,6 +45,8 @@ confidence: high
 ## Contracts
 
 画板使用 `[data-stage]` / `[data-artboard]`。HTML 内嵌内容、样式和编辑器；界面使用 Shadow DOM。本地服务默认绑定 127.0.0.1:8876，属于本机工具，不作为远程多用户服务部署。
+
+内容排版直接使用原生 CSS Grid/Flex，HTML/CSS 继续作为布局真值，无需额外网格坐标模型或默认框架依赖。列数、比例及跨行列关系随内容选择，12列仅是可选方案；Agent 修改原生规则，浏览器提供真实几何与换行，不能把某份示例稿固定为后续页面模板。具体制作指导见 `html-design/SKILL.md`。
 
 
 ## Workflows
