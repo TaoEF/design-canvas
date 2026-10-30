@@ -99,6 +99,12 @@ button.primary:hover:not(:disabled) {
   padding: 0 16px;
   background: var(--paper);
 }
+.head [data-act="edit"],
+.head [data-act="done"],
+.head [data-act="preview"],
+.head [data-act="export"] {
+  font-size: 13px;
+}
 .grp {
   display: flex;
   align-items: center;
