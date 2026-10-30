@@ -30,30 +30,48 @@ export function collectEditableSlide(board) {
     underline: cs.textDecorationLine.includes('underline'), strike: cs.textDecorationLine.includes('line-through'),
     color: cssColor(cs.color).color, charSpacing: (parseFloat(cs.letterSpacing) || 0) * scale,
   });
-  const textVertical = (cs, name) => {
+  const textVertical = (el, cs, name, textItems) => {
+    const approximate = () => { warnings.push(`${name}: 文字子项或轨道对齐使用顶部近似`); return 'top'; };
+    const anchor = (value, reversed = false) => {
+      value = value.replace(/^(?:safe|unsafe) /, '');
+      if (value === 'center') return 'middle';
+      if (value === 'flex-start') return reversed ? 'bottom' : 'top';
+      if (value === 'flex-end') return reversed ? 'top' : 'bottom';
+      return ['end', 'self-end'].includes(value) ? 'bottom' : 'top';
+    };
+    const itemStyles = [...textItems].map(item => item === el ? null : getComputedStyle(item));
+    const cross = itemStyles.map(style => !style || style.alignSelf === 'auto' ? cs.alignItems : style.alignSelf);
+    const unsupportedItems = itemStyles.some(style => style && (['absolute','fixed'].includes(style.position) ||
+      ['contents','flex','inline-flex','grid','inline-grid'].includes(style.display) || style.writingMode !== cs.writingMode));
+    const ambiguous = reversed => new Set(cross.map(value => anchor(value, reversed))).size > 1;
     let alignment = 'start', reversed = false;
     if (['flex', 'inline-flex'].includes(cs.display)) {
       const column = cs.flexDirection.startsWith('column');
-      alignment = column ? cs.justifyContent : cs.alignItems;
       reversed = column ? cs.flexDirection === 'column-reverse' : cs.flexWrap === 'wrap-reverse';
+      if (unsupportedItems || (!column && ambiguous(reversed))) return approximate();
+      alignment = column ? cs.justifyContent : cross[0] || cs.alignItems;
     } else if (['grid', 'inline-grid'].includes(cs.display)) {
-      // Content alignment only moves tracks if there is free block-axis space;
-      // a 1fr/fill track still uses align-items, even with align-content:start.
+      if (unsupportedItems || ambiguous(false)) return approximate();
+      const itemAlignment = cross[0] || cs.alignItems;
       const rows = cs.gridTemplateRows.match(/[\d.]+px/g)?.map(parseFloat) || [];
       const padding = ['Top','Bottom'].reduce((sum,side)=>sum+(parseFloat(cs[`padding${side}`])||0)+(parseFloat(cs[`border${side}Width`])||0),0);
       const height = parseFloat(cs.height)-(cs.boxSizing==='border-box'?padding:0);
       const used = rows.reduce((sum,v)=>sum+v,0)+(parseFloat(cs.rowGap)||0)*Math.max(0,rows.length-1);
-      alignment = rows.length && Math.abs(height-used)>.1 && !['normal', 'stretch'].includes(cs.alignContent) ? cs.alignContent : cs.alignItems;
+      const positionedTracks = rows.length && Math.abs(height-used)>.1 && !['normal', 'stretch'].includes(cs.alignContent);
+      if (positionedTracks && rows.length === 1) {
+        const itemHeight = Math.max(...itemStyles.map(style => parseFloat(style?.height) || parseFloat(cs.lineHeight) || parseFloat(cs.fontSize)*1.2));
+        // A centered fixed track plus an end-aligned short item is neither the
+        // full card's center nor its end. Do not silently claim either anchor.
+        if (rows[0]-itemHeight>.1 && anchor(itemAlignment)!==anchor(cs.alignContent)) return approximate();
+        if (['normal','stretch'].includes(itemAlignment) && rows[0]-(parseFloat(cs.lineHeight)||0)>.1)
+          warnings.push(`${name}: 轨道内文字布局使用单文本框近似`);
+      }
+      alignment = positionedTracks ? cs.alignContent : itemAlignment;
       if (rows.length>1) warnings.push(`${name}: 多轨文字布局使用单文本框近似`);
     }
     if (cs.writingMode !== 'horizontal-tb' || /space-|safe /.test(alignment))
       warnings.push(`${name}: 复杂文字对齐使用简化映射`);
-    if (cs.writingMode !== 'horizontal-tb') return 'top';
-    alignment = alignment.replace(/^(?:safe|unsafe) /, '');
-    if (alignment === 'center') return 'middle';
-    if (alignment === 'flex-start') return reversed ? 'bottom' : 'top';
-    if (alignment === 'flex-end') return reversed ? 'top' : 'bottom';
-    return ['end', 'self-end'].includes(alignment) ? 'bottom' : 'top';
+    return cs.writingMode !== 'horizontal-tb' ? 'top' : anchor(alignment, reversed);
   };
   const graphics = [...board.querySelectorAll('svg,canvas')];
   for (const el of board.querySelectorAll('*')) {
@@ -137,7 +155,7 @@ export function collectEditableSlide(board) {
       emit(el, { kind: 'graphic', ...box, name, index: graphics.indexOf(el) });
     } else if (el.hasAttribute('data-el') && !el.querySelector('[data-el]') && el.textContent.trim()) {
       // Keep authored breaks, not the browser's width-dependent soft wraps.
-      const runs = [];
+      const runs = [], textItems = new Set();
       let lastKey = null, pendingSpace = null, pendingBlockBreak = false;
       const baseStyle = styles(cs, el.textContent, box.scale);
       const append = (text, options) => {
@@ -160,6 +178,11 @@ export function collectEditableSlide(board) {
       };
       const visit = node => {
         if (node.nodeType === Node.TEXT_NODE) {
+          if (node.textContent.trim()) {
+            let item = node.parentElement;
+            while (item !== el && item.parentElement !== el) item = item.parentElement;
+            textItems.add(item); // actual direct item, or el for anonymous text
+          }
           const parentStyle = getComputedStyle(node.parentElement);
           const options = styles(parentStyle, el.textContent, box.scale);
           let text = node.textContent;
@@ -200,7 +223,7 @@ export function collectEditableSlide(board) {
       if (runs.length) emit(el, {
         kind: 'text', ...box, name, runs, ...baseStyle,
         align: ['left', 'center', 'right', 'justify'].includes(cs.textAlign) ? cs.textAlign : 'left',
-        valign: textVertical(cs, name),
+        valign: textVertical(el, cs, name, textItems),
         lineHeight: (parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.2) * box.scale,
         padding: ['Top', 'Right', 'Bottom', 'Left'].map(side => ((parseFloat(cs[`padding${side}`]) || 0) + (parseFloat(cs[`border${side}Width`]) || 0)) * box.scale),
         href: el.closest('a')?.href,

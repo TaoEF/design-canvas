@@ -441,3 +441,23 @@ test('PPTX same-node background and own text become native subgroups inside exis
   assert.deepEqual(s.leaves.filter(n=>n.text).map(n=>n.text),['First leaf','Card A','Card B','Card C','Last leaf']);assert.equal(s.leaves.length,12);assert.equal(new Set(s.ids).size,s.ids.length);
   const rels=await zip.file('ppt/slides/_rels/slide1.xml.rels').async('string');for(const ref of s.references)assert.match(rels,new RegExp(`Id="${ref}"`));assert.match(rels,/https:\/\/example.com\/card/);
 });
+
+test('review P2: actual text-item align-self overrides container cross alignment; column keeps its main axis and unrepresentable grid/mixed items disclose approximation',async()=>{
+  const cases=[
+    ['flex-start','display:flex;align-items:center','<span style="align-self:start">Text</span>','t',false],
+    ['grid-start','display:grid;align-items:center','<span style="align-self:start">Text</span>','t',false],
+    ['flex-end','display:flex;align-items:center','<span style="align-self:end">Text</span>','b',false],
+    ['grid-end','display:grid;align-items:center','<span style="align-self:end">Text</span>','b',false],
+    ['flex-stretch','display:flex;align-items:center','<span style="align-self:stretch">Text</span>','t',false],
+    ['column','display:flex;flex-direction:column;justify-content:center','<span style="align-self:start">Text</span>','ctr',false],
+    ['fixed-grid','display:grid;grid-template-rows:80px;align-content:center;align-items:end','<span>Text</span>','t',true],
+    ['auto-grid','display:grid;align-content:center;align-items:end','<span>Text</span>','ctr',false],
+    ['mixed-flex','display:flex;align-items:center','<span style="align-self:start">First</span><span style="align-self:end">Last</span>','t',true],
+  ];
+  const html=`<!doctype html><html><head><style>body{margin:0}[data-artboard]{position:relative;width:1200px;height:750px}.card{position:absolute;width:200px;height:200px;font:20px/24px Arial;background:#def}</style></head><body><main data-stage><section data-artboard="p1">${cases.map(([id,style,body],i)=>`<div data-el="${id}" class="card" style="left:${20+i%5*235}px;top:${40+Math.floor(i/5)*300}px;${style}">${body}</div>`).join('')}</section></main></body></html>`;
+  const dom=await xmlPage(async page=>{await page.setContent(html);return page.locator('[data-el]').evaluateAll(nodes=>Object.fromEntries(nodes.map(n=>{const r=n.getBoundingClientRect(),range=document.createRange();range.selectNodeContents(n);const t=range.getBoundingClientRect();return[n.dataset.el,{top:r.top,height:r.height,textTop:t.top,textHeight:t.height}];})));});
+  for(const id of ['flex-start','grid-start'])assert.ok(dom[id].textTop-dom[id].top<2,id+' really starts at top');
+  assert.ok(Math.abs(dom['fixed-grid'].textTop-dom['fixed-grid'].top-116)<2,'80px centered track plus end puts text below the full-box center');
+  const {xml,zip}=await slideXml(html),structure=await inspectSlide(xml),notes=await zip.file('ppt/notesSlides/notesSlide1.xml').async('string');
+  for(const [id,,,anchor,approx] of cases){const text=structure.leaves.find(n=>n.name===id&&n.xml.includes('<p:txBody>'));assert.ok(text,id);assert.match(text.xml,new RegExp(`<a:bodyPr[^>]*anchor="${anchor}"`),id);assert.match(text.xml,/<a:bodyPr[^>]*wrap="square"/);if(approx)assert.match(notes,new RegExp(id+': .*近似'),id);else assert.doesNotMatch(notes,new RegExp(id+':'),id+' maps representably');}
+});

@@ -65,7 +65,7 @@ PPTX 每个文字元素对应一个可编辑文本框，开启 `wrap="square"`�
 
 PptxGenJS 4 没有公开 addGroup API；生成后以真实 XML 树移动原叶子节点，JSZip 只替换对应 slide XML，图片/超链接关系和原叶子顺序、格式、坐标不变。组边界来自原生对象旋转后的可见外框（包含溢出后代），`off/ext` 与 `chOff/chExt` 初始相同，避免初始偏移或缩放；新组 ID 高于已有对象 ID。对象数或归属顺序不能核对时明确失败，不输出损坏文件。文字超链接写到 PptxGenJS rich run options，确保生成实际 relationship ID，而不是悬空引用。此分组只作用于导出文件，不新增浏览器编辑器内分组功能。
 
-文字垂直对齐按CSS布局轴映射原生top/middle/bottom：Flex row使用align-items、column使用justify-content并区分reverse的flex-start/end；常见Grid按block轴的轨道剩余空间/align-content和align-items处理。普通block保持顶部，不能一律居中。非对称padding+border按实际四边映射；PptxGenJS4文字margin序列化顺序为left/right/bottom/top，不能直接传CSS的top/right/bottom/left。换行/字号/旋转仍保留原生重排，分布式、多轨或竖排等复杂布局沿notes提示近似，不承诺任意CSS对齐完全一致。
+文字垂直对齐按CSS布局轴映射原生top/middle/bottom：Flex row使用align-items、column使用justify-content并区分reverse的flex-start/end；常见Grid按block轴的轨道剩余空间/align-content和align-items处理。可表达的实际文字item `align-self` 优先于容器的cross-axis `align-items`；Flex column的垂直轴仍由 `justify-content` 决定。混合item位置、固定Grid轨道与轨道内对齐冲突等不能用整框anchor表达时回退顶部并写notes，不能静默居中。普通block保持顶部，不能一律居中。非对称padding+border按实际四边映射；PptxGenJS4文字margin序列化顺序为left/right/bottom/top，不能直接传CSS的top/right/bottom/left。换行/字号/旋转仍保留原生重排，分布式、多轨或竖排等复杂布局沿notes提示近似，不承诺任意CSS对齐完全一致。
 
 原生旋转采用共用elementGeometry的未旋转border-box尺寸×累积uniform scale、实际BCR中心与累积角度；PPTX的rotate为页面方向，组本身仍identity，避免双重旋转。缩放后的字体/行高/字距、CSS padding+border映射文本margin、统一描边/圆角一并缩放，文本框不再额外加2px。图片保留cover/contain取景及实际hyperlink关系。SVG/canvas仍按既有可见截图路径，不把其已栅格化的旋转重复应用。XML回归和PDF/浏览器对照不能替代原生Office人工视觉验收。
 
