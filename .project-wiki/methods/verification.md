@@ -89,6 +89,8 @@ AI 审阅增加 review.test.mjs（真树语义、部分接受/恢复、私有基
 
 群组方向回归用真实手柄覆盖50/100/200%、父20°+外组30°的嵌套50°、混合成员角度/非中心origin和有盒祖先。断言真实角点受方向框包围、同一方向中心旋转和局部对角锚定/最小尺寸；取消/整圈不留源噪音，临时多选换集合Undo不污染另一集合。保存离线重开/复制/取消组、成员删除Undo、真实AI交接，以及有无方向提示的QA facts和PPTX原生XML一致。旧缩放fixture须沿局部对角向量拖动，不能继续用旋转后AABB宽高声称同比20%。
 
+PPTX文字定位回归覆盖Flex row/column/reverse与常见Grid轨道的top/center/bottom、非对称padding+border及旋转scale；原生文本wrap保持重排。直接文字卡片own shape/text须有自身子组，嵌套path、唯一ID、关系、叶子数量与绘制顺序不变；空/单叶仍跳过。PptxGenJS4文本margin实际顺序left/right/bottom/top必须通过四边不同值的XML验证，等值padding无法发现顺序错误。
+
 ## Update Rules
 
 新增测试入口、CI 或改变依赖/浏览器时更新此页与 harness。

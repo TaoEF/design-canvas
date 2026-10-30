@@ -7,7 +7,7 @@ node html-design/export-cli.mjs pptx input.html --output result.pptx
 node html-design/export-cli.mjs pdf input.html --output result.pdf
 ```
 
-无需打开编辑器或启动常驻预览服务。复用同一导出引擎，保留现有可编辑文字、图片和语义容器原生组合；复杂 CSS 仍可能简化，成功摘要不等于完整保真检查。
+无需打开编辑器或启动常驻预览服务。复用同一导出引擎，保留现有可编辑文字、图片和语义容器原生组合；同节点背景与自身文字一起导出为原生子组，外层组合保留嵌套；常见Flex/Grid垂直起止/居中映射为文本框原生对齐，普通段落保持顶部。复杂 CSS 仍可能简化，成功摘要不等于完整保真检查。
 
 ## 保存快照与资源
 

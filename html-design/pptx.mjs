@@ -30,6 +30,31 @@ export function collectEditableSlide(board) {
     underline: cs.textDecorationLine.includes('underline'), strike: cs.textDecorationLine.includes('line-through'),
     color: cssColor(cs.color).color, charSpacing: (parseFloat(cs.letterSpacing) || 0) * scale,
   });
+  const textVertical = (cs, name) => {
+    let alignment = 'start', reversed = false;
+    if (['flex', 'inline-flex'].includes(cs.display)) {
+      const column = cs.flexDirection.startsWith('column');
+      alignment = column ? cs.justifyContent : cs.alignItems;
+      reversed = column ? cs.flexDirection === 'column-reverse' : cs.flexWrap === 'wrap-reverse';
+    } else if (['grid', 'inline-grid'].includes(cs.display)) {
+      // Content alignment only moves tracks if there is free block-axis space;
+      // a 1fr/fill track still uses align-items, even with align-content:start.
+      const rows = cs.gridTemplateRows.match(/[\d.]+px/g)?.map(parseFloat) || [];
+      const padding = ['Top','Bottom'].reduce((sum,side)=>sum+(parseFloat(cs[`padding${side}`])||0)+(parseFloat(cs[`border${side}Width`])||0),0);
+      const height = parseFloat(cs.height)-(cs.boxSizing==='border-box'?padding:0);
+      const used = rows.reduce((sum,v)=>sum+v,0)+(parseFloat(cs.rowGap)||0)*Math.max(0,rows.length-1);
+      alignment = rows.length && Math.abs(height-used)>.1 && !['normal', 'stretch'].includes(cs.alignContent) ? cs.alignContent : cs.alignItems;
+      if (rows.length>1) warnings.push(`${name}: 多轨文字布局使用单文本框近似`);
+    }
+    if (cs.writingMode !== 'horizontal-tb' || /space-|safe /.test(alignment))
+      warnings.push(`${name}: 复杂文字对齐使用简化映射`);
+    if (cs.writingMode !== 'horizontal-tb') return 'top';
+    alignment = alignment.replace(/^(?:safe|unsafe) /, '');
+    if (alignment === 'center') return 'middle';
+    if (alignment === 'flex-start') return reversed ? 'bottom' : 'top';
+    if (alignment === 'flex-end') return reversed ? 'top' : 'bottom';
+    return ['end', 'self-end'].includes(alignment) ? 'bottom' : 'top';
+  };
   const graphics = [...board.querySelectorAll('svg,canvas')];
   for (const el of board.querySelectorAll('*')) {
     if ((el.matches('img[data-crop-image]') && el.parentElement?.matches('[data-crop-frame="1"]')) || (el.closest('svg') && !el.matches('svg'))) continue;
@@ -175,6 +200,7 @@ export function collectEditableSlide(board) {
       if (runs.length) emit(el, {
         kind: 'text', ...box, name, runs, ...baseStyle,
         align: ['left', 'center', 'right', 'justify'].includes(cs.textAlign) ? cs.textAlign : 'left',
+        valign: textVertical(cs, name),
         lineHeight: (parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.2) * box.scale,
         padding: ['Top', 'Right', 'Bottom', 'Left'].map(side => ((parseFloat(cs[`padding${side}`]) || 0) + (parseFloat(cs[`border${side}Width`]) || 0)) * box.scale),
         href: el.closest('a')?.href,
@@ -182,8 +208,10 @@ export function collectEditableSlide(board) {
     }
   }
   // Nodes, not public names/classes, own export groups. No metadata enters the DOM.
+  const ownLeaves = new Map();
+  sources.forEach(node => ownLeaves.set(node, (ownLeaves.get(node) || 0) + 1));
   const candidates = [...board.querySelectorAll('[data-el]')].filter(node =>
-    !node.matches('[data-stage],[data-artboard]') && sources.some(source => source !== node && node.contains(source)));
+    !node.matches('[data-stage],[data-artboard]') && ((ownLeaves.get(node) || 0) > 1 || sources.some(source => source !== node && node.contains(source))));
   const groups = candidates.map((node, i) => ({ id: `g${i}`, name: node.dataset.el }));
   const groupByNode = new Map(candidates.map((node, i) => [node, groups[i].id]));
   items.forEach((item, i) => {
@@ -234,7 +262,8 @@ export async function addEditableSlide({ pptx, slide, data, page, board, context
       slide.addText(runs, {
         ...position, ...textOptions(item),
         x: position.x, y: position.y, w: position.w, h: position.h,
-        margin: item.padding.map(pt), valign: 'top', fit: 'none', wrap: true,
+        // PptxGenJS 4 serializes text margins as left/right/bottom/top.
+        margin: [item.padding[3], item.padding[1], item.padding[2], item.padding[0]].map(pt), valign: item.valign, fit: 'none', wrap: true,
         lineSpacing: pt(item.lineHeight), paraSpaceBefore: 0, paraSpaceAfter: 0,
         lang: 'zh-CN',
       });

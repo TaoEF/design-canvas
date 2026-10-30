@@ -364,7 +364,7 @@ test('PPTX native rotation uses true local dimensions, accumulated scale/angle a
   assert.ok(Math.abs(native.find(n => n.name === 'title' && n.text).margin - 13.5) < .002, 'text margin includes scaled CSS padding and border');
   assert.match(namedShape(xml, 'title'), /<a:ln w="14288"/);
   assert.match(xml, /sz="2250"/); assert.match(xml, /<a:srcRect/);
-  const structure = await inspectSlide(xml); assert.equal(structure.groups.length, 2); assert.equal(new Set(structure.ids).size, structure.ids.length);
+  const structure = await inspectSlide(xml); assert.deepEqual(structure.groups.map(g=>g.name).sort(),['card','inner','title']); assert.deepEqual(structure.groups.find(g=>g.name==='title').children.map(n=>n.name),['title','title']); assert.equal(new Set(structure.ids).size, structure.ids.length);
   for (const group of structure.groups) { assert.deepEqual(group.transform.off, group.transform.chOff); assert.deepEqual(group.transform.ext, group.transform.chExt); }
   assert.match(await zip.file('ppt/slides/_rels/slide1.xml.rels').async('string'), /https:\/\/example.com\/rotation/);
   const pdfResponse = await request('pdf', html); assert.equal(pdfResponse.status, 200);
@@ -380,7 +380,7 @@ for (const grouped of [false, true]) test(`rotated side-specific border fallback
   const html = `<html><head><style>body{margin:0}[data-artboard]{position:relative;width:1200px;height:600px}.card{position:absolute;width:200px;height:100px;box-sizing:border-box;background:#abcdef;border:2px solid red;border-left-color:blue}.card p{position:absolute;left:20px;top:20px;width:120px;height:50px;margin:0;font:18px/24px Arial}</style></head><body><main data-stage><section data-artboard="p1">${angles.map((angle, i) => `<div data-el="c${i}" class="card" style="left:${20 + i % 5 * 240}px;top:${70 + Math.floor(i / 5) * 240}px;rotate:${angle}deg">${grouped ? `<p data-el="c${i}-text">Native child</p>` : ''}</div>`).join('')}</section></main></body></html>`;
   const { xml } = await slideXml(html);
   const structure = await inspectSlide(xml);
-  assert.equal(structure.groups.length, grouped ? angles.length : 0);
+  assert.equal(structure.groups.length, angles.length, 'each container owns its native fill and side-specific borders, with or without child text');
   const native = await xmlPage(page => page.evaluate(xml => {
     const doc = new DOMParser().parseFromString(xml, 'application/xml'), a = 'http://schemas.openxmlformats.org/drawingml/2006/main', p = 'http://schemas.openxmlformats.org/presentationml/2006/main';
     const extents = [...doc.getElementsByTagNameNS(a, 'ext')].map(n => [Number(n.getAttribute('cx')), Number(n.getAttribute('cy'))]);
@@ -406,4 +406,38 @@ for (const grouped of [false, true]) test(`rotated side-specific border fallback
     assert.equal(structure.leaves.filter(n => n.text === 'Native child').length, angles.length);
     for (const group of structure.groups) { assert.deepEqual(group.transform.off, group.transform.chOff); assert.deepEqual(group.transform.ext, group.transform.chExt); }
   }
+});
+
+test('PPTX editable text maps common Flex/Grid vertical axes and padding while ordinary blocks stay top', async () => {
+  const cases = [
+    ['block', 'display:block;text-align:center', 't'],
+    ['row-top','display:flex;align-items:flex-start','t'],
+    ['row-center','display:flex;align-items:center','ctr'],
+    ['row-bottom','display:flex;align-items:flex-end','b'],
+    ['column-top','display:flex;flex-direction:column;justify-content:flex-start;align-items:center','t'],
+    ['column-center','display:flex;flex-direction:column;justify-content:center;align-items:flex-start','ctr'],
+    ['column-bottom','display:flex;flex-direction:column;justify-content:flex-end;align-items:center','b'],
+    ['reverse-start','display:flex;flex-direction:column-reverse;justify-content:flex-start','b'],
+    ['reverse-end','display:flex;flex-direction:column-reverse;justify-content:flex-end','t'],
+    ['grid-center','display:grid;align-items:center','ctr'],
+    ['grid-bottom','display:grid;align-items:end','b'],
+    ['grid-fill','display:grid;grid-template-rows:1fr;align-items:center;align-content:start','ctr'],
+    ['grid-content-center','display:grid;align-content:center','ctr'],
+    ['grid-content-bottom','display:grid;align-content:end','b'],
+  ];
+  cases.unshift(cases.splice(2,1)[0]);
+  const html=`<!doctype html><html><head><style>body{margin:0}[data-artboard]{position:relative;width:1200px;height:900px}.text{position:absolute;box-sizing:border-box;width:190px;height:130px;padding:14px 18px 22px 10px;border:2px solid #123456;border-radius:16px;background:#dbe5df;font:20px/28px Arial;white-space:normal;text-align:center}</style></head><body><main data-stage><section data-artboard="p1">${cases.map(([id,css],i)=>`<div data-el="${id}" class="text" style="left:${30+i%5*235}px;top:${50+Math.floor(i/5)*240}px;${css};${id==='row-center'?'rotate:30deg;transform-origin:20% 70%;scale:1.2':''}">${id.startsWith('grid')?'<span>Editable <b>wrapped words</b><br>Second line</span>':'Editable <span style="font-weight:bold">wrapped words</span><br>Second line'}</div>`).join('')}</section></main></body></html>`;
+  const {xml}=await slideXml(html),structure=await inspectSlide(xml);
+  for(const [id,,anchor] of cases){const text=structure.leaves.find(n=>n.name===id&&n.xml.includes('<p:txBody>'));assert.ok(text,id);assert.match(text.xml,new RegExp(`<a:bodyPr[^>]*anchor="${anchor}"`),id);assert.match(text.xml,/<a:bodyPr[^>]*wrap="square"/);assert.match(text.text,/^Editable ?wrapped wordsSecond line$/,id);assert.doesNotMatch(text.xml,/<a:(?:normAutofit|spAutoFit)/);const scaled=id==='row-center'?1.2:1;for(const [attr,pixels] of [['tIns',16],['rIns',20],['bIns',24],['lIns',12]]){const value=Number(text.xml.match(new RegExp(`${attr}="(\\d+)"`))[1])/9525;assert.ok(Math.abs(value-pixels*scaled)<.002,`${id} ${attr}: ${value} expected ${pixels*scaled}`);}if(id==='row-center')assert.match(text.xml,/<a:xfrm[^>]*rot="1800000"/);}
+});
+
+test('PPTX same-node background and own text become native subgroups inside existing semantic groups without changing leaf order',async()=>{
+  const html=`<!doctype html><html><head><style>body{margin:0}[data-artboard]{width:800px;height:600px;position:relative}p{margin:0;font:20px/28px Arial}.repeat{position:absolute;width:160px;height:100px;box-sizing:border-box;border:2px solid #123456;border-radius:18px;background:#abcdef;font:22px/30px Arial;display:flex;align-items:center;justify-content:center;text-align:center}</style></head><body><main data-stage><section data-artboard="p1"><p data-el="title">First leaf</p><div data-el="outer" data-group="1" style="display:contents"><a href="https://example.com/card"><div data-el="card-a" class="repeat" style="left:40px;top:100px;rotate:30deg">Card A</div></a><div data-el="card-b" class="repeat" style="left:280px;top:100px;border-left-color:blue">Card B</div></div><div data-el="card-c" class="repeat" style="left:510px;top:100px">Card C</div><p data-el="only" style="position:absolute;top:300px">Last leaf</p></section></main></body></html>`;
+  const {xml,zip}=await slideXml(html),s=await inspectSlide(xml);
+  assert.deepEqual(s.top.map(n=>n.name),['title','outer','card-c','only']);
+  assert.deepEqual(s.groups.map(g=>g.name).sort(),['card-a','card-b','card-c','outer']);
+  assert.deepEqual(s.groups.find(g=>g.name==='outer').children.map(n=>[n.kind,n.name]),[['grpSp','card-a'],['grpSp','card-b']]);
+  for(const name of ['card-a','card-b','card-c']){const group=s.groups.find(g=>g.name===name);assert.equal(group.children.filter(n=>n.xml.includes('<p:txBody>')).length,1);assert.equal(group.children.length,name==='card-b'?6:2);assert.deepEqual(group.transform.off,group.transform.chOff);assert.deepEqual(group.transform.ext,group.transform.chExt);assert.ok(group.children.every(n=>n.name===name||n.name===name+'-border'));}
+  assert.deepEqual(s.leaves.filter(n=>n.text).map(n=>n.text),['First leaf','Card A','Card B','Card C','Last leaf']);assert.equal(s.leaves.length,12);assert.equal(new Set(s.ids).size,s.ids.length);
+  const rels=await zip.file('ppt/slides/_rels/slide1.xml.rels').async('string');for(const ref of s.references)assert.match(rels,new RegExp(`Id="${ref}"`));assert.match(rels,/https:\/\/example.com\/card/);
 });

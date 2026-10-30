@@ -59,9 +59,13 @@ PPTX 每个文字元素对应一个可编辑文本框，开启 `wrap="square"`�
 
 旋转后的按边回退保留实际有向端点；序列化线段时以最小坐标角和绝对宽高建立非负DrawingML外框，再用flipH/flipV恢复端点方向，不能只取abs尺寸导致线段镜像/偏移。独立对象与原生组合均遵守此约束，覆盖正负角、跨象限与直角。
 
-带 `data-el` 且有实际导出后代的语义容器导出为原生 `p:grpSp`，自身背景/描边与后代文字、图片可一起移动缩放；子对象仍可单独编辑或取消组合。分组只派生于来源 DOM 节点与祖先路径，不按可能重复的 class/objectName 匹配，不写回设计 HTML；不强制组合 stage、整页、无标记布局层，空组与单对象包装省略，支持嵌套组。
+带 `data-el` 且有实际导出后代、或同一节点发出多个原生叶子的语义容器导出为原生 `p:grpSp`，自身背景/描边与后代文字、图片可一起移动缩放；子对象仍可单独编辑或取消组合。分组只派生于来源 DOM 节点与祖先路径，不按可能重复的 class/objectName 匹配，不写回设计 HTML；不强制组合 stage、整页、无标记布局层，空组与单对象包装省略，支持嵌套组。
+
+直接文字卡片的背景/统一边框shape与自身可编辑文本框拥有同一源DOM，导出为自身子组，外层语义组保留其嵌套；不同边框回退线也跟随同一节点归属。空组和单叶包装仍省略，不按名称或class合并。
 
 PptxGenJS 4 没有公开 addGroup API；生成后以真实 XML 树移动原叶子节点，JSZip 只替换对应 slide XML，图片/超链接关系和原叶子顺序、格式、坐标不变。组边界来自原生对象旋转后的可见外框（包含溢出后代），`off/ext` 与 `chOff/chExt` 初始相同，避免初始偏移或缩放；新组 ID 高于已有对象 ID。对象数或归属顺序不能核对时明确失败，不输出损坏文件。文字超链接写到 PptxGenJS rich run options，确保生成实际 relationship ID，而不是悬空引用。此分组只作用于导出文件，不新增浏览器编辑器内分组功能。
+
+文字垂直对齐按CSS布局轴映射原生top/middle/bottom：Flex row使用align-items、column使用justify-content并区分reverse的flex-start/end；常见Grid按block轴的轨道剩余空间/align-content和align-items处理。普通block保持顶部，不能一律居中。非对称padding+border按实际四边映射；PptxGenJS4文字margin序列化顺序为left/right/bottom/top，不能直接传CSS的top/right/bottom/left。换行/字号/旋转仍保留原生重排，分布式、多轨或竖排等复杂布局沿notes提示近似，不承诺任意CSS对齐完全一致。
 
 原生旋转采用共用elementGeometry的未旋转border-box尺寸×累积uniform scale、实际BCR中心与累积角度；PPTX的rotate为页面方向，组本身仍identity，避免双重旋转。缩放后的字体/行高/字距、CSS padding+border映射文本margin、统一描边/圆角一并缩放，文本框不再额外加2px。图片保留cover/contain取景及实际hyperlink关系。SVG/canvas仍按既有可见截图路径，不把其已栅格化的旋转重复应用。XML回归和PDF/浏览器对照不能替代原生Office人工视觉验收。
 
